@@ -70,6 +70,7 @@ const AUTH_TTL_MS       = 1000 * 60 * 60 * 24 * 30;
 const RATE_BURST        = 60;                    // balde de tokens
 const RATE_RECARGA      = 40;                    // tokens por segundo
 const VEL_MAX           = 14;                    // m/s — corrida é ~6, folga pra lag
+const RETOMADA_POS_MS    = 15000;                 // reconexão curta retoma o último ponto
 const NUM_LOTES         = 10;
 // ETAPA D — cada propriedade tem os MESMOS ambientes do quintal original:
 // 6 canteiros no sol, 4 na estufa de lona e 6 no grow room de alvenaria.
@@ -683,6 +684,15 @@ function spawnOficial(j) {
   const lote = loteDoJogador(j);
   if (lote) return { x: lote.x, y: 0, z: lote.z + LOTE_D / 2 - 3.2 };
   return { x: 0, y: 0, z: 15 };
+}
+function consumirPosicaoRetomada(chave) {
+  const p = chave && posicoesRetomada.get(chave);
+  if (!p) return null;
+  posicoesRetomada.delete(chave);
+  if (p.expira <= agora()) return null;
+  if (![p.x, p.y, p.z, p.ry].every(Number.isFinite)) return null;
+  if (dentroDeParede(p.x, p.z, RAIO_JOGADOR)) return null;
+  return p;
 }
 function aplicarDanoJogador(j, dano, de) {
   if (!j || j.morto || !j.autenticado) return { aplicado: 0, morreu: false };
@@ -1318,6 +1328,7 @@ function passoBot(b, dt) {
 
 /* ───────── rede ───────── */
 const jogadores = new Map();   // id -> estado
+const posicoesRetomada = new Map(); // chave -> {x,y,z,ry,expira}
 let proxId = 1;
 let tickAtual = 0;
 const metricas = { msgRecebidas: 0, msgEnviadas: 0, descartadas: 0, rejeitadas: 0,
@@ -1543,19 +1554,23 @@ wss.on('connection', (ws, req) => {
         if (m.nome) j.nome = nomeSeguro(m.nome) || j.nome;
         j.avatarId = avatarCatalogado(m.avatarId);
         enviar(j, { t: 'sessao', token: emitirToken(j.chave), persistId: j.chave });
+        const retomada = consumirPosicaoRetomada(j.chave);
         const idx = atribuirLote(j.chave, j.nome);
         if (idx !== null) {
           const loteInicial = lotes[idx];
-          // O servidor escolhe o ponto inicial. O primeiro input do cliente
-          // não pode transformar-se em um teleporte arbitrário.
-          j.x = loteInicial.x;
-          j.y = 0;
-          j.z = loteInicial.z + LOTE_D / 2 - 3.2;
+          const spawn = retomada || {
+            x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
+          };
+          // Queda curta retoma a posição authoritative anterior. Sem posição
+          // recente, nasce no ponto oficial do lote — nunca no ponto enviado.
+          j.x = spawn.x; j.y = spawn.y || 0; j.z = spawn.z; j.ry = spawn.ry || 0;
           j.posIniciada = true;
         }
         enviar(j, {
           t: 'lote_atribuido',
           loteIndex: idx,
+          retomada: !!retomada,
+          posicao: idx !== null ? { x:j.x, y:j.y, z:j.z, ry:j.ry } : null,
           lote: idx !== null ? resumoLote(lotes[idx], true) : null
         });
         // Carrega o estado salvo ANTES de anunciar a aparência final.
@@ -2101,7 +2116,15 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     // grava na saída: é o momento mais provável de perder progresso
-    try { const k = j.chave || j.id; if (carteiras.has(k)) salvarCarteira(k); } catch (e) {}
+    try {
+      const k = j.chave || j.id;
+      if (carteiras.has(k)) salvarCarteira(k);
+      if (j.autenticado && j.chave && j.posIniciada && !j.morto) {
+        posicoesRetomada.set(j.chave, {
+          x:j.x, y:j.y, z:j.z, ry:j.ry, expira:agora()+RETOMADA_POS_MS
+        });
+      }
+    } catch (e) {}
     jogadores.delete(id); paraTodos({ t: 'leave', id });
   });
   ws.on('error', () => {});
@@ -2111,6 +2134,8 @@ wss.on('connection', (ws, req) => {
 setInterval(() => {
   const tickInicio = performance.now();
   tickAtual++;
+  const agoraTick = agora();
+  for (const [chave, p] of posicoesRetomada) if (p.expira <= agoraTick) posicoesRetomada.delete(chave);
   const dtTick = TICK_MS / 1000;
   clienteSpawnT -= dtTick;
   if (clienteSpawnT <= 0) {
