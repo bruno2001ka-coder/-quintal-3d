@@ -90,8 +90,15 @@ body.aim #reticle{display:block}
 #hurt.on{opacity:1}
 #radar{position:absolute;bottom:78px;right:10px;width:118px;height:118px;border-radius:50%;background:rgba(8,12,8,.72);border:1px solid rgba(255,255,255,.16);overflow:hidden}
 #radar canvas{width:100%;height:100%}
-.modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(95vw,470px);max-height:86vh;overflow-y:auto;background:rgba(10,14,10,.97);border:1px solid rgba(143,224,99,.32);border-radius:4px;padding:18px;display:none;pointer-events:auto}
+.modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(95vw,470px);max-height:86vh;overflow-y:auto;background:rgba(10,14,10,.97);border:1px solid rgba(143,224,99,.32);border-radius:4px;padding:18px;display:none;pointer-events:auto;z-index:30}
 .modal.on{display:block}
+/* No celular o modal precisa ser a camada de interação principal. Antes o
+   #touch vinha depois dele no HTML e desenhava AÇÃO/MIRA/TIRO por cima do
+   inventário, impedindo inclusive de tocar em FECHAR. */
+body.touch .modal{width:calc(100vw - 16px);max-height:calc(100vh - 18px);max-height:calc(100dvh - 18px);padding:12px}
+body.touch .modal.on ~ #touch{display:none !important}
+body.touch .modal .tabs{overflow-x:auto;flex-wrap:nowrap}
+body.touch .modal .row button{min-width:72px}
 .tabs{display:flex;gap:5px;margin-bottom:12px}
 .tab{flex:1;padding:7px 2px;font:inherit;font-size:9px;letter-spacing:1px;background:transparent;border:1px solid rgba(255,255,255,.16);color:#aab;cursor:pointer;border-radius:2px}
 .tab.on{background:#8fe063;color:#0e120e;border-color:#8fe063;font-weight:700}
@@ -458,7 +465,8 @@ const hemi=new THREE.HemisphereLight(0x8fb4dc,0x6b5138,.34);scene.add(hemi);
 const perfBox=document.createElement('div');
 perfBox.style.cssText='position:fixed;right:10px;top:10px;z-index:20;padding:7px 9px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(12,16,15,.72);color:#dce9d7;font:11px system-ui;backdrop-filter:blur(4px);pointer-events:auto';
 perfBox.innerHTML='<label style="display:flex;gap:6px;align-items:center">qualidade <select id="qualitySelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="alto">Alto</option><option value="medio">Médio</option><option value="baixo">Baixo</option></select></label><label style="display:flex;gap:6px;align-items:center;margin-top:4px">som <select id="soundSelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="ativo">Ativo</option><option value="mudo">Mudo</option></select></label><label style="display:flex;gap:6px;align-items:center;margin-top:4px">avatar <select id="avatarSelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="carmo">Carmo</option><option value="verde">Verde</option><option value="azul">Azul</option><option value="roxo">Roxo</option></select></label><div id="perfReadout" style="margin-top:4px;opacity:.75">medindo…</div>';
-document.body.appendChild(perfBox);
+perfBox.id='perfBox';document.body.appendChild(perfBox);
+function atualizarVisibilidadePerf(){perfBox.style.display=modalOpen()?'none':'block'}
 const qualitySelect=document.getElementById('qualitySelect');qualitySelect.value=qualidade;
 qualitySelect.onchange=()=>{qualidade=qualitySelect.value;try{localStorage.setItem('quintal3d-qualidade',qualidade)}catch(e){};renderer.setPixelRatio(Math.min(devicePixelRatio||1,cfgQual().pixel));renderer.shadowMap.enabled=cfgQual().sombras;renderer.shadowMap.type=cfgQual().tipo;sun.castShadow=cfgQual().sombras;sun.shadow.mapSize.set(cfgQual().mapa,cfgQual().mapa);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}toast('qualidade '+qualitySelect.options[qualitySelect.selectedIndex].text+' aplicada');};
 const soundSelect=document.getElementById('soundSelect');soundSelect.value=somAtivo?'ativo':'mudo';soundSelect.onchange=()=>{somAtivo=soundSelect.value==='ativo';try{localStorage.setItem('quintal3d-som',somAtivo?'ativo':'mudo')}catch(e){};if(typeof sfxMaster!=='undefined'&&sfxMaster)sfxMaster.gain.setTargetAtTime(somAtivo?.72:0,sfxMaster.context.currentTime,.015);toast(somAtivo?'som ativado':'som desligado');};
@@ -466,7 +474,7 @@ const avatarSelect=document.getElementById('avatarSelect');
 try{avatarSelect.value=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
 avatarSelect.onchange=()=>{const id=avatarSelect.value;try{localStorage.setItem('quintal3d-avatar',id)}catch(e){};if(typeof mpAvatarId!=='undefined')mpAvatarId=id;if(typeof player!=='undefined'&&typeof aplicarCoresAvatar==='function')aplicarCoresAvatar(player,coresAvatar(id));if(typeof mpConnected!=='undefined'&&mpConnected&&mpWs)try{mpWs.send(JSON.stringify({t:'avatar',avatarId:id}))}catch(e){};toast('avatar '+avatarSelect.options[avatarSelect.selectedIndex].text+' selecionado');};
 let perfT=0,perfFrames=0,perfDt=0;
-function atualizarMetricas(dt){perfT-=dt;perfFrames++;perfDt+=dt;if(perfT>0)return;const fps=perfDt>0?perfFrames/perfDt:0;const info=renderer.info.render;const r=document.getElementById('perfReadout');if(r)r.textContent=`${fps.toFixed(0)} FPS · ${info.calls} chamadas · ${info.triangles} triângulos`;perfT=1;perfFrames=0;perfDt=0;}
+function atualizarMetricas(dt){atualizarVisibilidadePerf();perfT-=dt;perfFrames++;perfDt+=dt;if(perfT>0)return;const fps=perfDt>0?perfFrames/perfDt:0;const info=renderer.info.render;const r=document.getElementById('perfReadout');if(r)r.textContent=`${fps.toFixed(0)} FPS · ${info.calls} chamadas · ${info.triangles} triângulos`;perfT=1;perfFrames=0;perfDt=0;}
 
 /* ═════════ COLISÃO ═════════ */
 const colliders=[];
@@ -2213,7 +2221,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
  t.classList.add('on');bancaTab=t.dataset.t;crossPick=[];renderBanca()});
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=closeAll);
-function closeAll(){['banca','venda','ponto','mundo'].forEach(id=>$(id).classList.remove('on'))}
+function closeAll(){['banca','venda','ponto','mundo'].forEach(id=>$(id).classList.remove('on'));atualizarVisibilidadePerf()}
 const modalOpen=()=>['banca','venda','ponto','mundo'].some(id=>$(id).classList.contains('on'));
 
 const matchLabel=v=>v>=78?'exatamente o perfil dele':v>=58?'atende bem':v>=38?'serve, paga menos':'não é o que ele quer';
@@ -3421,7 +3429,7 @@ function tick(){
  const mag=Math.hypot(ix,iz);
  const run=(keys.ShiftLeft||keys.ShiftRight||mag>.85)&&!aiming;
  const spd=aiming?2.7:(run?5.6:3.1);
- if(mag>.05&&G.running&&!modalOpen()&&!mpReconnecting&&(!mpConnected||mpReady)){
+ if(mag>.05&&G.running&&!modalOpen()&&!mpReconnecting){
   const nx=ix/mag,nz=iz/mag;
   // direção derivada direto do ângulo da câmera (mesma fórmula usada pro
   // posicionamento da câmera), sem depender do quaternion do frame anterior —
@@ -4591,6 +4599,13 @@ function mpConnect(){
     if(p){p.nome=msg.nome;if(msg.avatarId&&msg.avatarId!==p.avatarId){p.avatarId=AVATAR_CATALOGO[msg.avatarId]?msg.avatarId:'carmo';aplicarCoresAvatar(p.g,coresAvatar(p.avatarId))}}
    } else if(msg.t==='lote_atribuido'){
     if(msg.loteIndex===null||msg.loteIndex===undefined){
+     // Sem lote próprio ainda é possível caminhar pela cidade. O servidor
+     // entrega um spawn público para que mpReady não fique falso para sempre.
+     mpReady=true;
+     if(G.running&&msg.posicao&&!G._nasceuNoLote){
+      const p=msg.posicao;player.position.set(Number(p.x)||0,Number(p.y)||0,Number(p.z)||0);
+      player.rotation.y=Number(p.ry)||0;camYaw=player.rotation.y+Math.PI;
+     }
      toast('todos os lotes estão ocupados agora');
     } else {
      meuLoteIndex=msg.loteIndex;

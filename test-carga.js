@@ -10,6 +10,7 @@ function abrir(i) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
     let snaps = 0;
+    let loteAtual = null;
     let abriu = false;
     const timer = setTimeout(() => { try { ws.close(); } catch (_) {} reject(new Error('timeout no cliente ' + i)); }, 5000);
     ws.on('open', () => {
@@ -19,9 +20,12 @@ function abrir(i) {
     ws.on('message', raw => {
       let msg; try { msg = JSON.parse(raw); } catch (_) { return; }
       if (msg.t === 'snap') snaps++;
+      if (msg.t === 'lote_atribuido') loteAtual = msg;
       if (msg.t === 'estado') {
+        const lote = loteAtual;
+        if (!lote || !lote.posicao) { clearTimeout(timer); try { ws.close(); } catch (_) {} reject(new Error('cliente sem posição authoritative')); return; }
         clearTimeout(timer);
-        resolve({ ws, get snaps() { return snaps; }, abriu });
+        resolve({ ws, lote, get snaps() { return snaps; }, abriu });
       }
     });
     ws.on('error', err => { clearTimeout(timer); reject(err); });
@@ -43,6 +47,7 @@ function abrir(i) {
   assert.equal(response.ok, true, 'endpoint /metrics deve responder');
   const metrics = await response.json();
   assert.ok(metrics.jogadores >= TOTAL, `servidor deve manter ${TOTAL} jogadores, recebeu ${metrics.jogadores}`);
+  assert.ok(clientes.every(c => c.lote && c.lote.posicao), 'todos os clientes devem ter posição authoritative');
   assert.ok(metrics.snapshots > 0, 'servidor deve produzir snapshots');
   assert.ok(Number.isFinite(metrics.tickMaxMs), 'tickMaxMs deve ser numérico');
   for (const c of clientes) c.ws.close();

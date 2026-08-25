@@ -1556,22 +1556,21 @@ wss.on('connection', (ws, req) => {
         enviar(j, { t: 'sessao', token: emitirToken(j.chave), persistId: j.chave });
         const retomada = consumirPosicaoRetomada(j.chave);
         const idx = atribuirLote(j.chave, j.nome);
-        if (idx !== null) {
-          const loteInicial = lotes[idx];
-          const spawn = retomada || {
-            x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
-          };
-          // Queda curta retoma a posição authoritative anterior. Sem posição
-          // recente, nasce no ponto oficial do lote — nunca no ponto enviado.
-          j.x = spawn.x; j.y = spawn.y || 0; j.z = spawn.z; j.ry = spawn.ry || 0;
-          j.posIniciada = true;
-        }
+        const loteInicial = idx !== null ? lotes[idx] : null;
+        const spawn = retomada || (loteInicial ? {
+          x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
+        } : spawnOficial(j));
+        // Queda curta retoma a posição authoritative anterior. Sem posição
+        // recente, nasce no ponto oficial do lote ou, se todos estiverem
+        // ocupados, numa posição pública da cidade — nunca no ponto enviado.
+        j.x = spawn.x; j.y = spawn.y || 0; j.z = spawn.z; j.ry = spawn.ry || 0;
+        j.posIniciada = true;
         enviar(j, {
           t: 'lote_atribuido',
           loteIndex: idx,
           retomada: !!retomada,
-          posicao: idx !== null ? { x:j.x, y:j.y, z:j.z, ry:j.ry } : null,
-          lote: idx !== null ? resumoLote(lotes[idx], true) : null
+          posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry },
+          lote: loteInicial ? resumoLote(loteInicial, true) : null
         });
         // Carrega o estado salvo ANTES de anunciar a aparência final.
         // Isso evita que uma carteira antiga apareça por um instante com o
