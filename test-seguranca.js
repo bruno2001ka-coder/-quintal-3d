@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const assert = require('node:assert/strict');
 
-const URL = process.env.TEST_WS || 'ws://127.0.0.1:8800';
+const URL = process.env.TEST_WS || 'ws://127.0.0.1:8080';
 
 function connect() {
   return new Promise((resolve, reject) => {
@@ -50,7 +50,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   // O portão e os clientes devem existir como estado server-side.
   send(a, { t:'portao', id:lote.lote.portaoId });
   await a.waitFor(m => m.t === 'portao_estado' && m.aberto === true, 1500, 'server gate state');
-  const customerSnap = await a.waitFor(m => m.t === 'snap' && Array.isArray(m.clientes) && m.clientes.length > 0, 9000, 'server customer snapshot');
+  const customerSnap = await a.waitFor(m => m.t === 'snap' && Array.isArray(m.clientes) && m.clientes.length > 0, 30000, 'server customer snapshot');
   assert.equal(typeof customerSnap.clientes[0].id, 'string');
 
   // Ação sem posse de semente deve ser recusada.

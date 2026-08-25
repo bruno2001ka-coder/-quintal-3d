@@ -49,6 +49,8 @@ const HEARTBEAT_MS      = 30000;                 // ping a cada 30s
 const HEARTBEAT_TIMEOUT = 10000;                 // 10s pra responder
 const MAX_PAYLOAD       = 4 * 1024;              // 4KB por mensagem
 const MAX_CONEXOES      = 64;
+const WS_BUFFER_LIMITE  = 256 * 1024;              // não acumula mais que 256KB por cliente
+const GRADE_CELULA      = AOI_RAIO;                // índice espacial simples para snapshots
 const SESSION_SECRET_PATH = process.env.AUTH_SECRET_PATH || path.join(process.cwd(), '.quintal-session-secret');
 function carregarAuthSecret() {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
@@ -338,9 +340,11 @@ function carregarCarteira(chave) {
     try {
       const r = db.prepare('SELECT * FROM usuarios WHERE chave = ?').get(chave);
       if (!r) return null;
+      const up = JSON.parse(r.up || '{}');
       return {
         cash: r.cash, bank: JSON.parse(r.bank || '[]'),
-        estoque: JSON.parse(r.estoque || '[]'), up: JSON.parse(r.up || '{}'),
+        estoque: JSON.parse(r.estoque || '[]'), up,
+        avatarId: avatarCatalogado(up._avatarId),
         armas: JSON.parse(r.armas || '{}'),         fert: JSON.parse(r.fert || '{}'),
         rackMax: r.rack_max || 6, armor: Number(r.armor) || 0,
         municao: JSON.parse(r.municao || '{}'), funcs: JSON.parse(r.funcs || '[]'),
@@ -357,9 +361,11 @@ async function carregarCarteiraAsync(chave) {
     const r = await pg.query('SELECT * FROM usuarios WHERE chave = $1', [chave]);
     if (!r.rows.length) return null;
     const x = r.rows[0];
+    const up = JSON.parse(x.up || '{}');
     return {
       cash: x.cash, bank: JSON.parse(x.bank || '[]'),
-      estoque: JSON.parse(x.estoque || '[]'), up: JSON.parse(x.up || '{}'),
+      estoque: JSON.parse(x.estoque || '[]'), up,
+      avatarId: avatarCatalogado(up._avatarId),
       armas: JSON.parse(x.armas || '{}'),       fert: JSON.parse(x.fert || '{}'),
       rackMax: x.rack_max || 6, armor: Number(x.armor) || 0,
       municao: JSON.parse(x.municao || '{}'), funcs: JSON.parse(x.funcs || '[]'),
@@ -371,9 +377,10 @@ async function carregarCarteiraAsync(chave) {
 function salvarCarteira(chave) {
   const c = carteiras.get(chave);
   if (!c) return;
+  const upSalvo = Object.assign({}, c.up || {}, { _avatarId: avatarCatalogado(c.avatarId) });
   const dados = [chave, c._nome || '', Math.floor(c.cash),
     JSON.stringify(c.bank || []), JSON.stringify(c.estoque || []),
-    JSON.stringify(c.up || {}), JSON.stringify(c.armas || {}),
+    JSON.stringify(upSalvo), JSON.stringify(c.armas || {}),
     JSON.stringify(c.fert || {}), c.rackMax || 6, Number(c.armor) || 0,
     JSON.stringify(c.municao || {}), JSON.stringify(c.funcs || []), JSON.stringify(c.imoveis || []),
     Number(c.nivel) || 1, Number(c.xp) || 0, JSON.stringify(c.territorios || {}), Date.now()];
@@ -584,6 +591,11 @@ const CAT_ARMA_ESTADO = {
   rifle:   { dano: 42, mag: 24, reserva: 78, rate: 0.19, alcance: 52 }
 };
 const ARMA_INDEX = ['punho', 'pistola', 'smg', 'rifle'];
+const AVATAR_IDS = new Set(['carmo', 'verde', 'azul', 'roxo']);
+function avatarCatalogado(v) {
+  const id = str(v, 16).toLowerCase();
+  return AVATAR_IDS.has(id) ? id : 'carmo';
+}
 const CUSTO_COLETE = 520;
 const CUSTO_CRUZAR = 120;
 const TRAIT_KEYS = ['ritmo','rendimento','resistencia','aroma','brilho'];
@@ -611,7 +623,7 @@ function carteiraDe(j) {
     // tenta recuperar do banco antes de criar uma carteira nova
     const salva = carregarCarteira(k);
     carteiras.set(k, salva || { cash: CASH_INICIAL, bank: [], estoque: [],
-      rackMax: 6, up: {}, armas: { pistola: true }, fert: {}, municao: {}, funcs: [] });
+      rackMax: 6, up: {}, avatarId: avatarCatalogado(j.avatarId), armas: { pistola: true }, fert: {}, municao: {}, funcs: [] });
   }
   const c = carteiras.get(k);
   c.armas = c.armas || {};
@@ -621,6 +633,8 @@ function carteiraDe(j) {
   c.nivel = Math.max(1, Math.min(12, Number(c.nivel) || 1));
   c.xp = Math.max(0, Number(c.xp) || 0);
   c.funcs = Array.isArray(c.funcs) ? c.funcs : [];
+  c.avatarId = avatarCatalogado(c.avatarId || (c.up && c.up._avatarId) || j.avatarId);
+  j.avatarId = c.avatarId;
   // A pistola inicial não depende de mensagem do cliente.
   c.armas.pistola = true;
   if (!c.municao.pistola) c.municao.pistola = { pente: 12, reserva: 24 };
@@ -631,6 +645,7 @@ function carteiraDe(j) {
 }
 function sincronizarEquipamento(j) {
   const c = carteiraDe(j);
+  j.avatarId = c.avatarId;
   j.armas = c.armas;
   j.municao = c.municao;
   j.armor = c.armor;
@@ -690,7 +705,7 @@ function aplicarDanoJogador(j, dano, de) {
     j.procurado = 0;
     resultado.morreu = true;
     resultado.perda = perda;
-    paraTodos({ t: 'player_morreu', id: j.id, por: de || null });
+    paraInteresse({ t: 'player_morreu', id: j.id, por: de || null }, j.x, j.z, j.chave);
   }
   enviar(j, { t: 'levou_tiro', de, dano: resultado.aplicado, hp: j.hp, armor: j.armor });
   enviarEstado(j);
@@ -720,7 +735,8 @@ function enviarEstado(j) {
       const e = id && entidades.get(id); return e && e.ref ? resumoFunc(e.ref) : null;
     }).filter(Boolean),
     imoveis: c.imoveis || [], nivel: c.nivel || 1, xp: c.xp || 0,
-    territorios: c.territorios || {}, hp: j.hp, armor: j.armor, wanted: j.procurado || 0
+    territorios:     c.territorios || {}, hp: j.hp, armor: j.armor, wanted: j.procurado || 0, avatarId: j.avatarId
+
   });
 }
 function bankAdd(c, s, n) {
@@ -1015,7 +1031,7 @@ function funcsDoJogador(chave) {
   return funcsDe.get(chave);
 }
 function resumoFunc(f) {
-  return { id:f.id, cargo:f.cargo, nome:f.nome, dono:f.dono,
+  return { id:f.id, cargo:f.cargo, nome:f.nome, loteIndex:f.loteIndex ?? null,
     x:+f.x.toFixed(2), z:+f.z.toFixed(2), ry:+f.ry.toFixed(3), estado:f.estado || 'parado' };
 }
 function restaurarFuncionarios(j, c) {
@@ -1024,7 +1040,7 @@ function restaurarFuncionarios(j, c) {
     const cargo = typeof registro === 'string' ? null : str(registro && registro.cargo, 16);
     const def = cargo && CAT_FUNC[cargo];
     if (!def || meus.some(id => { const e=entidades.get(id); return e && e.ref && e.ref.cargo===cargo; })) continue;
-    const f = { cargo, nome:def.nome, dono:j.chave, x:j.x+1.5, z:j.z+1.5,
+    const f = { cargo, nome:def.nome, dono:j.chave, loteIndex:loteDe.get(j.chave) ?? null, x:j.x+1.5, z:j.z+1.5,
       ry:0, alvo:null, estado:'parado', proximaTarefa:agora()+5000 };
     const ent = registrar('fn', j.chave, f);
     f.id = ent.id; funcionarios.push(f); meus.push(ent.id);
@@ -1060,12 +1076,14 @@ function passoFuncionario(f, dt) {
       const q = Math.max(2, Math.round((1.3 + alvo.pl.s.t.rendimento / 100 * 2.6) * alvo.pl.saude * 7 * (alvo.pl.s.auto ? .72 : 1) * (RAR_MULT[alvo.pl.s.rar] || 1)));
       c.estoque.push({ id: proxLoteId++, s: alvo.pl.s, qtd:q, estagio:'sec', qual:.55 + alvo.pl.saude * .45, desde:agora() });
       lote.plots[alvo.i] = null; remover(alvo.pl.id);
-      paraTodos({ t:'lote_update', loteIndex:lote.index, plotIndex:alvo.i, plot:null });
+      metricas.loteUpdates++;
+      paraInteresse({ t:'lote_update', loteIndex:lote.index, plotIndex:alvo.i, plot:null }, lote.x, lote.z, lote.donoChave);
       marcarSuja({ chave:f.dono });
     }
   } else {
     alvo.pl.agua = 1; alvo.pl.praga = 0;
-    paraTodos({ t:'lote_update', loteIndex:lote.index, plotIndex:alvo.i, plot:alvo.pl });
+      metricas.loteUpdates++;
+      paraInteresse({ t:'lote_update', loteIndex:lote.index, plotIndex:alvo.i, plot:alvo.pl }, lote.x, lote.z, lote.donoChave);
   }
   f.proximaTarefa = agora() + 2500;
 }
@@ -1079,7 +1097,7 @@ const clientes = [];
 let proxCliente = 1;
 let clienteSpawnT = 5;
 function resumoCliente(c) {
-  return { id:c.id, dono:c.dono, loteIndex:c.loteIndex, nome:c.nome,
+  return { id:c.id, loteIndex:c.loteIndex, nome:c.nome,
     want:c.want, qtd:c.qtd, mult:+c.mult.toFixed(3), fala:c.fala,
     fase:c.fase, x:+c.x.toFixed(2), z:+c.z.toFixed(2),
     destX:+c.destX.toFixed(2), destZ:+c.destZ.toFixed(2), ry:+c.ry.toFixed(3) };
@@ -1201,7 +1219,7 @@ function nascerPM(alvoJog) {
     cacando: alvoJog.id, destX: alvoJog.x, destZ: alvoJog.z
   };
   bots.push(b);
-  paraTodos({ t: 'sirene' });
+  paraInteresse({ t: 'sirene' }, alvoJog.x, alvoJog.z, alvoJog.chave);
   return b;
 }
 /* Tiro da polícia: só dispara com linha de visão livre. Isso acaba com o
@@ -1215,7 +1233,7 @@ function tiroPM(b) {
     if (!temVisao(b.x, b.z, j.x, j.z)) continue;   // parede no caminho: não atira
     b.ultimoTiro = t;
     aplicarDanoJogador(j, PM_DANO, b.id);
-    paraTodos({ t: 'tiro_npc', id: b.id, ax: b.x, az: b.z, bx: j.x, bz: j.z });
+    paraInteresse({ t: 'tiro_npc', id: b.id, ax: b.x, az: b.z, bx: j.x, bz: j.z }, j.x, j.z, j.chave);
     return;
   }
 }
@@ -1302,7 +1320,57 @@ function passoBot(b, dt) {
 const jogadores = new Map();   // id -> estado
 let proxId = 1;
 let tickAtual = 0;
-const metricas = { msgRecebidas: 0, msgEnviadas: 0, rejeitadas: 0, desdeT: agora() };
+const metricas = { msgRecebidas: 0, msgEnviadas: 0, descartadas: 0, rejeitadas: 0,
+  snapshots: 0, loteUpdates: 0, tickMaxMs: 0, desdeT: agora() };
+const gradeJogadores = new Map();
+const chaveGrade = (x, z) => Math.floor(x / GRADE_CELULA) + ':' + Math.floor(z / GRADE_CELULA);
+function reconstruirGradeJogadores() {
+  gradeJogadores.clear();
+  for (const j of jogadores.values()) {
+    if (!j.autenticado) continue;
+    const k = chaveGrade(j.x, j.z);
+    const lista = gradeJogadores.get(k);
+    if (lista) lista.push(j); else gradeJogadores.set(k, [j]);
+  }
+}
+function jogadoresNaArea(x, z, raio = AOI_RAIO) {
+  const out = [];
+  const minX = Math.floor((x - raio) / GRADE_CELULA);
+  const maxX = Math.floor((x + raio) / GRADE_CELULA);
+  const minZ = Math.floor((z - raio) / GRADE_CELULA);
+  const maxZ = Math.floor((z + raio) / GRADE_CELULA);
+  for (let gx = minX; gx <= maxX; gx++) for (let gz = minZ; gz <= maxZ; gz++) {
+    const lista = gradeJogadores.get(gx + ':' + gz); if (!lista) continue;
+    for (const j of lista) if (Math.hypot(j.x - x, j.z - z) <= raio) out.push(j);
+  }
+  return out;
+}
+const gradeDinamicos = new Map();
+function reconstruirGradeDinamicos() {
+  gradeDinamicos.clear();
+  const adicionar = (tipo, ref) => {
+    if (!ref || (tipo === 'bot' && ref.hp <= 0)) return;
+    const k = chaveGrade(ref.x, ref.z);
+    const lista = gradeDinamicos.get(k);
+    const item = { tipo, ref };
+    if (lista) lista.push(item); else gradeDinamicos.set(k, [item]);
+  };
+  for (const b of bots) adicionar('bot', b);
+  for (const f of funcionarios) adicionar('func', f);
+  for (const c of clientes) if (c.fase !== 'saindo' || !c.removerEm) adicionar('cliente', c);
+}
+function dinamicosNaArea(x, z, raio = AOI_RAIO) {
+  const out = [];
+  const minX = Math.floor((x - raio) / GRADE_CELULA);
+  const maxX = Math.floor((x + raio) / GRADE_CELULA);
+  const minZ = Math.floor((z - raio) / GRADE_CELULA);
+  const maxZ = Math.floor((z + raio) / GRADE_CELULA);
+  for (let gx = minX; gx <= maxX; gx++) for (let gz = minZ; gz <= maxZ; gz++) {
+    const lista = gradeDinamicos.get(gx + ':' + gz); if (!lista) continue;
+    for (const item of lista) if (Math.hypot(item.ref.x - x, item.ref.z - z) <= raio) out.push(item);
+  }
+  return out;
+}
 
 const server = http.createServer((req, res) => {
   if (req.url === '/metrics') {
@@ -1315,6 +1383,10 @@ const server = http.createServer((req, res) => {
       msgRecebidasPorSeg: +(metricas.msgRecebidas / dt).toFixed(1),
       msgEnviadasPorSeg: +(metricas.msgEnviadas / dt).toFixed(1),
       rejeitadas: metricas.rejeitadas,
+      descartadasPorBackpressure: metricas.descartadas,
+      snapshots: metricas.snapshots,
+      loteUpdates: metricas.loteUpdates,
+      tickMaxMs: +metricas.tickMaxMs.toFixed(2),
       lotesOcupados: lotes.filter(l => l.donoChave).length,
       uptimeSeg: Math.round(process.uptime()),
       memoriaMB: +(process.memoryUsage().rss / 1048576).toFixed(1),
@@ -1334,20 +1406,47 @@ uptime: ${Math.round(process.uptime())}s
 
 const wss = new WebSocketServer({ server, maxPayload: MAX_PAYLOAD });
 
+function enviarSerializado(j, payload) {
+  if (!j || !j.ws || j.ws.readyState !== 1) return false;
+  // Um cliente lento não pode fazer a fila de saída crescer sem limite.
+  // Snapshots são descartáveis: o próximo já contém estado mais recente.
+  if (j.ws.bufferedAmount > WS_BUFFER_LIMITE) {
+    metricas.descartadas++;
+    return false;
+  }
+  try { j.ws.send(payload); metricas.msgEnviadas++; return true; } catch (e) { return false; }
+}
 function enviar(j, obj) {
-  if (j.ws.readyState !== 1) return;
-  try { j.ws.send(JSON.stringify(obj)); metricas.msgEnviadas++; } catch (e) {}
+  let payload;
+  try { payload = typeof obj === 'string' ? obj : JSON.stringify(obj); } catch (_) { return false; }
+  return enviarSerializado(j, payload);
 }
 function paraTodos(obj, exceto) {
+  let payload; try { payload = JSON.stringify(obj); } catch (_) { return; }
   for (const [id, j] of jogadores) {
     if (id === exceto) continue;
-    enviar(j, obj);
+    enviarSerializado(j, payload);
   }
 }
-function resumoLote(l) {
+function paraInteresse(obj, x, z, donoChave = null, exceto = null) {
+  let payload; try { payload = JSON.stringify(obj); } catch (_) { return; }
+  // O dono sempre recebe o evento, mesmo que esteja ligeiramente fora do AOI.
+  const enviados = new Set();
+  for (const j of jogadoresNaArea(x, z)) {
+    if (j.id !== exceto && !enviados.has(j.id)) {
+      enviados.add(j.id); enviarSerializado(j, payload);
+    }
+  }
+  if (donoChave) for (const j of jogadores.values()) {
+    if (j.id !== exceto && j.chave === donoChave && !enviados.has(j.id)) {
+      enviados.add(j.id); enviarSerializado(j, payload);
+    }
+  }
+}
+function resumoLote(l, incluirPlots = false) {
   return { index: l.index, id: l.id, portaoId: l.portaoId,
-    donoNome: l.donoNome, portaoAberto: l.portaoAberto,
-    tipos: TIPO_PLOT, plots: l.plots };
+    donoNome: l.donoNome, donoId: l.donoChave || null, portaoAberto: l.portaoAberto,
+    tipos: TIPO_PLOT, plots: incluirPlots ? l.plots : [] };
 }
 
 wss.on('connection', (ws, req) => {
@@ -1361,11 +1460,12 @@ wss.on('connection', (ws, req) => {
     id, ws,
     nome: 'Jogador' + id,
     chave: null,
-    x: 0, y: 0, z: 0, ry: 0, arma: 0,
+    x: 0, y: 0, z: 0, ry: 0, arma: 0, avatarId: 'carmo',
     hp: 100, armor: 0, procurado: 0, morto: false, respawnEm: 0,
     armas: { pistola: true },
     municao: { pistola: { pente: 12, reserva: 24 } },
     ultimoTiro: 0, ultimoCrime: 0,
+    lotesVisiveis: new Set(),
     posIniciada: false, autenticado: false,
     ultimoMov: agora(),
     vivo: true, ultimoPong: agora(),
@@ -1380,7 +1480,7 @@ wss.on('connection', (ws, req) => {
     territorios: TERRITORIOS.map(t => ({ nome:t.nome, x:t.x, z:t.z, raio:t.raio,
       demanda:t.demanda, donoChave:t.ownerKey || null, donoNome:t.ownerNome || null }))
   });
-  paraTodos({ t: 'join', id, nome: j.nome }, id);
+  paraTodos({ t: 'join', id, nome: j.nome, avatarId: j.avatarId }, id);
 
   ws.on('pong', () => { j.ultimoPong = agora(); j.vivo = true; });
 
@@ -1441,6 +1541,7 @@ wss.on('connection', (ws, req) => {
         j.fundador = ehFundador(j);
         if (j.fundador) console.log('fundador conectado: ' + j.nome);
         if (m.nome) j.nome = nomeSeguro(m.nome) || j.nome;
+        j.avatarId = avatarCatalogado(m.avatarId);
         enviar(j, { t: 'sessao', token: emitirToken(j.chave), persistId: j.chave });
         const idx = atribuirLote(j.chave, j.nome);
         if (idx !== null) {
@@ -1455,10 +1556,11 @@ wss.on('connection', (ws, req) => {
         enviar(j, {
           t: 'lote_atribuido',
           loteIndex: idx,
-          lote: idx !== null ? resumoLote(lotes[idx]) : null
+          lote: idx !== null ? resumoLote(lotes[idx], true) : null
         });
-        paraTodos({ t: 'nome', id, nome: j.nome }, id);
-        // Carrega o estado salvo ANTES de mandar o estado inicial.
+        // Carrega o estado salvo ANTES de anunciar a aparência final.
+        // Isso evita que uma carteira antiga apareça por um instante com o
+        // avatar enviado apenas nesta conexão.
         // No Postgres a leitura é assíncrona, então esperamos ela.
         (async () => {
           const k = j.chave || j.id;
@@ -1467,6 +1569,7 @@ wss.on('connection', (ws, req) => {
             if (salva) carteiras.set(k, salva);
           }
           const c = sincronizarEquipamento(j);
+          paraTodos({ t: 'nome', id, nome: j.nome, avatarId: j.avatarId }, id);
           for (const nomeTerr of Object.keys(c.territorios || {})) {
             const terr = TERRITORIOS.find(x => x.nome === nomeTerr);
             if (terr && (!terr.ownerKey || terr.ownerKey === j.chave)) {
@@ -1491,7 +1594,17 @@ wss.on('connection', (ws, req) => {
         j.nome = nomeSeguro(m.nome) || j.nome;
         if (j.chave && loteDe.has(j.chave)) lotes[loteDe.get(j.chave)].donoNome = j.nome;
         marcarSuja(j);
-        paraTodos({ t: 'nome', id, nome: j.nome }, id);
+        paraTodos({ t: 'nome', id, nome: j.nome, avatarId: j.avatarId }, id);
+        break;
+      }
+
+      case 'avatar': {
+        if (!exigirHandshake(j)) return;
+        const c = carteiraDe(j);
+        c.avatarId = avatarCatalogado(m.avatarId);
+        j.avatarId = c.avatarId;
+        marcarSuja(j);
+        paraTodos({ t: 'nome', id, nome: j.nome, avatarId: j.avatarId }, id);
         break;
       }
 
@@ -1569,7 +1682,8 @@ wss.on('connection', (ws, req) => {
         novaPl.plotIndex = pi;
         lote.plots[pi] = novaPl;
         const ev = { t: 'lote_update', loteIndex: lote.index, plotIndex: pi, plot: lote.plots[pi] };
-        paraTodos(ev); enviar(j, ev);
+        metricas.loteUpdates++;
+        paraInteresse(ev, lote.x, lote.z, lote.donoChave);
         enviarEstado(j);
         break;
       }
@@ -1584,7 +1698,8 @@ wss.on('connection', (ws, req) => {
           if (!exigirPlotDoJogador(j, lote2, p2.plotIndex)) return;
           p2.agua = 1; p2.praga = 0;
           const ev2 = { t: 'lote_update', loteIndex: p2.loteIndex, plotIndex: p2.plotIndex, plot: p2 };
-          paraTodos(ev2); enviar(j, ev2);
+          metricas.loteUpdates++;
+          paraInteresse(ev2, lote2.x, lote2.z, lote2.donoChave);
           return;
         }
         // caminho antigo (índice) — mantido temporariamente, com a mesma
@@ -1756,7 +1871,7 @@ wss.on('connection', (ws, req) => {
           contexto.cliente.destX = contexto.cliente.x;
           contexto.cliente.destZ = contexto.cliente.z;
           contexto.cliente.esperaAte = agora();
-          paraTodos({ t: 'cliente_vendeu', id: contexto.cliente.id, qtd: q, valor });
+          paraInteresse({ t: 'cliente_vendeu', id: contexto.cliente.id, qtd: q, valor }, contexto.cliente.x, contexto.cliente.z, contexto.cliente.dono);
         }
         enviar(j, { t: 'venda_ok', valor, qtd: q });
         enviarEstado(j);
@@ -1912,14 +2027,14 @@ wss.on('connection', (ws, req) => {
         if (b.hp <= 0) {
           b.hp = 0;
           darXP(j, 80);
-          paraTodos({ t: 'bot_morreu', id: b.id, porQuem: j.nome });
+          paraInteresse({ t: 'bot_morreu', id: b.id, porQuem: j.nome }, b.x, b.z);
           // renasce depois de um tempo, no próprio ponto
           setTimeout(() => {
             b.x = b.casaX; b.z = b.casaZ; b.hp = BOT_VIDA; b.alvo = null;
-            paraTodos({ t: 'bot_nasceu', id: b.id });
+            paraInteresse({ t: 'bot_nasceu', id: b.id }, b.x, b.z);
           }, 25000);
         } else {
-          paraTodos({ t: 'bot_dano', id: b.id, hp: b.hp });
+          paraInteresse({ t: 'bot_dano', id: b.id, hp: b.hp }, b.x, b.z);
         }
         enviarEstado(j);
         break;
@@ -1946,7 +2061,8 @@ wss.on('connection', (ws, req) => {
           lotes[p2.loteIndex].plots[p2.plotIndex] = null;
           remover(p2.id);
           const ev2 = { t: 'lote_update', loteIndex: p2.loteIndex, plotIndex: p2.plotIndex, plot: null };
-          paraTodos(ev2); enviar(j, ev2);
+          metricas.loteUpdates++;
+          paraInteresse(ev2, lote2.x, lote2.z, lote2.donoChave);
           c2.estoque.push({ id: proxLoteId++, s: p2.s, qtd: q2, estagio: 'sec',
             qual: .55 + p2.saude * .45, desde: agora() });
           enviar(j, { t: 'colheita', plotIndex: p2.plotIndex, qtd: q2, strain: p2.s });
@@ -1969,7 +2085,8 @@ wss.on('connection', (ws, req) => {
         }
         lote.plots[pi] = null;
         const ev = { t: 'lote_update', loteIndex: lote.index, plotIndex: pi, plot: null };
-        paraTodos(ev); enviar(j, ev);
+        metricas.loteUpdates++;
+        paraInteresse(ev, lote.x, lote.z, lote.donoChave);
         c.estoque.push({ id: proxLoteId++, s: pl.s, qtd:q, estagio:'sec',
           qual:.55 + pl.saude * .45, desde:agora() });
         enviar(j, { t: 'colheita', plotIndex: pi, qtd: q, qual: .55 + pl.saude * .45, strain: pl.s });
@@ -1992,6 +2109,7 @@ wss.on('connection', (ws, req) => {
 
 /* ───────── tick fixo: um snapshot por tick, só de quem está perto ───────── */
 setInterval(() => {
+  const tickInicio = performance.now();
   tickAtual++;
   const dtTick = TICK_MS / 1000;
   clienteSpawnT -= dtTick;
@@ -2014,10 +2132,16 @@ setInterval(() => {
     const b = bots[i];
     if (b.tipo === 'pm' && b.morreEm && agora() > b.morreEm) {
       bots.splice(i, 1);
-      paraTodos({ t: 'bot_morreu', id: b.id, porQuem: null });
+      paraInteresse({ t: 'bot_morreu', id: b.id, porQuem: null }, b.x, b.z);
     }
   }
+  reconstruirGradeJogadores();
+  reconstruirGradeDinamicos();
   for (const [id, j] of jogadores) {
+    if (j.ws.bufferedAmount > WS_BUFFER_LIMITE) {
+      metricas.descartadas++;
+      continue; // o próximo snapshot substitui este
+    }
     if (j.morto && agora() >= j.respawnEm) {
       const p = spawnOficial(j);
       j.x = p.x; j.y = p.y; j.z = p.z; j.hp = 100; j.armor = 0;
@@ -2027,38 +2151,44 @@ setInterval(() => {
       enviarEstado(j);
     }
     const perto = [];
-    for (const [oid, o] of jogadores) {
-      if (oid === id) continue;
-      if (Math.hypot(o.x - j.x, o.z - j.z) > AOI_RAIO) continue;
+    for (const o of jogadoresNaArea(j.x, j.z)) {
+      if (o.id === id) continue;
       perto.push({
-        id: oid, nome: o.nome,
+        id: o.id, nome: o.nome,
         x: +o.x.toFixed(2), y: +o.y.toFixed(2),
         z: +o.z.toFixed(2), ry: +o.ry.toFixed(3), arma: o.arma,
-        hp: o.hp, morto: !!o.morto
+        avatarId: o.avatarId, hp: o.hp, morto: !!o.morto
       });
     }
-    const botsPerto = [];
-    for (const b of bots) {
-      if (b.hp <= 0) continue;
-      if (Math.hypot(b.x - j.x, b.z - j.z) > AOI_RAIO) continue;
-      botsPerto.push({ id: b.id, tipo: b.tipo, x: +b.x.toFixed(2),
-        z: +b.z.toFixed(2), ry: +b.ry.toFixed(3), hp: b.hp, agro: !!b.alvo });
+    const botsPerto = [], funcsPerto = [], clientesPerto = [];
+    for (const item of dinamicosNaArea(j.x, j.z)) {
+      if (item.tipo === 'bot') {
+        const b = item.ref;
+        botsPerto.push({ id: b.id, tipo: b.tipo, x: +b.x.toFixed(2),
+          z: +b.z.toFixed(2), ry: +b.ry.toFixed(3), hp: b.hp, agro: !!b.alvo });
+      } else if (item.tipo === 'func') {
+        funcsPerto.push(resumoFunc(item.ref));
+      } else {
+        clientesPerto.push(resumoCliente(item.ref));
+      }
     }
-    // F1 — funcionários viajam no MESMO snapshot dos bots, com o mesmo
-    // filtro de AOI. Todos que estiverem perto veem os mesmos.
-    const funcsPerto = [];
-    for (const f of funcionarios) {
-      if (Math.hypot(f.x - j.x, f.z - j.z) > AOI_RAIO) continue;
-      funcsPerto.push(resumoFunc(f));
+    // Dados de plantas só são enviados quando o jogador entra no AOI do lote.
+    // O handshake nunca deve revelar todas as plantas privadas do mundo.
+    const lotesNovos = [];
+    for (const l of lotes) {
+      const perto = Math.hypot(l.x - j.x, l.z - j.z) <= AOI_RAIO;
+      if (perto && !j.lotesVisiveis.has(l.index)) {
+        j.lotesVisiveis.add(l.index);
+        lotesNovos.push(resumoLote(l, true));
+      } else if (!perto) {
+        j.lotesVisiveis.delete(l.index);
+      }
     }
-    const clientesPerto = [];
-    for (const c of clientes) {
-      if (Math.hypot(c.x - j.x, c.z - j.z) > AOI_RAIO) continue;
-      clientesPerto.push(resumoCliente(c));
-    }
+    metricas.snapshots++;
     enviar(j, { t: 'snap', tick: tickAtual, players: perto, bots: botsPerto,
-      funcs: funcsPerto, clientes: clientesPerto });
+      funcs: funcsPerto, clientes: clientesPerto, lotes: lotesNovos });
   }
+  metricas.tickMaxMs = Math.max(metricas.tickMaxMs, performance.now() - tickInicio);
 }, TICK_MS);
 
 /* ───────── crescimento das plantas ─────────
@@ -2075,11 +2205,10 @@ setInterval(() => {
   relogio = (relogio + avancou) % 1440;
   if (relogioAntes + avancou >= 1440) aplicarDiariaServidor();
   for (const lote of lotes) {
+    const updates = [];
     for (let i = 0; i < lote.plots.length; i++) {
       const pl = lote.plots[i];
       if (!pl) continue;
-      const progAntes = pl.prog;
-      const aguaAntes = pl.agua;
       const dono = lote.donoChave ? carteiras.get(lote.donoChave) : null;
       const mudouEstagio = crescer(pl, dt, relogio, TIPO_PLOT[i], dono ? dono.up : null);
       const mudouProg = Math.abs(pl.prog - (pl._ultProg ?? -99)) >= 0.7;
@@ -2087,8 +2216,14 @@ setInterval(() => {
       if (mudouEstagio || mudouProg || mudouAgua) {
         pl._ultProg = pl.prog;
         pl._ultAgua = pl.agua;
-        paraTodos({ t: 'lote_update', loteIndex: lote.index, plotIndex: i, plot: pl });
+        updates.push({ plotIndex: i, plot: pl });
       }
+    }
+    if (updates.length) {
+      metricas.loteUpdates += updates.length;
+      // Um pacote por lote substitui dezenas de broadcasts e mantém o
+      // progresso contínuo sem inundar sockets que nem estão na área.
+      paraInteresse({ t: 'lotes_update', loteIndex: lote.index, updates }, lote.x, lote.z, lote.donoChave);
     }
   }
 }, GROW_MS);

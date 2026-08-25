@@ -26,24 +26,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check server syntax
-        run: node --check servidor-1.js
-
-      - name: Check client syntax
+      - name: Check syntax
         run: |
+          node --check servidor-1.js
+          node --check test-seguranca.js
+          node --check test-multiplayer-aoi.js
+          node --check test-carga.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
 
-      - name: Run WebSocket security integration test
+      - name: Run isolated regression servers and tests
         env:
-          PORT: 8800
           AUTH_SECRET: ci-only-session-secret
-          DB_PATH: ${{ runner.temp }}/quintal-ci.db
         run: |
           set -euo pipefail
-          node servidor-1.js > "$RUNNER_TEMP/quintal-server.log" 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          pids=()
+          cleanup() { for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; }
+          trap cleanup EXIT
+          for port in 8800 8801 8802; do
+            rm -f "$RUNNER_TEMP/quintal-$port.db" "$RUNNER_TEMP/quintal-$port.db-shm" "$RUNNER_TEMP/quintal-$port.db-wal"
+            PORT="$port" DB_PATH="$RUNNER_TEMP/quintal-$port.db" node servidor-1.js > "$RUNNER_TEMP/quintal-$port.log" 2>&1 &
+            pids+=("$!")
+          done
           sleep 2
-          TEST_WS=ws://127.0.0.1:8800 node test-seguranca.js
-          cat "$RUNNER_TEMP/quintal-server.log"
+          TEST_WS=ws://127.0.0.1:8800 npm test
+          TEST_WS=ws://127.0.0.1:8801 npm run test:aoi
+          TEST_WS=ws://127.0.0.1:8802 TEST_HTTP=http://127.0.0.1:8802 npm run test:carga
+          for port in 8800 8801 8802; do cat "$RUNNER_TEMP/quintal-$port.log"; done

@@ -429,9 +429,15 @@ function mat(canvas,rx,ry,o){return new THREE.MeshStandardMaterial(Object.assign
 const scene=new THREE.Scene();
 scene.fog=new THREE.FogExp2(0xcfd6dd,.038);
 const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,85);
-const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(matchMedia('(pointer:coarse)').matches?1:Math.min(devicePixelRatio,1.5));
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const qualidadeCfg={alto:{pixel:1.35,sombras:true,tipo:THREE.PCFSoftShadowMap,mapa:1024},medio:{pixel:1.1,sombras:true,tipo:THREE.PCFShadowMap,mapa:768},baixo:{pixel:1,sombras:false,tipo:THREE.BasicShadowMap,mapa:512}};
+let qualidade='alto';
+try{qualidade=localStorage.getItem('quintal3d-qualidade')||'alto'}catch(e){}
+if(!qualidadeCfg[qualidade])qualidade='alto';
+const cfgQual=()=>qualidadeCfg[qualidade];
+const renderer=new THREE.WebGLRenderer({antialias:qualidade!=='baixo'&& !matchMedia('(pointer:coarse)').matches,powerPreference:'high-performance'});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,cfgQual().pixel));
+renderer.shadowMap.enabled=cfgQual().sombras;renderer.shadowMap.type=cfgQual().tipo;
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.82;
 document.body.appendChild(renderer.domElement);
@@ -442,11 +448,22 @@ scene.add(skyDome);
 function paintSky(a,b,c){const g=skyC.getContext('2d'),gr=g.createLinearGradient(0,0,0,256);
  gr.addColorStop(0,a);gr.addColorStop(.5,b);gr.addColorStop(1,c);g.fillStyle=gr;g.fillRect(0,0,4,256);skyT.needsUpdate=true}
 const sun=new THREE.DirectionalLight(0xffe9c4,1.85);
-sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+ sun.castShadow=cfgQual().sombras;sun.shadow.mapSize.set(cfgQual().mapa,cfgQual().mapa);
 Object.assign(sun.shadow.camera,{left:-18,right:18,top:18,bottom:-18,near:1,far:60});
 sun.shadow.bias=-.0007;sun.shadow.normalBias=.02;
 scene.add(sun);scene.add(sun.target);
 const hemi=new THREE.HemisphereLight(0x8fb4dc,0x6b5138,.34);scene.add(hemi);
+const perfBox=document.createElement('div');
+perfBox.style.cssText='position:fixed;right:10px;top:10px;z-index:20;padding:7px 9px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(12,16,15,.72);color:#dce9d7;font:11px system-ui;backdrop-filter:blur(4px);pointer-events:auto';
+perfBox.innerHTML='<label style="display:flex;gap:6px;align-items:center">qualidade <select id="qualitySelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="alto">Alto</option><option value="medio">Médio</option><option value="baixo">Baixo</option></select></label><label style="display:flex;gap:6px;align-items:center;margin-top:4px">avatar <select id="avatarSelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="carmo">Carmo</option><option value="verde">Verde</option><option value="azul">Azul</option><option value="roxo">Roxo</option></select></label><div id="perfReadout" style="margin-top:4px;opacity:.75">medindo…</div>';
+document.body.appendChild(perfBox);
+const qualitySelect=document.getElementById('qualitySelect');qualitySelect.value=qualidade;
+qualitySelect.onchange=()=>{qualidade=qualitySelect.value;try{localStorage.setItem('quintal3d-qualidade',qualidade)}catch(e){};renderer.setPixelRatio(Math.min(devicePixelRatio||1,cfgQual().pixel));renderer.shadowMap.enabled=cfgQual().sombras;renderer.shadowMap.type=cfgQual().tipo;sun.castShadow=cfgQual().sombras;sun.shadow.mapSize.set(cfgQual().mapa,cfgQual().mapa);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}toast('qualidade '+qualitySelect.options[qualitySelect.selectedIndex].text+' aplicada');};
+const avatarSelect=document.getElementById('avatarSelect');
+try{avatarSelect.value=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
+avatarSelect.onchange=()=>{const id=avatarSelect.value;try{localStorage.setItem('quintal3d-avatar',id)}catch(e){};if(typeof mpAvatarId!=='undefined')mpAvatarId=id;if(typeof player!=='undefined'&&typeof aplicarCoresAvatar==='function')aplicarCoresAvatar(player,coresAvatar(id));if(typeof mpConnected!=='undefined'&&mpConnected&&mpWs)try{mpWs.send(JSON.stringify({t:'avatar',avatarId:id}))}catch(e){};toast('avatar '+avatarSelect.options[avatarSelect.selectedIndex].text+' selecionado');};
+let perfT=0,perfFrames=0,perfDt=0;
+function atualizarMetricas(dt){perfT-=dt;perfFrames++;perfDt+=dt;if(perfT>0)return;const fps=perfDt>0?perfFrames/perfDt:0;const info=renderer.info.render;const r=document.getElementById('perfReadout');if(r)r.textContent=`${fps.toFixed(0)} FPS · ${info.calls} chamadas · ${info.triangles} triângulos`;perfT=1;perfFrames=0;perfDt=0;}
 
 /* ═════════ COLISÃO ═════════ */
 const colliders=[];
@@ -1537,16 +1554,16 @@ function leafletGeo(len,wid){
  geo.computeVertexNormals();
  _leafCache[key]=geo;return geo;
 }
-function makeFan(mat,scale){
- // leque palmado: 7 folíolos, o do meio maior, decrescendo pros lados
- const fan=new THREE.Group(),N=7,mid=3;
+function makeFan(mat,scale,folhas=7,sombras=true){
+ // LOD: o modo alto usa 7 folíolos; médio/baixo reduzem nós e polígonos.
+ const fan=new THREE.Group(),N=folhas,mid=(N-1)/2;
  for(let f=0;f<N;f++){
   const t=1-Math.abs(f-mid)/(mid+.55);
   const len=(.13+t*.34)*scale, wid=(.022+t*.052)*scale;
   const lf=new THREE.Mesh(leafletGeo(len,wid),mat);
   lf.rotation.z=(f-mid)*0.36;
   lf.rotation.x=-1.16-(1-t)*0.30;   // folíolos externos caem mais
-  lf.castShadow=true;fan.add(lf);
+  lf.castShadow=sombras;fan.add(lf);
  }
  const peciolo=new THREE.Mesh(new THREE.CylinderGeometry(.008*scale,.011*scale,.14*scale,4),
   new THREE.MeshStandardMaterial({color:0x6f9440,roughness:.9}));
@@ -1555,6 +1572,7 @@ function makeFan(mat,scale){
 }
 function buildPlant(s){
  const g=new THREE.Group();
+ const lod=qualidade==='alto'?{nodes:5,folhas:7,sombras:true,camadas:4,calices:5,sparks:6}:qualidade==='medio'?{nodes:3,folhas:5,sombras:false,camadas:3,calices:3,sparks:3}:{nodes:2,folhas:3,sombras:false,camadas:2,calices:2,sparks:1};
  // folha: textura de nervura + leve brilho de cutícula. emissive baixinho na
  // própria cor finge a translucidez da folha fina no contraluz.
  const leafM=new THREE.MeshStandardMaterial({color:s.cor,map:leafTex(),
@@ -1564,9 +1582,9 @@ function buildPlant(s){
  const H=1.6;
  // caule principal, levemente cônico
  const st=new THREE.Mesh(new THREE.CylinderGeometry(.022,.052,H,8),stemM);
- st.geometry.translate(0,H/2,0);st.castShadow=true;g.add(st);
+ st.geometry.translate(0,H/2,0);st.castShadow=lod.sombras;g.add(st);
  // nós com pares de folhas opostas (como planta de verdade), alternando 90°
- const NODES=5;const fans=[];
+ const NODES=lod.nodes;const fans=[];
  for(let n=0;n<NODES;n++){
   const t=n/(NODES-1);
   const y=.16+t*(H-.28);
@@ -1574,7 +1592,7 @@ function buildPlant(s){
   const giro=n*1.57+ (n%2?0.25:0);          // filotaxia alternada
   for(let side=0;side<2;side++){
    const a=giro+side*Math.PI;
-   const fan=makeFan(leafM,esc);
+   const fan=makeFan(leafM,esc,lod.folhas,lod.sombras);
    fan.position.set(Math.cos(a)*.05,y,Math.sin(a)*.05);
    fan.rotation.y=a+Math.PI/2;
    fan.rotation.z=(side?1:-1)*.12;
@@ -1592,7 +1610,7 @@ function buildPlant(s){
    br.geometry.translate(0,bl/2,0);
    br.position.set(Math.cos(a)*.04,y,Math.sin(a)*.04);
    br.rotation.z=-Math.cos(a)*1.0;br.rotation.x=Math.sin(a)*1.0;
-   br.castShadow=true;g.add(br);
+   br.castShadow=lod.sombras;g.add(br);
   }
  }
  // ─── colas ───
@@ -1613,12 +1631,12 @@ function buildPlant(s){
               {x:-.24,y:H*.54,z:-.10,s:.55,alt:.24}];
  colas.forEach(c=>{
   const cola=new THREE.Group();
-  const camadas=Math.round(4+s.t.rendimento/100*4);
+   const camadas=Math.max(2,Math.round(lod.camadas+s.t.rendimento/100*(lod.camadas===4?4:2)));
   for(let L=0;L<camadas;L++){
    const ct=L/(camadas-1||1);
    const yy=ct*c.alt;
    const raio=(.115*(1-ct*.72)+.02)*c.s;    // afina pro topo, formato de cone
-   const nCal=L===camadas-1?3:5;
+   const nCal=L===camadas-1?Math.max(2,lod.calices-2):lod.calices;
    for(let i=0;i<nCal;i++){
     const a=(i/nCal)*6.283+L*.7;
     // cálice: esfera achatada, agrupada
@@ -1626,20 +1644,20 @@ function buildPlant(s){
     cal.scale.set(1,1.35,1);
     cal.position.set(Math.cos(a)*raio,yy,Math.sin(a)*raio);
     cal.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));
-    cal.castShadow=true;cola.add(cal);
+    cal.castShadow=lod.sombras;cola.add(cal);
     // pistilos saindo do cálice
     for(let pz=0;pz<1;pz++){
      const ph=new THREE.Mesh(new THREE.CylinderGeometry(.0028,.0055,.075*c.s,3),pistilM);
      ph.position.copy(cal.position);ph.position.y+=.03*c.s;
      ph.rotation.set(rnd(-.9,.9),rnd(0,6.283),rnd(-.9,.9));cola.add(ph)}
     // sugar leaf pequena espetando pra fora
-    if(i%2===0){
+    if(i%2===0&&qualidade!=='baixo'){
      const sl=new THREE.Mesh(leafletGeo(.1*c.s,.019*c.s),sugarM);
      sl.position.copy(cal.position);
      sl.rotation.set(-1.0+rnd(-.4,.4),a,rnd(-.5,.5));cola.add(sl)}
    }
   }
-  for(let k=0;k<6;k++){
+  for(let k=0;k<lod.sparks;k++){
    const sp=new THREE.Mesh(sparkGeo,sparkM),a=rnd(0,6.283),rr=rnd(0,.13*c.s);
    sp.position.set(Math.cos(a)*rr,rnd(0,c.alt),Math.sin(a)*rr);cola.add(sp)}
   cola.position.set(c.x,c.y,c.z);buds.add(cola)});
@@ -1788,8 +1806,8 @@ function humanoid(shirt,pants,skin){
  const sk=new THREE.MeshStandardMaterial({color:skin||0xc98d63,roughness:.85});
  const sh=new THREE.MeshStandardMaterial({color:shirt,roughness:.9});
  const pa=new THREE.MeshStandardMaterial({color:pants,roughness:.95});
- const t=new THREE.Mesh(new THREE.BoxGeometry(.44,.58,.25),sh);t.position.y=1.1;g.add(t);
- const h=new THREE.Mesh(new THREE.BoxGeometry(.28,.3,.27),sk);h.position.y=1.54;g.add(h);
+ const t=new THREE.Mesh(new THREE.BoxGeometry(.44,.58,.25),sh);t.userData.avatarPart='shirt';t.position.y=1.1;g.add(t);
+ const h=new THREE.Mesh(new THREE.BoxGeometry(.28,.3,.27),sk);h.userData.avatarPart='skin';h.position.y=1.54;g.add(h);
  const hr=new THREE.Mesh(new THREE.BoxGeometry(.3,.11,.29),
   new THREE.MeshStandardMaterial({color:0x1d1610,roughness:1}));hr.position.y=1.68;g.add(hr);
  // rosto: olhos e boca na face frontal da cabeça (+z)
@@ -1804,9 +1822,9 @@ function humanoid(shirt,pants,skin){
  const brL=new THREE.Mesh(new THREE.BoxGeometry(.06,.018,.018),browM);brL.position.set(-.07,1.605,.146);g.add(brL);
  const brR=new THREE.Mesh(new THREE.BoxGeometry(.06,.018,.018),browM);brR.position.set(.07,1.605,.146);g.add(brR);
  ['L','R'].forEach((s,i)=>{const sg=i?1:-1;
-  const a=new THREE.Mesh(new THREE.BoxGeometry(.11,.48,.12),sk);
+  const a=new THREE.Mesh(new THREE.BoxGeometry(.11,.48,.12),sk);a.userData.avatarPart='skin';
   a.geometry.translate(0,-.24,0);a.position.set(sg*.29,1.33,0);g.add(a);L['arm'+s]=a;
-  const l=new THREE.Mesh(new THREE.BoxGeometry(.14,.54,.15),pa);
+  const l=new THREE.Mesh(new THREE.BoxGeometry(.14,.54,.15),pa);l.userData.avatarPart='pants';
   l.geometry.translate(0,-.27,0);l.position.set(sg*.12,.8,0);g.add(l);L['leg'+s]=l});
  g.traverse(o=>{if(o.isMesh)o.castShadow=true});
  return{g,L}}
@@ -2004,6 +2022,12 @@ function pedirAoServidor(msg){
 }
 function aplicarEstado(d){
  estadoDoServidor=true;
+ if(d.avatarId&&AVATAR_CATALOGO[d.avatarId]){
+  mpAvatarId=d.avatarId;
+  if(typeof player!=='undefined'&&typeof aplicarCoresAvatar==='function')aplicarCoresAvatar(player,coresAvatar(d.avatarId));
+  const av=document.getElementById('avatarSelect');if(av)av.value=d.avatarId;
+  try{localStorage.setItem('quintal3d-avatar',d.avatarId)}catch(e){}
+ }
  G.cash=d.cash;
  G.bank=(d.bank||[]).map(e=>({s:e.s,qtd:e.qtd}));
  if(G.sel>=G.bank.length)G.sel=Math.max(0,G.bank.length-1);
@@ -2225,7 +2249,7 @@ function renderStock(){const el=$('stockList');
  el.innerHTML=p.length?p.slice(0,5).map(l=>`${l.s.nome.split(' ')[0]} <i>${l.qtd}un</i> ${Math.round(l.qual*100)}%`).join('<br>'):'vazio'}
 function updHUD(){
  $('cash').textContent=Math.floor(G.cash);
- $('alive').textContent=plots.filter(p=>p.plant).length;
+ $('alive').textContent=plots.concat(fazPlots,casaNovaPlots).filter(p=>p.plant).length;
  $('lotes').textContent=G.lotes.length;
  $('terr').textContent=TERR.filter(t=>t.dono==='seu').length;
  const _l=$('lvl');if(_l)_l.textContent=G.nivel;
@@ -2751,10 +2775,14 @@ function findFocus(){
  if(Math.hypot(p.x-SHOP.x,p.z-SHOP.z)<2.2)return{t:'banca'};
  if(Math.hypot(p.x-DRY.x,p.z-DRY.z)<2.1)return{t:'estacao'};
  let best=null,bd=1.7;
+ // No online, todos os canteiros válidos vêm de lotesOnline (16 por lote).
+ // Os canteiros legados ficam invisíveis e não podem capturar a interação.
+ if(mpConnected)return null;
  for(const pl of plots){if(pl.locked)continue;
   const d=Math.hypot(p.x-pl.x,p.z-pl.z);if(d<bd){bd=d;best=pl}}
  return best?{t:'plot',plot:best}:null}
 function plantaMaisPerto(){
+ if(mpConnected)return null;
  let best=null,bd=4.5;
  for(const p of plots){if(!p.plant)continue;
   const d=Math.hypot(player.position.x-p.x,player.position.z-p.z);
@@ -3324,7 +3352,8 @@ addEventListener('keydown',e=>{if(e.code==='F5')return;if(e.code==='KeyP')saveGa
 // os controles agora aparecem DENTRO do jogo, em dicas contextuais
 
 /* ═════════ LOOP ═════════ */
-const CK=new THREE.Clock(),camT=new THREE.Vector3();let walkPhase=0,radarT=0;
+const CK=new THREE.Clock(),camT=new THREE.Vector3(),camPos=new THREE.Vector3();
+let walkPhase=0,radarT=0,hudT=0;
 const _camFwd=new THREE.Vector3(),_camRight=new THREE.Vector3(),_moveDir=new THREE.Vector3(),_worldUp=new THREE.Vector3(0,1,0);
 function tick(){
  requestAnimationFrame(tick);
@@ -3364,7 +3393,7 @@ function tick(){
   if(G.rainTimer<=0){
    if(G.rain>0){G.rain=0;G.rainTimer=rnd(60,120);toast('a chuva passou')}
    else{G.rain=1;G.rainTimer=rnd(12,26);toast('chuva — os canteiros do sol se regam sozinhos');
-    plots.forEach(p=>{if(p.tipo==='sol'&&p.plant)p.plant.agua=1})}}}
+    plots.concat(fazPlots,casaNovaPlots).forEach(p=>{if(p.tipo==='sol'&&p.plant&&!p.online)p.plant.agua=1})}}}
 
  /* movimento */
  let ix=0,iz=0;
@@ -3461,13 +3490,19 @@ function tick(){
  const cx=camT.x+cxf*dist+Math.cos(camYaw)*shoulder;
  const cz=camT.z+czf*dist-Math.sin(camYaw)*shoulder;
  const cy=camT.y+Math.sin(camPitch)*dist+(aiming?.15:.35)+recoil*.06;
- camera.position.lerp(new THREE.Vector3(cx,Math.max(.6,cy),cz),1-Math.pow(aiming?.0005:.002,dt));
+  camPos.set(cx,Math.max(.6,cy),cz);
+  camera.position.lerp(camPos,1-Math.pow(aiming?.0005:.002,dt));
  camera.lookAt(camT.x-Math.cos(camYaw)*shoulder*.4,camT.y,camT.z+Math.sin(camYaw)*shoulder*.4);
  skyDome.position.copy(camera.position);
 
  /* plantas */
- if(G.running) for(const p of plots){
+ if(G.running) for(const p of plots.concat(fazPlots,casaNovaPlots)){
   const pl=p.plant;if(!pl)continue;const s=pl.s;
+  if(mpConnected&&!p.online){
+   if(pl.mesh)pl.mesh.visible=false;
+   continue;
+  }
+  if(pl.mesh)pl.mesh.visible=true;
   // Planta espelhada do servidor: quem faz os NÚMEROS crescerem é o
   // servidor. Mas o visual continua vivo aqui — vento nas folhas e anel
   // de aviso. Antes eu pulava tudo e a planta ficava congelada.
@@ -3722,8 +3757,9 @@ function tick(){
  }
  mpTick(dt);
  if(G.running)mpTickBots(dt);
- if(G.running)updHUD();
- renderer.render(scene,camera)}
+ hudT-=dt;
+ if(G.running&&hudT<=0){hudT=.1;updHUD()}
+ renderer.render(scene,camera);atualizarMetricas(dt)}
 // ─── otimização pós-montagem ───
 // 1) só o que é grande projeta sombra; tralha pequena sai do mapa de sombra
 // 2) objetos estáticos param de recalcular matriz todo frame
@@ -4070,6 +4106,18 @@ function desmontarLote(lote){
  lote.grp=null;lote.placa=null;lote.montado=false;
 }
 // ═══ streaming: só monta o que está perto, como GTA faz ═══
+// Os ambientes extras continuam disponíveis no modo solo, mas não podem
+// simular um segundo mundo enquanto o servidor está ativo.
+function setModoMultiplayerVisual(online){
+ // A representação autoritativa online é exclusivamente lotesOnline.
+ // Isso esconde sol, estufa, grow, fazenda e Casa Nova enquanto conectado,
+ // evitando duas simulações visuais para a mesma propriedade.
+ const locais=plots.concat(fazPlots,casaNovaPlots);
+ for(const p of locais){
+  if(p.group)p.group.visible=online?false:!p.locked;
+  if(p.plant&&p.plant.mesh)p.plant.mesh.visible=!online;
+ }
+}
 let streamT=0;
 function streamLotes(dt){
  streamT-=dt; if(streamT>0)return; streamT=.5;
@@ -4146,46 +4194,9 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
  const P=lote.plots[plotIndex]; if(!P)return;
  P.dados=dados;
  if(dados&&dados.id)P.entId=dados.id;   // ETAPA C: id da planta
- // se for o MEU lote, o desenho acontece nos canteiros do meu quintal —
- // é lá que eu planto de verdade, não na casa genérica da cidade
- if(loteIndex===meuLoteIndex){
-  const alvo=plots.find(q=>q.online&&q.plotIndex===plotIndex);
-  if(alvo){
-   if(!dados){ if(alvo.plant){scene.remove(alvo.plant.mesh);alvo.plant=null} }
-   else {
-    if(!alvo.plant||alvo.plant.s.id!==dados.s.id){
-     if(alvo.plant)scene.remove(alvo.plant.mesh);
-     const g2=buildPlant(dados.s);
-     g2.position.set(alvo.x,alvo.baseY,alvo.z);scene.add(g2);
-     alvo.plant={s:dados.s,mesh:g2,sway:Math.random()*6,
-      adubOrg:0,adubCres:0,adubFlor:false};
-    }
-    // números vêm do servidor: aqui só espelha
-    alvo.plant.prog=dados.prog;alvo.plant.agua=dados.agua;
-    alvo.plant.saude=dados.saude;alvo.plant.praga=dados.praga;
-    alvo.plant.estagio=dados.estagio;alvo.plant.remoto=true;
-    // ESTE ERA O BUG: os números chegavam do servidor, mas o modelo 3D
-    // nunca era redimensionado. A planta ficava eternamente do tamanho de
-    // semente, parecendo que não crescia — mesmo com o servidor certo.
-    if(alvo.plant.mesh){
-     const esc=.25+Math.min(1,dados.prog/100)*.95;
-     alvo.plant.mesh.scale.setScalar(esc);
-     // refaz o modelo ao mudar de estágio (broto vira jovem, etc)
-     if(alvo.plant.estagioDesenhado!==dados.estagio){
-      alvo.plant.estagioDesenhado=dados.estagio;
-      scene.remove(alvo.plant.mesh);
-      const g3=buildPlant(dados.s);
-      g3.position.set(alvo.x,alvo.baseY,alvo.z);
-      g3.scale.setScalar(esc);
-      scene.add(g3);
-      alvo.plant.mesh=g3;
-     }
-    }
-   }
-   updHUD();
-  }
- }
- // guarda sempre o dado; o desenho só acontece se a casa estiver montada
+ // Guarda sempre o dado; o desenho só acontece se a casa estiver montada.
+ // Inclusive no lote próprio: os 16 plots server-side são a única fonte
+ // visual online, eliminando a duplicação com os seis canteiros legados.
  if(!lote.montado)return;
  if(!dados){
   if(P.mesh){scene.remove(P.mesh);P.mesh=null;P.meshEstagio=-1}
@@ -4206,7 +4217,8 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
 // funcionando normal — multiplayer nunca pode travar o modo solo.
 const MP_URL='wss://quintal-3d.onrender.com';
 let mpWs=null, mpId=null, mpConnected=false, mpSendT=0, mpTentativas=0;
-let mpToken='';
+let mpToken='',mpAvatarId='carmo';
+try{mpAvatarId=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
 try{mpToken=localStorage.getItem('quintal3d-session-token')||''}catch(e){}
 // atraso proposital de renderização: mostramos os outros jogadores ~120ms
 // no passado e interpolamos entre snapshots. É isso que tira o tranco da
@@ -4275,11 +4287,11 @@ function mpAddFunc(F){
   pick([0xc98d63,0xa06d47,0xe0b48c]));
  h.g.position.set(F.x||0,0,F.z||0);h.g.rotation.y=F.ry||0;
  // etiqueta com o nome e o dono, pra ficar claro de quem é
- const meu = F.dono && meuLoteIndex!==null && F.dono===idJogador();
+ const meu = F.loteIndex!==null && F.loteIndex!==undefined && meuLoteIndex!==null && F.loteIndex===meuLoteIndex;
  const lbl=mpLabel((F.nome||'Funcionário')+(meu?'':' ·'));
  lbl.scale.set(1.0,.25,1);h.g.add(lbl);
  scene.add(h.g);
- mpFuncs.set(F.id,{g:h.g,L:h.L,nome:F.nome,dono:F.dono,cargo:F.cargo,
+ mpFuncs.set(F.id,{g:h.g,L:h.L,nome:F.nome,loteIndex:F.loteIndex,cargo:F.cargo,
   tx:F.x||0,tz:F.z||0,tr:F.ry||0,walk:0,buf:[],ultimoVisto:performance.now()});
 }
 function mpRemoveFunc(id){
@@ -4377,14 +4389,25 @@ function mpTickBots(dt){
   b.L.armR.rotation.x=b.agro?-.9:-.25;   // facão erguido quando persegue
  }
 }
-function mpAddPlayer(id,nome,x,y,z,ry){
+const AVATAR_CATALOGO={
+ carmo:{shirt:0x1a1c1a,pants:0x4a5233,skin:0xc98d63},
+ verde:{shirt:0x426b43,pants:0x34432d,skin:0xa06d47},
+ azul:{shirt:0x416d9a,pants:0x303948,skin:0xe0b48c},
+ roxo:{shirt:0x714c84,pants:0x352d43,skin:0xc98d63}
+};
+function coresAvatar(id){return AVATAR_CATALOGO[id]||AVATAR_CATALOGO.carmo}
+function aplicarCoresAvatar(g,a){
+ g.traverse(o=>{if(!o.isMesh||!o.userData.avatarPart)return;const cor=o.userData.avatarPart==='shirt'?a.shirt:o.userData.avatarPart==='pants'?a.pants:a.skin;o.material.color.setHex(cor)});
+}
+function mpAddPlayer(id,nome,x,y,z,ry,avatarId){
  if(mpPlayers.has(id)||id===mpId)return;
- const h=humanoid(pick([0x6f88a0,0x8a9268,0xb08a5a,0x93748a]),pick([0x39424c,0x4a3f34,0x333b3f]),
-  pick([0xc98d63,0xa06d47,0xe0b48c]));
+ const avatar=AVATAR_CATALOGO[avatarId]?avatarId:'carmo';
+ const a=coresAvatar(avatar);
+ const h=humanoid(a.shirt,a.pants,a.skin);
  h.g.position.set(x||0,y||0,z||0);h.g.rotation.y=ry||0;
  const label=mpLabel(nome||'Jogador');h.g.add(label);
  scene.add(h.g);
- mpPlayers.set(id,{g:h.g,L:h.L,nome:nome||'Jogador',
+ mpPlayers.set(id,{g:h.g,L:h.L,nome:nome||'Jogador',avatarId:avatar,
   tx:x||0,ty:y||0,tz:z||0,tr:ry||0,walk:0,label,
   buf:[],ultimoVisto:performance.now()});
 }
@@ -4397,6 +4420,7 @@ function mpConnect(){
  try{ mpWs=new WebSocket(MP_URL) }catch(e){ return }
  mpWs.onopen=()=>{
   mpConnected=true; mpTentativas=0;
+  setModoMultiplayerVisual(true);
   const nt=$('netTag'); if(nt){nt.textContent='online';nt.classList.add('on')}
   statusServidor(true);
   // Se o jogo começou offline e os bots locais nasceram, eles somem agora:
@@ -4411,10 +4435,12 @@ function mpConnect(){
   try{ mpWs.send(JSON.stringify({t:'hello',token:mpToken,
    // persistId continua apenas como identificador legado/placar; a posse é
    // determinada exclusivamente pelo token assinado pelo servidor.
-   persistId:idJogador(),aparelhoId:chaveAparelho(),nome:meuNome,sementeBase:BASE[0]})) }catch(e){}
+   persistId:idJogador(),aparelhoId:chaveAparelho(),nome:meuNome,sementeBase:BASE[0],
+   avatarId:mpAvatarId})) }catch(e){}
  };
  mpWs.onclose=()=>{
   mpConnected=false;
+  setModoMultiplayerVisual(false);
   const nt=$('netTag'); if(nt){nt.textContent='offline';nt.classList.remove('on')}
   statusServidor(false);
   for(const id of [...mpPlayers.keys()]) mpRemovePlayer(id);
@@ -4431,7 +4457,7 @@ function mpConnect(){
   try{
    if(msg.t==='welcome'){
     mpId=msg.id;
-    (msg.players||[]).forEach(p=>mpAddPlayer(p.id,p.nome,p.x,p.y,p.z,p.ry));
+    (msg.players||[]).forEach(p=>mpAddPlayer(p.id,p.nome,p.x,p.y,p.z,p.ry,p.avatarId));
     // estado do mundo que já existia antes de eu entrar
     (msg.territorios||[]).forEach(T=>{
      const t=TERR.find(x=>x.nome===T.nome);if(!t)return;
@@ -4453,20 +4479,31 @@ function mpConnect(){
     mpToken=msg.token||'';
     try{localStorage.setItem('quintal3d-session-token',mpToken)}catch(e){}
    } else if(msg.t==='join'){
-    mpAddPlayer(msg.id,msg.nome,player.position.x,0,player.position.z+3,0);
+    mpAddPlayer(msg.id,msg.nome,player.position.x,0,player.position.z+3,0,msg.avatarId);
     toast(`${msg.nome} entrou no servidor`);
    } else if(msg.t==='leave'){
     const p=mpPlayers.get(msg.id);
     if(p)toast(`${p.nome} saiu`);
     mpRemovePlayer(msg.id);
    } else if(msg.t==='snap'){
+    // O servidor manda o estado completo de um lote apenas quando ele entra
+    // no AOI. Guardamos o dado mesmo se a casa ainda estiver desmontada; o
+    // streaming o materializa quando o jogador se aproximar.
+    (msg.lotes||[]).forEach(L=>{
+     const lote=lotesOnline[L.index]; if(!lote)return;
+     lote.donoNome=L.donoNome||null;lote.donoId=L.donoId||null;
+     lote.entId=L.id;lote.portaoId=L.portaoId;
+     if(L.portaoAberto!==undefined)aplicarPortao(lote,L.portaoAberto);
+     atualizarPlacaLote(lote);
+     (L.plots||[]).forEach((pl,i)=>aplicarPlotOnline(L.index,i,pl));
+    });
     // snapshot do tick: guarda no buffer com carimbo de tempo pra
     // interpolar depois. Quem sumiu do snapshot saiu do alcance.
     const vistos=new Set();
     const agora=performance.now();
     for(const P of (msg.players||[])){
      vistos.add(P.id);
-     if(!mpPlayers.has(P.id))mpAddPlayer(P.id,P.nome,P.x,P.y,P.z,P.ry);
+     if(!mpPlayers.has(P.id))mpAddPlayer(P.id,P.nome,P.x,P.y,P.z,P.ry,P.avatarId);
      const p=mpPlayers.get(P.id);
      if(!p)continue;
      if(P.nome&&p.nome!==P.nome){p.nome=P.nome;
@@ -4532,7 +4569,7 @@ function mpConnect(){
           player.position.z+=(msg.z-player.position.z)*.25; }
    } else if(msg.t==='nome'){
     const p=mpPlayers.get(msg.id);
-    if(p)p.nome=msg.nome;
+    if(p){p.nome=msg.nome;if(msg.avatarId&&msg.avatarId!==p.avatarId){p.avatarId=AVATAR_CATALOGO[msg.avatarId]?msg.avatarId:'carmo';aplicarCoresAvatar(p.g,coresAvatar(p.avatarId))}}
    } else if(msg.t==='lote_atribuido'){
     if(msg.loteIndex===null||msg.loteIndex===undefined){
      toast('todos os lotes estão ocupados agora');
@@ -4559,6 +4596,8 @@ function mpConnect(){
    } else if(msg.t==='lote_update'){
     const lote=lotesOnline[msg.loteIndex];
     if(lote)aplicarPlotOnline(msg.loteIndex,msg.plotIndex,msg.plot);
+   } else if(msg.t==='lotes_update'){
+    (msg.updates||[]).forEach(u=>aplicarPlotOnline(msg.loteIndex,u.plotIndex,u.plot));
    } else if(msg.t==='levou_tiro'){
     // O servidor já aplicou dano, armadura e morte. O cliente apenas espelha.
     if(G.running){

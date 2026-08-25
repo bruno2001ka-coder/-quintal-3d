@@ -5,7 +5,10 @@
   "description": "Servidor autoritativo WebSocket para o multiplayer em tempo real do Quintal 3D",
   "main": "servidor-1.js",
   "scripts": {
-    "start": "node servidor-1.js"
+    "start": "node servidor-1.js",
+    "test": "node test-seguranca.js",
+    "test:aoi": "node test-multiplayer-aoi.js",
+    "test:carga": "node test-carga.js"
   },
   "engines": {
     "node": ">=18"
