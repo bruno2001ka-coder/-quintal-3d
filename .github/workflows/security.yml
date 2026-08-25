@@ -33,6 +33,7 @@ jobs:
           node --check test-clientes-casa.js
           node --check test-plantio-proprio.js
           node --check test-protecao-entidades.js
+          node --check test-audio-mixer.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
       - name: Run isolated regression servers and tests
@@ -65,4 +66,5 @@ jobs:
           TEST_WS=ws://127.0.0.1:8804 npm run test:clientes
           TEST_WS=ws://127.0.0.1:8805 npm run test:plantio
           TEST_WS=ws://127.0.0.1:8806 npm run test:entidades
+          npm run test:audio
           for port in 8800 8801 8802 8803 8804 8805 8806; do cat "$RUNNER_TEMP/quintal-$port.log"; done

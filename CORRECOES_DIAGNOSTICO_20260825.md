@@ -84,3 +84,9 @@ O teste `npm run test:entidades` passou como `PROTECAO_ENTIDADES_OK`, confirmand
 ### Suíte final desta rodada
 
 A suíte completa pós-correção passou: `SECURITY_INTEGRATION_OK`, `MULTIPLAYER_AOI_OK`, `LOAD_24_OK` com 24 jogadores, tick máximo de 4,56 ms e zero descartes, `RECONNECTION_POSITION_OK`, `CLIENTE_CASA_OK`, `PLANTIO_PROPRIO_OK` e `PROTECAO_ENTIDADES_OK`. A checagem de sintaxe do servidor, testes Node e JavaScript inline também passou.
+
+## Correção adicional: áudio estável
+
+O mixer do cliente foi reforçado para limitar vozes simultâneas a 16, acompanhar as fontes ativas e liberar cada oscilador ou buffer também por timeout de segurança quando o navegador não dispara `ended`. Ao selecionar `Mudo`, as fontes ativas são interrompidas e o volume mestre é zerado, evitando sons presos e sobreposição depois de reativar.
+
+O `AudioContext` agora é retomado após `pointerdown`, teclado e retorno da aba. Contextos fechados ou interrompidos são descartados com segurança e recriados no próximo efeito. O som mudo não cria nem retoma contexto desnecessariamente. A sintaxe do HTML e do script inline passou após essa alteração.

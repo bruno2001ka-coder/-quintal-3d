@@ -469,7 +469,16 @@ perfBox.id='perfBox';document.body.appendChild(perfBox);
 function atualizarVisibilidadePerf(){perfBox.style.display=modalOpen()?'none':'block'}
 const qualitySelect=document.getElementById('qualitySelect');qualitySelect.value=qualidade;
 qualitySelect.onchange=()=>{qualidade=qualitySelect.value;try{localStorage.setItem('quintal3d-qualidade',qualidade)}catch(e){};renderer.setPixelRatio(Math.min(devicePixelRatio||1,cfgQual().pixel));renderer.shadowMap.enabled=cfgQual().sombras;renderer.shadowMap.type=cfgQual().tipo;sun.castShadow=cfgQual().sombras;sun.shadow.mapSize.set(cfgQual().mapa,cfgQual().mapa);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}toast('qualidade '+qualitySelect.options[qualitySelect.selectedIndex].text+' aplicada');};
-const soundSelect=document.getElementById('soundSelect');soundSelect.value=somAtivo?'ativo':'mudo';soundSelect.onchange=()=>{somAtivo=soundSelect.value==='ativo';try{localStorage.setItem('quintal3d-som',somAtivo?'ativo':'mudo')}catch(e){};if(typeof sfxMaster!=='undefined'&&sfxMaster)sfxMaster.gain.setTargetAtTime(somAtivo?.72:0,sfxMaster.context.currentTime,.015);toast(somAtivo?'som ativado':'som desligado');};
+const soundSelect=document.getElementById('soundSelect');soundSelect.value=somAtivo?'ativo':'mudo';soundSelect.onchange=()=>{
+ somAtivo=soundSelect.value==='ativo';
+ try{localStorage.setItem('quintal3d-som',somAtivo?'ativo':'mudo')}catch(e){}
+ if(somAtivo){ativarAudio();if(sfxMaster)sfxMaster.gain.setTargetAtTime(.72,sfxMaster.context.currentTime,.015)}
+ else if(sfxMaster){
+  sfxMaster.gain.setTargetAtTime(0,sfxMaster.context.currentTime,.015);
+  pararSfxAtivos();
+ }
+ toast(somAtivo?'som ativado':'som desligado');
+};
 const avatarSelect=document.getElementById('avatarSelect');
 try{avatarSelect.value=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
 avatarSelect.onchange=()=>{const id=avatarSelect.value;try{localStorage.setItem('quintal3d-avatar',id)}catch(e){};if(typeof mpAvatarId!=='undefined')mpAvatarId=id;if(typeof player!=='undefined'&&typeof aplicarCoresAvatar==='function')aplicarCoresAvatar(player,coresAvatar(id));if(typeof mpConnected!=='undefined'&&mpConnected&&mpWs)try{mpWs.send(JSON.stringify({t:'avatar',avatarId:id}))}catch(e){};toast('avatar '+avatarSelect.options[avatarSelect.selectedIndex].text+' selecionado');};
@@ -1929,48 +1938,86 @@ function splash(x,y,z){let n=0;for(const d of drops){if(d.life>0)continue;
 
 /* ═════════ ÁUDIO ═════════ */
 let actx=null,sfxMaster=null,noiseBuffer=null;
-const SFX_MAX_VOZES=24,sfxState={vozes:0,ultimo:{}};
-function ativarAudio(){
- if(!actx){try{actx=new(window.AudioContext||window.webkitAudioContext)();sfxMaster=actx.createGain();sfxMaster.gain.value=somAtivo?.72:0;sfxMaster.connect(actx.destination)}catch(e){actx=null}}
- if(actx&&actx.state==='suspended')actx.resume();
+const SFX_MAX_VOZES=16;
+const sfxState={vozes:0,ultimo:{},ativos:new Set()};
+function pararSfxAtivos(){
+ for(const node of [...sfxState.ativos]){
+  try{node._sfxDone=true;node.stop()}catch(e){}
+ }
+ sfxState.ativos.clear();sfxState.vozes=0;
 }
+function resetarAudio(){
+ const antigo=actx;
+ pararSfxAtivos();sfxState.ultimo={};noiseBuffer=null;
+ actx=null;sfxMaster=null;
+ try{if(antigo&&antigo.state!=='closed')antigo.close()}catch(e){}
+}
+function ativarAudio(){
+ if(!somAtivo)return;
+ try{
+  if(actx&&(actx.state==='closed'||actx.state==='interrupted'))resetarAudio();
+  if(!actx){
+   const Ctx=window.AudioContext||window.webkitAudioContext;
+   if(!Ctx)return;
+   actx=new Ctx();
+   const contexto=actx;
+   sfxMaster=actx.createGain();
+   sfxMaster.gain.value=somAtivo?.72:0;sfxMaster.connect(actx.destination);
+   actx.onstatechange=()=>{if(actx===contexto&&contexto.state==='closed')resetarAudio()};
+  }
+  if(actx.state==='suspended'||actx.state==='interrupted'){
+   const p=actx.resume();if(p&&p.catch)p.catch(()=>{});
+  }
+ }catch(e){resetarAudio()}
+}
+// Alguns navegadores suspendem o contexto quando a aba perde foco. Retomar
+// apenas no start não basta, pois o próximo som pode ocorrer depois de uma
+// reconexão ou ao voltar para a aba.
+document.addEventListener('pointerdown',ativarAudio,{passive:true});
+document.addEventListener('keydown',ativarAudio,{passive:true});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)ativarAudio()});
 function permitirSfx(chave,gap){
- if(!somAtivo||!actx||!sfxMaster||actx.state==='closed'||sfxState.vozes>=SFX_MAX_VOZES)return false;
+ if(!somAtivo||!actx||!sfxMaster||actx.state==='closed'||sfxState.ativos.size>=SFX_MAX_VOZES)return false;
  const agoraAudio=actx.currentTime,ultimo=sfxState.ultimo[chave]||-Infinity;
  if(agoraAudio-ultimo<(gap||0))return false;
- sfxState.ultimo[chave]=agoraAudio;sfxState.vozes++;return true;
+ sfxState.ultimo[chave]=agoraAudio;return true;
 }
-function terminarSfx(node){
- const done=()=>{if(node._sfxDone)return;node._sfxDone=true;sfxState.vozes=Math.max(0,sfxState.vozes-1)};
+function terminarSfx(node,dur){
+ if(!node)return;
+ sfxState.ativos.add(node);sfxState.vozes=sfxState.ativos.size;
+ const done=()=>{if(node._sfxDone)return;node._sfxDone=true;sfxState.ativos.delete(node);sfxState.vozes=sfxState.ativos.size};
  node.addEventListener&&node.addEventListener('ended',done,{once:true});node.onended=done;
+ // Fallback: em aba suspensa alguns browsers atrasam o evento `ended` e o
+ // mixer ficava travado em 24 vozes, silenciando o resto da partida.
+ setTimeout(done,Math.max(120,(dur||.2)*1000+350));
 }
-function blip(f,d,t,v){if(!permitirSfx('blip',.025))return;
+function blip(f,d,t,v){if(!somAtivo)return;ativarAudio();if(!permitirSfx('blip',.025))return;
  const o=actx.createOscillator(),g=actx.createGain(),agoraAudio=actx.currentTime,dur=d||.12;
  o.type=t||'sine';o.frequency.setValueAtTime(f,agoraAudio);g.gain.setValueAtTime(v||.07,agoraAudio);
  g.gain.exponentialRampToValueAtTime(.0001,agoraAudio+dur);
- o.connect(g);g.connect(sfxMaster);terminarSfx(o);o.start(agoraAudio);o.stop(agoraAudio+dur+.01)}
+ o.connect(g);g.connect(sfxMaster);terminarSfx(o,dur);o.start(agoraAudio);o.stop(agoraAudio+dur+.01)}
 function obterNoiseBuffer(){
  if(noiseBuffer&&noiseBuffer.sampleRate===actx.sampleRate)return noiseBuffer;
  const n=Math.floor(actx.sampleRate*.05),b=actx.createBuffer(1,n,actx.sampleRate),d=b.getChannelData(0);
  for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3.2);
  noiseBuffer=b;return b;
 }
-function shotSfx(vol){if(!permitirSfx('shot',.035))return;
+function shotSfx(vol){if(!somAtivo)return;ativarAudio();if(!permitirSfx('shot',.035))return;
  const s=actx.createBufferSource();s.buffer=obterNoiseBuffer();
  const g=actx.createGain();g.gain.value=(vol===undefined?.16:vol);
  const f=actx.createBiquadFilter();f.type='lowpass';f.frequency.value=1400;
- s.connect(f);f.connect(g);g.connect(sfxMaster);terminarSfx(s);s.start()}
-function sirene(){if(!permitirSfx('sirene',.5))return;
+ s.connect(f);f.connect(g);g.connect(sfxMaster);terminarSfx(s,.08);s.start()}
+function sirene(){if(!somAtivo)return;ativarAudio();if(!permitirSfx('sirene',.5))return;
  const o=actx.createOscillator(),g=actx.createGain(),agoraAudio=actx.currentTime;
  o.type='sine';o.frequency.setValueAtTime(760,agoraAudio);
  o.frequency.linearRampToValueAtTime(1180,agoraAudio+.3);o.frequency.linearRampToValueAtTime(760,agoraAudio+.6);
  g.gain.setValueAtTime(.05,agoraAudio);g.gain.exponentialRampToValueAtTime(.0001,agoraAudio+.65);
- o.connect(g);g.connect(sfxMaster);terminarSfx(o);o.start(agoraAudio);o.stop(agoraAudio+.66)}
-function slashSfx(){if(!permitirSfx('slash',.05))return;
+ o.connect(g);g.connect(sfxMaster);terminarSfx(o,.7);o.start(agoraAudio);o.stop(agoraAudio+.66)}
+function slashSfx(){if(!somAtivo)return;ativarAudio();if(!permitirSfx('slash',.05))return;
  const o=actx.createOscillator(),g=actx.createGain(),agoraAudio=actx.currentTime;
  o.type='sawtooth';o.frequency.setValueAtTime(920,agoraAudio);o.frequency.exponentialRampToValueAtTime(210,agoraAudio+.09);
  g.gain.setValueAtTime(.1,agoraAudio);g.gain.exponentialRampToValueAtTime(.0001,agoraAudio+.1);
- o.connect(g);g.connect(sfxMaster);terminarSfx(o);o.start(agoraAudio);o.stop(agoraAudio+.11)}
+ o.connect(g);g.connect(sfxMaster);terminarSfx(o,.15);o.start(agoraAudio);o.stop(agoraAudio+.11)}
 
 /* ═════════ ARMAS ═════════ */
 const ARMAS=[

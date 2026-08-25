@@ -12,7 +12,8 @@
     "test:reconexao": "node test-reconexao-posicao.js",
     "test:clientes": "node test-clientes-casa.js",
     "test:plantio": "node test-plantio-proprio.js",
-    "test:entidades": "node test-protecao-entidades.js"
+    "test:entidades": "node test-protecao-entidades.js",
+    "test:audio": "node test-audio-mixer.js"
   },
   "engines": {
     "node": ">=18"
