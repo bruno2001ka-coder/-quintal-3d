@@ -10,7 +10,8 @@
     "test:aoi": "node test-multiplayer-aoi.js",
     "test:carga": "node test-carga.js",
     "test:reconexao": "node test-reconexao-posicao.js",
-    "test:clientes": "node test-clientes-casa.js"
+    "test:clientes": "node test-clientes-casa.js",
+    "test:plantio": "node test-plantio-proprio.js"
   },
   "engines": {
     "node": ">=18"

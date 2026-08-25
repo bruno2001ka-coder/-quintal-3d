@@ -2772,6 +2772,10 @@ surface.addEventListener('lostpointercapture',pEnd);
 /* ═════════ FOCO / AÇÃO ═════════ */
 let focus=null;
 function findFocus(){
+ // Enquanto o servidor ainda não devolveu o lote e a posição authoritative,
+ // não existe foco válido. Sem este bloqueio a prévia continuava no quintal
+ // antigo e a tecla E podia capturar um território público por engano.
+ if(mpConnected&&!mpReady)return null;
  const p=player.position;
  if(Math.hypot(p.x-GATEX,p.z-C.z1)<2.4)return{t:'gate'};
  // portão da casa: detecta antes dos canteiros
@@ -2982,6 +2986,10 @@ $('wipeBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropaga
 $('invBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();openInventory()},{passive:false});
 function doAction(){
  if(!G.running)return;
+ if(mpConnected&&!mpReady){
+  toast('aguarde: carregando seu quintal multiplayer');
+  return;
+ }
  if(modalOpen()){closeAll();return}
  if(!focus)return;
  if(focus.t==='portaoCasa'){

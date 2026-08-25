@@ -31,6 +31,7 @@ jobs:
           node --check test-carga.js
           node --check test-reconexao-posicao.js
           node --check test-clientes-casa.js
+          node --check test-plantio-proprio.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
       - name: Run isolated regression servers and tests
@@ -49,10 +50,14 @@ jobs:
           rm -f "$RUNNER_TEMP/quintal-8804.db" "$RUNNER_TEMP/quintal-8804.db-shm" "$RUNNER_TEMP/quintal-8804.db-wal"
           PORT=8804 DB_PATH="$RUNNER_TEMP/quintal-8804.db" CLIENTE_FIRST_S=1 CLIENTE_MIN_S=1 CLIENTE_MAX_S=1 node servidor-1.js > "$RUNNER_TEMP/quintal-8804.log" 2>&1 &
           pids+=("$!")
+          rm -f "$RUNNER_TEMP/quintal-8805.db" "$RUNNER_TEMP/quintal-8805.db-shm" "$RUNNER_TEMP/quintal-8805.db-wal"
+          PORT=8805 DB_PATH="$RUNNER_TEMP/quintal-8805.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8805.log" 2>&1 &
+          pids+=("$!")
           sleep 2
           TEST_WS=ws://127.0.0.1:8800 npm test
           TEST_WS=ws://127.0.0.1:8801 npm run test:aoi
           TEST_WS=ws://127.0.0.1:8802 TEST_HTTP=http://127.0.0.1:8802 npm run test:carga
           TEST_WS=ws://127.0.0.1:8803 npm run test:reconexao
           TEST_WS=ws://127.0.0.1:8804 npm run test:clientes
-          for port in 8800 8801 8802 8803 8804; do cat "$RUNNER_TEMP/quintal-$port.log"; done
+          TEST_WS=ws://127.0.0.1:8805 npm run test:plantio
+          for port in 8800 8801 8802 8803 8804 8805; do cat "$RUNNER_TEMP/quintal-$port.log"; done

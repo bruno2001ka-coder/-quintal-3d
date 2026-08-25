@@ -62,3 +62,13 @@ Ainda não há gato nem modelos externos de personagens no código ou nos arquiv
 Após esta rodada, os arquivos atualizados devem ser sincronizados para o clone de publicação, a suíte completa deve ser executada novamente no clone e somente então o commit deve ser enviado para `main`. O HTML atualizado e o servidor atualizado serão entregues junto com o resultado final para teste direto.
 
 **Autor:** Manus AI
+
+## Correção adicional: plantio no próprio quintal
+
+A mensagem `longe do território` não era gerada pelo plantio. Ela pertence exclusivamente à ação de capturar um território público. Durante o handshake, o cliente já estava conectado (`mpConnected=true`), mas ainda não tinha recebido `lote_atribuido` (`mpReady=false`). Nesse intervalo, o cenário antigo continuava jogável e a tecla `E` podia manter foco em uma ação pública de território.
+
+O HTML agora não exibe foco de interação nem executa `doAction` enquanto o lote e a posição authoritative ainda estão sendo carregados. Depois de `lote_atribuido`, o jogador é reposicionado no próprio lote, os 16 canteiros online ficam disponíveis e o comando de plantio volta a enviar somente `plantar` para o plot do proprietário. O servidor já valida novamente o dono do lote, o índice do plot, a distância e a semente pertencente à carteira.
+
+Essa proteção evita que a tela inicial no quintal antigo seja confundida com o quintal multiplayer e impede que plantar seja desviado para `capturar_territorio`.
+
+O teste adicional `npm run test:plantio` foi executado em banco isolado e passou como `PLANTIO_PROPRIO_OK`, confirmando plantio no `loteIndex` atribuído, no plot 5, com criação de uma única entidade de planta e sem qualquer recusa relacionada a território.
