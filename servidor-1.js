@@ -698,6 +698,10 @@ function consumirPosicaoRetomada(chave) {
 }
 function aplicarDanoJogador(j, dano, de) {
   if (!j || j.morto || !j.autenticado) return { aplicado: 0, morreu: false };
+  // A propriedade é uma zona segura contra NPCs e polícia. A proteção é
+  // authoritative e fica aqui, antes de alterar HP/armadura, para não haver
+  // dano visual no cliente que depois seja desfeito pelo próximo estado.
+  if (jogadorEmCasaSegura(j)) return { aplicado: 0, morreu: false, protegido: true };
   const c = sincronizarEquipamento(j);
   let restante = Math.max(0, num(dano, 0, 100, 0));
   const absorvido = Math.min(j.armor, restante * .7);
@@ -1004,6 +1008,13 @@ function dentroDePropriedade(x, z) {
   return -1;
 }
 // empurra pro ponto mais próximo FORA da propriedade
+function jogadorEmCasaSegura(j) {
+  return !!j && dentroDePropriedade(j.x, j.z) >= 0;
+}
+function limiteCasaSegura(j) {
+  const i = j && dentroDePropriedade(j.x, j.z);
+  return i >= 0 ? empurrarPraFora(j.x, j.z, i) : null;
+}
 function empurrarPraFora(x, z, i) {
   const [lx, lz] = LOTE_SPOTS[i];
   const dEsq = Math.abs(x - (lx - LOTE_W/2 - .7));
@@ -1269,6 +1280,7 @@ function tiroPM(b) {
   const t = agora();
   if (t - b.ultimoTiro < PM_CADENCIA_MS) return;
   for (const [id, j] of jogadores) {
+    if (jogadorEmCasaSegura(j)) continue; // a casa nunca recebe dano de PM
     const d = Math.hypot(j.x - b.x, j.z - b.z);
     if (d > PM_ALCANCE) continue;
     if (!temVisao(b.x, b.z, j.x, j.z)) continue;   // parede no caminho: não atira
@@ -1287,6 +1299,17 @@ function passoBot(b, dt) {
   const raio = b.alvo ? (ehPM ? PM_AGRO + 10 : BOT_DESISTE) : raioBase;
   let maisPerto = null, melhor = raio;
   for (const [, j] of jogadores) {
+    const limiteCasa = limiteCasaSegura(j);
+    if (limiteCasa) {
+      // A PM continua aparecendo e chega até a fronteira, mas não entra.
+      if (!ehPM) continue;
+      const dLimite = Math.hypot(limiteCasa.x - b.x, limiteCasa.z - b.z);
+      if (dLimite < melhor) {
+        melhor = dLimite;
+        maisPerto = { id:j.id, x:limiteCasa.x, z:limiteCasa.z, _limiteCasa:true };
+      }
+      continue;
+    }
     const d = Math.hypot(j.x - b.x, j.z - b.z);
     if (d >= melhor) continue;
     // LINHA DE VISÃO: sem enxergar, não persegue nem atira.
@@ -2172,7 +2195,15 @@ setInterval(() => {
   if (clienteSpawnT <= 0) {
     clienteSpawnT = CLIENTE_MIN_S + Math.random() * (CLIENTE_MAX_S - CLIENTE_MIN_S);
     const donos = lotes.filter(l => l.donoChave);
-    if (donos.length) spawnClienteServer(donos[Math.floor(Math.random() * donos.length)]);
+    if (donos.length) {
+      // Não sorteia sempre a mesma casa: primeiro atende o lote que está
+      // sem cliente ativo. Assim cada propriedade tem fluxo próprio e uma
+      // casa não fica invisível enquanto outra recebe todos os compradores.
+      const semCliente = donos.filter(l => !clientes.some(c =>
+        c.loteIndex === l.index && c.fase !== 'saindo' && !c.removerEm));
+      const fila = semCliente.length ? semCliente : donos;
+      spawnClienteServer(fila[Math.floor(Math.random() * fila.length)]);
+    }
   }
   for (let i = clientes.length - 1; i >= 0; i--) {
     passoCliente(clientes[i], dtTick);
@@ -2187,8 +2218,15 @@ setInterval(() => {
   for (let i = bots.length - 1; i >= 0; i--) {
     const b = bots[i];
     if (b.tipo === 'pm' && b.morreEm && agora() > b.morreEm) {
-      bots.splice(i, 1);
-      paraInteresse({ t: 'bot_morreu', id: b.id, porQuem: null }, b.x, b.z);
+      const alvo = b.cacando && jogadores.get(b.cacando);
+      if (alvo && alvo.procurado > 0 && !alvo.morto) {
+        // A viatura não some enquanto o mandado continua ativo. Ela só
+        // deixa o mundo quando o procurado não precisa mais ser perseguido.
+        b.morreEm = agora() + 90000;
+      } else {
+        bots.splice(i, 1);
+        paraInteresse({ t: 'bot_morreu', id: b.id, porQuem: null }, b.x, b.z);
+      }
     }
   }
   reconstruirGradeJogadores();

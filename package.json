@@ -11,7 +11,8 @@
     "test:carga": "node test-carga.js",
     "test:reconexao": "node test-reconexao-posicao.js",
     "test:clientes": "node test-clientes-casa.js",
-    "test:plantio": "node test-plantio-proprio.js"
+    "test:plantio": "node test-plantio-proprio.js",
+    "test:entidades": "node test-protecao-entidades.js"
   },
   "engines": {
     "node": ">=18"

@@ -72,3 +72,15 @@ O HTML agora não exibe foco de interação nem executa `doAction` enquanto o lo
 Essa proteção evita que a tela inicial no quintal antigo seja confundida com o quintal multiplayer e impede que plantar seja desviado para `capturar_territorio`.
 
 O teste adicional `npm run test:plantio` foi executado em banco isolado e passou como `PLANTIO_PROPRIO_OK`, confirmando plantio no `loteIndex` atribuído, no plot 5, com criação de uma única entidade de planta e sem qualquer recusa relacionada a território.
+
+## Correção adicional: dano dentro da casa e entidades multiplayer
+
+O servidor não tinha uma regra explícita de zona segura antes de aplicar dano da polícia. A linha de visão e a colisão impediam parte dos tiros através da parede, mas não impediam dano quando o jogador ainda estava dentro da área do lote. Foi adicionada uma proteção authoritative para a propriedade: enquanto o jogador estiver dentro de um lote, `aplicarDanoJogador` não altera vida nem armadura e `tiroPM` não dispara contra ele. A polícia continua sendo atualizada na fronteira externa, sem entrar na casa.
+
+Também foi corrigido o agendamento de clientes. Antes cada novo cliente escolhia um lote dono aleatoriamente, permitindo que uma casa ficasse sem atendimento enquanto outra acumulava compradores. Agora o servidor prioriza o lote dono que está sem cliente ativo. Policiais não expiram enquanto o nível de procurado do alvo continua ativo, evitando que desapareçam durante a perseguição.
+
+O teste `npm run test:entidades` passou como `PROTECAO_ENTIDADES_OK`, confirmando que a polícia aparece no snapshot, não causa `levou_tiro` dentro da propriedade, permanece visível enquanto o procurado está ativo e que o cliente do lote continua presente em snapshots sucessivos.
+
+### Suíte final desta rodada
+
+A suíte completa pós-correção passou: `SECURITY_INTEGRATION_OK`, `MULTIPLAYER_AOI_OK`, `LOAD_24_OK` com 24 jogadores, tick máximo de 4,56 ms e zero descartes, `RECONNECTION_POSITION_OK`, `CLIENTE_CASA_OK`, `PLANTIO_PROPRIO_OK` e `PROTECAO_ENTIDADES_OK`. A checagem de sintaxe do servidor, testes Node e JavaScript inline também passou.
