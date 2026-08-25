@@ -82,13 +82,23 @@ async function moveTo(c, x, z, step = 7, delay = 650) {
   const plantEventB = await b.waitFor(m => m.t === 'lote_update' && m.loteIndex === 0 && m.plotIndex === plotIndex && m.plot && m.plot.id, 5000, 'planta de A no B');
   assert.equal(plantEventB.plot.loteIndex, 0);
   const idPlanta = plantEventB.plot.id;
+  const progInicial = Number(plantEventB.plot.prog) || 0;
+  const crescimento = await b.waitFor(m =>
+    m.t === 'lotes_update' && m.loteIndex === 0 &&
+    (m.updates || []).some(u => u.plotIndex === plotIndex && u.plot &&
+      u.plot.id === idPlanta && Number(u.plot.prog) > progInicial),
+    8000, 'crescimento contínuo da planta');
+  const updateCrescimento = crescimento.updates.find(u => u.plotIndex === plotIndex && u.plot && u.plot.id === idPlanta);
+  assert.ok(Number(updateCrescimento.plot.prog) > progInicial, 'a planta deve crescer no servidor');
   const mensagensBAntes = b.messages.length;
-  const estadosDaPlanta = b.messages.filter(m =>
-    (m.t === 'lote_update' && m.loteIndex === 0 && m.plotIndex === plotIndex && m.plot && m.plot.id === idPlanta) ||
-    (m.t === 'lotes_update' && m.loteIndex === 0 && (m.updates || []).some(u => u.plotIndex === plotIndex && u.plot && u.plot.id === idPlanta)) ||
-    (m.t === 'snap' && (m.lotes || []).some(L => L.index === 0 && L.plots && L.plots[plotIndex] && L.plots[plotIndex].id === idPlanta))
+  // O crescimento contínuo gera novos `lotes_update` da mesma entidade.
+  // A regra de não duplicação deve contar apenas o evento de criação, não
+  // cada atualização legítima de progresso.
+  const criacoesDaPlanta = b.messages.filter(m =>
+    m.t === 'lote_update' && m.loteIndex === 0 && m.plotIndex === plotIndex &&
+    m.plot && m.plot.id === idPlanta
   );
-  assert.equal(estadosDaPlanta.length, 1, 'B deve receber uma única representação do plantio de A até aqui');
+  assert.equal(criacoesDaPlanta.length, 1, 'B deve receber uma única criação da planta de A');
 
   // Libera o portão de B e leva B para longe de A.
   b.send({ t:'portao', id:bi.lote.lote.portaoId });

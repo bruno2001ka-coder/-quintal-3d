@@ -82,13 +82,15 @@ const TIPO_PLOT = [
 ];
 const DAYLEN            = 600;                   // seg reais = 1 dia de jogo (igual o cliente)
 const GROW_MS           = 1000;                  // recalcula plantas a cada 1s
-
 /* ───────── util ───────── */
 const num = (v, min, max, def = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
 };
 const str = (v, max) => String(v == null ? '' : v).slice(0, max);
+const CLIENTE_FIRST_S   = num(process.env.CLIENTE_FIRST_S, 1, 60, 5);
+const CLIENTE_MIN_S     = num(process.env.CLIENTE_MIN_S, 1, 120, 12);
+const CLIENTE_MAX_S     = num(process.env.CLIENTE_MAX_S, CLIENTE_MIN_S, 180, 24);
 const nomeSeguro = v => str(v, 18).replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Jogador';
 const agora = () => Date.now();
 const b64url = v => Buffer.from(v).toString('base64url');
@@ -1105,7 +1107,7 @@ const CLIENTE_NOMES = ['Dona Cida','Seu Vado','Marlene','Juninho','Tia Rosa','Ke
 const CLIENTE_DESEJOS = ['aroma','brilho','rendimento','resistencia','ritmo'];
 const clientes = [];
 let proxCliente = 1;
-let clienteSpawnT = 5;
+let clienteSpawnT = CLIENTE_FIRST_S;
 function resumoCliente(c) {
   return { id:c.id, loteIndex:c.loteIndex, nome:c.nome,
     want:c.want, qtd:c.qtd, mult:+c.mult.toFixed(3), fala:c.fala,
@@ -1122,9 +1124,36 @@ function spawnClienteServer(lote) {
     nome, want, qtd:5 + Math.floor(Math.random() * 12), mult:.95 + Math.random() * .55,
     fala:'quero uma que tenha ' + want + ' alto', fase:'esperando',
     x:gateX, z:gateZ, destX:gateX, destZ:gateZ, ry:0,
-    criadoEm:agora(), esperaAte:agora() + 30000, vendeu:false };
+    criadoEm:agora(), esperaAte:agora() + 30000, vendeu:false,
+    rota:[], rotaPos:0 };
   clientes.push(c);
   return c;
+}
+function rotaEntradaCliente(lote) {
+  // O cliente precisa atravessar o vão central antes de virar para a
+  // bancada. Uma linha direta da rua até a bancada encosta na parede frontal
+  // porque o destino fica 6,8m para a direita do portão.
+  return [
+    { x:lote.x,     z:lote.z + LOTE_D / 2 - 1.2 },
+    { x:lote.x + 4, z:lote.z + 6.0 },
+    { x:lote.x + 6.8, z:lote.z + 3.6 }
+  ];
+}
+function rotaSaidaCliente(lote) {
+  return [
+    { x:lote.x + 4, z:lote.z + 6.0 },
+    { x:lote.x,     z:lote.z + LOTE_D / 2 - 1.2 },
+    { x:lote.x,     z:lote.z + LOTE_D / 2 + 1.6 }
+  ];
+}
+function atualizarRotaCliente(c) {
+  while (c.rotaPos < c.rota.length) {
+    const alvo = c.rota[c.rotaPos];
+    if (Math.hypot(alvo.x - c.x, alvo.z - c.z) > .3) break;
+    c.rotaPos++;
+  }
+  const alvo = c.rota[c.rotaPos];
+  if (alvo) { c.destX = alvo.x; c.destZ = alvo.z; }
 }
 function passoCliente(c, dt) {
   const lote = lotes[c.loteIndex];
@@ -1134,16 +1163,18 @@ function passoCliente(c, dt) {
   if (c.fase === 'esperando') {
     if (lote && lote.portaoAberto) {
       c.fase = 'atendendo';
-      c.destX = lote.x + 6.8; c.destZ = lote.z + 3.6;
+      c.rota = rotaEntradaCliente(lote); c.rotaPos = 0;
       c.esperaAte = agora() + 120000;
     } else if (agora() >= c.esperaAte) {
       c.fase = 'saindo'; c.destX = gateX; c.destZ = gateZ;
     }
   } else if (c.fase === 'atendendo' && agora() >= c.esperaAte) {
-    c.fase = 'saindo'; c.destX = gateX; c.destZ = gateZ;
+    c.fase = 'saindo'; c.rota = lote ? rotaSaidaCliente(lote) : []; c.rotaPos = 0;
   } else if (c.fase === 'saindo') {
-    c.destX = gateX; c.destZ = gateZ;
+    if (lote && !c.rota.length) { c.rota = rotaSaidaCliente(lote); c.rotaPos = 0; }
+    if (!lote) { c.destX = gateX; c.destZ = gateZ; }
   }
+  if (c.fase === 'atendendo' || c.fase === 'saindo') atualizarRotaCliente(c);
   const dx = c.destX - c.x, dz = c.destZ - c.z, d = Math.hypot(dx, dz);
   if (d > .18) {
     const passo = Math.min(d, 1.7 * dt);
@@ -1455,7 +1486,7 @@ function paraInteresse(obj, x, z, donoChave = null, exceto = null) {
   }
 }
 function resumoLote(l, incluirPlots = false) {
-  return { index: l.index, id: l.id, portaoId: l.portaoId,
+  return { index: l.index, id: l.id, x: l.x, z: l.z, portaoId: l.portaoId,
     donoNome: l.donoNome, donoId: l.donoChave || null, portaoAberto: l.portaoAberto,
     tipos: TIPO_PLOT, plots: incluirPlots ? l.plots : [] };
 }
@@ -1726,7 +1757,8 @@ wss.on('connection', (ws, req) => {
         if (!pl) return;
         pl.agua = 1; pl.praga = 0;
         const ev = { t: 'lote_update', loteIndex: lote.index, plotIndex: pi, plot: pl };
-        paraTodos(ev); enviar(j, ev);
+        metricas.loteUpdates++;
+        paraInteresse(ev, lote.x, lote.z, lote.donoChave);
         break;
       }
 
@@ -2138,7 +2170,7 @@ setInterval(() => {
   const dtTick = TICK_MS / 1000;
   clienteSpawnT -= dtTick;
   if (clienteSpawnT <= 0) {
-    clienteSpawnT = 12 + Math.random() * 12;
+    clienteSpawnT = CLIENTE_MIN_S + Math.random() * (CLIENTE_MAX_S - CLIENTE_MIN_S);
     const donos = lotes.filter(l => l.donoChave);
     if (donos.length) spawnClienteServer(donos[Math.floor(Math.random() * donos.length)]);
   }

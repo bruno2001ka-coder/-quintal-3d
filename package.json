@@ -9,7 +9,8 @@
     "test": "node test-seguranca.js",
     "test:aoi": "node test-multiplayer-aoi.js",
     "test:carga": "node test-carga.js",
-    "test:reconexao": "node test-reconexao-posicao.js"
+    "test:reconexao": "node test-reconexao-posicao.js",
+    "test:clientes": "node test-clientes-casa.js"
   },
   "engines": {
     "node": ">=18"
