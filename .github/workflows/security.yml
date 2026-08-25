@@ -55,7 +55,7 @@ jobs:
           PORT=8805 DB_PATH="$RUNNER_TEMP/quintal-8805.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8805.log" 2>&1 &
           pids+=("$!")
           rm -f "$RUNNER_TEMP/quintal-8806.db" "$RUNNER_TEMP/quintal-8806.db-shm" "$RUNNER_TEMP/quintal-8806.db-wal"
-          PORT=8806 DB_PATH="$RUNNER_TEMP/quintal-8806.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8806.log" 2>&1 &
+          PORT=8806 DB_PATH="$RUNNER_TEMP/quintal-8806.db" CLIENTE_FIRST_S=1 CLIENTE_MIN_S=1 CLIENTE_MAX_S=1 node servidor-1.js > "$RUNNER_TEMP/quintal-8806.log" 2>&1 &
           pids+=("$!")
           sleep 2
           TEST_WS=ws://127.0.0.1:8800 npm test
