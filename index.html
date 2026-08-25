@@ -4240,7 +4240,7 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
 // conexão falhar, cair ou nunca acontecer, o jogo sozinho continua
 // funcionando normal — multiplayer nunca pode travar o modo solo.
 const MP_URL='wss://quintal-3d.onrender.com';
-let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpHadConnection=false, mpSendT=0, mpTentativas=0;
+let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0;
 let mpToken='',mpAvatarId='carmo';
 try{mpAvatarId=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
 try{mpToken=localStorage.getItem('quintal3d-session-token')||''}catch(e){}
@@ -4443,7 +4443,7 @@ function mpConnect(){
  if(!MP_URL)return;
  try{ mpWs=new WebSocket(MP_URL) }catch(e){ return }
  mpWs.onopen=()=>{
-  mpConnected=true; mpReady=false; mpReconnecting=false; mpHadConnection=true; mpTentativas=0;
+  mpReentrada=mpReconnecting; mpConnected=true; mpReady=false; mpReconnecting=false; mpHadConnection=true; mpTentativas=0;
   setModoMultiplayerVisual(true);
   const nt=$('netTag'); if(nt){nt.textContent='online';nt.classList.add('on')}
   statusServidor(true);
@@ -4601,7 +4601,7 @@ function mpConnect(){
     if(msg.loteIndex===null||msg.loteIndex===undefined){
      // Sem lote próprio ainda é possível caminhar pela cidade. O servidor
      // entrega um spawn público para que mpReady não fique falso para sempre.
-     mpReady=true;
+     mpReady=true;mpReentrada=false;
      if(G.running&&msg.posicao&&!G._nasceuNoLote){
       const p=msg.posicao;player.position.set(Number(p.x)||0,Number(p.y)||0,Number(p.z)||0);
       player.rotation.y=Number(p.ry)||0;camYaw=player.rotation.y+Math.PI;
@@ -4618,7 +4618,7 @@ function mpConnect(){
       // evita que o navegador continue enviando a posição antiga e receba
       // um retorno brusco em seguida.
       if(G.running&&msg.posicao&&(
-        msg.retomada||!G._nasceuNoLote||G._esperandoLote)){
+        msg.retomada||mpReentrada||!G._nasceuNoLote||G._esperandoLote)){
        const p=msg.posicao;
        player.position.set(Number(p.x)||0,Number(p.y)||0,Number(p.z)||0);
        player.rotation.y=Number(p.ry)||0;camYaw=player.rotation.y+Math.PI;
@@ -4627,7 +4627,7 @@ function mpConnect(){
       atualizarPlacaLote(lote);
       if(msg.lote&&msg.lote.plots)
        msg.lote.plots.forEach((pl,i)=>aplicarPlotOnline(meuLoteIndex,i,pl));
-      mpReady=true;
+      mpReady=true;mpReentrada=false;
       toast(`seu lote é o nº ${meuLoteIndex+1} — vai lá plantar`);
      }
     }

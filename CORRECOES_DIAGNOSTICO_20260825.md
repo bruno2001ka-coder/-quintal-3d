@@ -16,6 +16,7 @@ Esta rodada consolidou o multiplayer online em uma única fonte de verdade: os 1
 | Áudio | Buffer de ruído reutilizado, ganho mestre, limite de vozes simultâneas e controle Ativo/Mudo. | Evita criar áudio pesado em rajadas de tiros/efeitos e oferece um modo imediato para máquinas problemáticas. |
 | Reconexão | A última posição authoritative é guardada por até 15 segundos e reaplicada no novo handshake; o cliente fica parado até receber a posição do lote. | Evita andar num mundo local durante a queda e depois voltar bruscamente ao nascimento. |
 | Movimento durante handshake | O jogador pode andar enquanto o primeiro handshake termina; o envio ao servidor só começa depois da posição authoritative. Durante reconexão, o movimento permanece congelado. | Evita o bloqueio percebido no primeiro carregamento sem reabrir o retorno indevido após queda. |
+| Parede após queda | A retomada valida a última posição com o raio do jogador; se ela estiver inválida, usa spawn oficial seguro. Ao reconectar, o cliente aplica a posição server-side e libera o andar somente depois do lote. | Evita ficar dentro ou encostado num colisor inválido após perder a conexão. |
 | HUD mobile | Inventário e demais modais ficam acima do painel de métricas, ocupam uma área segura da tela e escondem AÇÃO/MIRA/TIRO/PULO/RECAR enquanto abertos. | Os controles não cobrem as linhas de sementes nem o botão FECHAR. |
 | Gráficos | Seletor Alto/Médio/Baixo, pixel ratio limitado, sombras configuráveis, painel com FPS, chamadas e triângulos, além de LOD de plantas. | Permite preservar detalhe no modo Alto e reduzir custo quando necessário. |
 | Avatar | Catálogo inicial Carmo/Verde/Azul/Roxo, seletor na tela, sincronização server-side, persistência compatível com carteiras antigas e atualização remota. | Os jogadores próximos veem o mesmo avatar; inventário, dinheiro e itens continuam privados. |
@@ -37,6 +38,7 @@ O mundo compartilhado inclui posição dos jogadores, plantas e lotes próximos,
 | `npm run test:carga` / 24 conexões | `LOAD_24_OK`, cerca de 2.172–2.184 snapshots, tick máximo observado de 3,1–3,68 ms e zero descartes por backpressure |
 | `npm run test:reconexao` / queda curta | `RECONNECTION_POSITION_OK` |
 | análise estática do layout mobile | seletores de modal, toque e cliente validados |
+| `test-reconexao` perto de parede | `RECONNECTION_POSITION_OK` com movimento após retomada |
 
 Os testes foram executados em servidores locais isolados, com banco SQLite temporário e segredo de teste. Nenhum segredo real foi incluído no relatório ou no repositório.
 

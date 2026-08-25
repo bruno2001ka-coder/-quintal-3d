@@ -21,7 +21,9 @@ function conectar(token = '') {
   const lote = primeiro.mensagens.find(m => m.t === 'lote_atribuido');
   assert.ok(sessao && sessao.token, 'primeira conexão deve entregar token');
   assert.ok(lote && lote.posicao, 'primeira conexão deve entregar posição oficial');
-  const destino = { x: lote.posicao.x + 4, z: lote.posicao.z };
+  // ponto legítimo bem perto da parede frontal, mas ainda dentro do raio
+  // seguro do jogador; simula a posição em que o usuário relatou travamento.
+  const destino = { x: lote.posicao.x, z: lote.posicao.z + 2.7 };
   for (let i = 1; i <= 12; i++) {
     primeiro.ws.send(JSON.stringify({ t:'input', x:lote.posicao.x + (destino.x-lote.posicao.x)*i/12, y:0, z:destino.z, ry:0, arma:0 }));
     await sleep(80);
@@ -34,6 +36,11 @@ function conectar(token = '') {
   assert.equal(retomada.retomada, true, 'reconexão curta deve indicar retomada');
   assert.ok(Math.hypot(retomada.posicao.x-destino.x, retomada.posicao.z-destino.z) < 1.2,
     `posição retomada inesperada: ${JSON.stringify(retomada.posicao)}`);
+  const antes = segundo.mensagens.length;
+  segundo.ws.send(JSON.stringify({ t:'input', x:retomada.posicao.x + .5, y:0, z:retomada.posicao.z, ry:0, arma:0 }));
+  await sleep(250);
+  const correcaoDepoisDaRetomada = segundo.mensagens.slice(antes).filter(m=>m.t==='correcao');
+  assert.equal(correcaoDepoisDaRetomada.length, 0, 'posição retomada não deve ficar presa na parede');
   segundo.ws.close();
-  console.log('RECONNECTION_POSITION_OK', JSON.stringify({ x:retomada.posicao.x, z:retomada.posicao.z }));
+  console.log('RECONNECTION_POSITION_OK', JSON.stringify({ x:retomada.posicao.x, z:retomada.posicao.z, movimentoAposRetomada:true }));
 })().catch(err => { console.error('RECONNECTION_POSITION_FAILED:', err.stack || err.message); process.exitCode = 1; });
