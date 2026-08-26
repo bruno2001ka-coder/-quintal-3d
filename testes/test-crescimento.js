@@ -30,8 +30,18 @@ assert.match(client, /const cal=new THREE\.Mesh\(new THREE\.IcosahedronGeometry\
   'o cálice do bud deve permanecer compacto');
 assert.match(client, /const sl=new THREE\.Mesh\(leafletGeo\(\.075\*c\.s,\.015\*c\.s\)/,
   'a sugar leaf deve permanecer compacta');
-assert.match(client, /ud\.buds\.scale\.setScalar\(\.32\+/,
+assert.match(client, /ud\.buds\.scale\.setScalar\(\.24\+/,
   'a escala dos buds deve ter limite compacto');
+assert.match(client, /const H=1\.38/,
+  'a planta adulta deve permanecer compacta no lote');
+assert.match(client, /e===0\?2:e===1\?4:e===2\?8:ud\.fans\.length/,
+  'os estágios devem revelar pares simétricos de folhas');
+assert.match(client, /if\(est===4\)\{toast\(`\$\{s\.nome\} pronta pra colher`/,
+  'a mensagem de colheita só pode aparecer no estágio pronto');
+assert.doesNotMatch(client, /if\(est===3\)\{toast\(`\$\{s\.nome\} pronta pra colher`/,
+  'o estágio adulto ainda não pode ser tratado como pronto');
+assert.match(client, /function escalaPlantaCultivada\(prog\)\{return \.07\+clamp\(Number\(prog\)\|\|0,0,100\)\/100\*\.65\}/,
+  'a escala deve crescer de muda pequena até uma planta adulta compacta');
 
 function simulaCiclo(segundos) {
   let prog = 0, agua = 1, saude = 1, relogio = 360;

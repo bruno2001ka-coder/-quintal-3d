@@ -1723,7 +1723,7 @@ function buildPlant(s){
   roughness:.58,metalness:0,side:THREE.DoubleSide,
   emissive:new THREE.Color(s.cor).multiplyScalar(.14)});
  const stemM=new THREE.MeshStandardMaterial({color:0x5c7a38,roughness:.92});
- const H=1.6;
+ const H=1.38;
  // caule principal, levemente cônico
  const st=new THREE.Mesh(new THREE.CylinderGeometry(.022,.052,H,8),stemM);
  st.geometry.translate(0,H/2,0);st.castShadow=lod.sombras;g.add(st);
@@ -1770,9 +1770,9 @@ function buildPlant(s){
  const sparkM=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.7});
  const sparkGeo=new THREE.SphereGeometry(.009,4,3);
  const buds=new THREE.Group();
- const colas=[{x:0,y:H-.06,z:0,s:.78,alt:.34},
-              {x:.22,y:H*.58,z:.08,s:.42,alt:.20},
-              {x:-.20,y:H*.54,z:-.09,s:.40,alt:.18}];
+ const colas=[{x:0,y:H-.06,z:0,s:.70,alt:.27},
+              {x:.20,y:H*.58,z:.08,s:.38,alt:.17},
+              {x:-.18,y:H*.54,z:-.09,s:.36,alt:.15}];
  colas.forEach(c=>{
   const cola=new THREE.Group();
    const camadas=Math.max(2,Math.round(lod.camadas+s.t.rendimento/100*(lod.camadas===4?4:2)));
@@ -1814,11 +1814,11 @@ function buildPlant(s){
 // Escala e silhueta são compartilhadas pelo cliente local e pelo espelho online.
 // O servidor continua decidindo prog/estágio; isto só impede que a planta nasça
 // com tamanho adulto e deixa os leques aparecerem progressivamente.
-function escalaPlantaCultivada(prog){return .10+clamp(Number(prog)||0,0,100)/100*.82}
+function escalaPlantaCultivada(prog){return .07+clamp(Number(prog)||0,0,100)/100*.65}
 function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
  const ud=mesh&&mesh.userData||{},e=clamp(Math.floor(Number(estagio)||0),0,4),p=clamp(Number(prog)||0,0,100);
- if(ud.fans){const n=e===0?2:e===1?5:e===2?8:ud.fans.length;ud.fans.forEach((fan,i)=>fan.visible=i<n)}
- if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.32+Math.min(1,Math.max(0,(p-62)/38))*(.46+(Number(rendimento)||0)/100*.28))}
+ if(ud.fans){const n=e===0?2:e===1?4:e===2?8:ud.fans.length;ud.fans.forEach((fan,i)=>fan.visible=i<n)}
+ if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.24+Math.min(1,Math.max(0,(p-62)/38))*(.40+(Number(rendimento)||0)/100*.22))}
 }
 function plantSeed(plot,e){
  const g=buildPlant(e.s);
@@ -3831,7 +3831,7 @@ function tick(){
   if(pl.estagio<4)pl.prog=Math.min(100,pl.prog+taxa*dt);
   const est=estagioDe(pl.prog);
   if(est!==pl.estagio){pl.estagio=est;
-   if(est===3){toast(`${s.nome} pronta pra colher`);blip(880,.16,'triangle',.06)}}
+   if(est===4){toast(`${s.nome} pronta pra colher`);blip(880,.16,'triangle',.06)}}
   const m=pl.mesh,ud=m.userData;
   m.scale.setScalar(escalaPlantaCultivada(pl.prog));
   aplicarFormaPlanta(m,est,pl.prog,s.t.rendimento);
@@ -3847,7 +3847,7 @@ function tick(){
     fn.rotation.z=bs.base.z+Math.cos(pl.sway*1.3+bs.fase)*bs.amp*.7*vento}}
   let cl=0x8fe063,op=0;
   if(pl.praga>0){cl=0xff6a3d;op=.32+Math.sin(t*6)*.2}
-  else if(est===3){cl=0xe8d264;op=.35+Math.sin(t*4)*.2}
+  else if(est===4){cl=0xe8d264;op=.35+Math.sin(t*4)*.2}
   else if(pl.agua<.3){cl=0x5fb8ff;op=.3+Math.sin(t*5)*.18}
   p.ring.material.color.setHex(cl);p.ring.material.opacity=op}
 
