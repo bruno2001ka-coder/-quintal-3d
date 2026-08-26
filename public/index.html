@@ -4274,15 +4274,24 @@ function montarLote(lote){
    transparent:true,opacity:.55,side:THREE.DoubleSide});
   const teto=new THREE.Mesh(new THREE.BoxGeometry(ew+.2,.06,ed+.2),lona);
   teto.position.set(ex,eh,ez);teto.castShadow=true;g.add(teto);
-  [[0,-ed/2,ew,.05],[0,ed/2,ew,.05],[-ew/2,0,.05,ed],[ew/2,0,.05,ed]].forEach(w=>{
+  const vaoEstufa=1.4,ladoEstufa=(ew-vaoEstufa)/2;
+  [[0,-ed/2,ew,.05],[-ew/2,0,.05,ed],[ew/2,0,.05,ed],
+   [-(vaoEstufa/2+ladoEstufa/2),ed/2,ladoEstufa,.05],
+   [vaoEstufa/2+ladoEstufa/2,ed/2,ladoEstufa,.05]].forEach(w=>{
    const p2=new THREE.Mesh(new THREE.BoxGeometry(w[2],eh,w[3]),lona);
    p2.position.set(ex+w[0],eh/2,ez+w[1]);g.add(p2)});
+  // Marco aberto da porta: a passagem fica igual em todas as estufas.
+  [-vaoEstufa/2,vaoEstufa/2].forEach(px=>{
+   const p2=new THREE.Mesh(new THREE.BoxGeometry(.08,eh,.08),tuboM);
+   p2.position.set(ex+px,eh/2,ez+ed/2);p2.castShadow=true;g.add(p2)});
+  const verga=new THREE.Mesh(new THREE.BoxGeometry(vaoEstufa+.16,.08,.08),tuboM);
+  verga.position.set(ex,eh-.08,ez+ed/2);verga.castShadow=true;g.add(verga);
   addColLocal(ex-ew/2-.1,ex-ew/2+.1,ez-ed/2,ez+ed/2);
   addColLocal(ex+ew/2-.1,ex+ew/2+.1,ez-ed/2,ez+ed/2);
   addColLocal(ex-ew/2,ex+ew/2,ez-ed/2-.1,ez-ed/2+.1);
-  // BUG CORRIGIDO: a 4ª parede da estufa existia no desenho mas não tinha
-  // colisor — dava pra entrar por trás.
-  addColLocal(ex-ew/2,ex+ew/2,ez+ed/2-.1,ez+ed/2+.1);
+  // A frente tem uma abertura central de 1,4m para o jogador entrar.
+  addColLocal(ex-ew/2,ex-vaoEstufa/2,ez+ed/2-.1,ez+ed/2+.1);
+  addColLocal(ex+vaoEstufa/2,ex+ew/2,ez+ed/2-.1,ez+ed/2+.1);
  })();
 
  // Grow room de alvenaria (canteiros 10-15)

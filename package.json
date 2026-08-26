@@ -20,6 +20,7 @@
     "test:entidades": "node testes/test-protecao-entidades.js",
     "test:audio": "node testes/test-audio-mixer.js",
     "test:movimento": "node testes/test-movimento-fluido.js",
+    "test:estufas": "node testes/test-acesso-estufas.js",
     "test:mapa": "node testes/test-mapa-conexoes.js",
     "test:spawn": "node testes/test-spawn-preclick.js",
     "test:http": "node testes/test-http-static.js",

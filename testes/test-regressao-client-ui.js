@@ -90,5 +90,11 @@ assert.match(html, /slot\.g\.visible=true/,
   'a atualização do estoque deve tornar visível o pote da cura');
 assert.match(html, /lote\.curaPotes=null/,
   'os potes devem ser liberados quando a casa é desmontada');
+assert.match(html, /const vaoEstufa=1\.4,ladoEstufa=\(ew-vaoEstufa\)\/2/,
+  'cada estufa deve reservar uma abertura de entrada');
+assert.match(html, /addColLocal\(ex-ew\/2,ex-vaoEstufa\/2,ez\+ed\/2-\.1,ez\+ed\/2\+\.1\)/,
+  'o colisor esquerdo da frente deve terminar antes da porta');
+assert.match(html, /addColLocal\(ex\+vaoEstufa\/2,ex\+ew\/2,ez\+ed\/2-\.1,ez\+ed\/2\+\.1\)/,
+  'o colisor direito da frente deve começar depois da porta');
 
 console.log('CLIENT_UI_REGRESSION_OK');

@@ -41,6 +41,7 @@ jobs:
           node --check testes/test-protecao-entidades.js
           node --check testes/test-audio-mixer.js
           node --check testes/test-movimento-fluido.js
+          node --check testes/test-acesso-estufas.js
           node --check testes/test-mapa-conexoes.js
           node --check testes/test-spawn-preclick.js
           node --check testes/test-regressao-client-ui.js
@@ -80,6 +81,9 @@ jobs:
           rm -f "$RUNNER_TEMP/quintal-8809.db" "$RUNNER_TEMP/quintal-8809.db-shm" "$RUNNER_TEMP/quintal-8809.db-wal"
           ALLOW_ANONYMOUS=0 PORT=8809 DB_PATH="$RUNNER_TEMP/quintal-8809.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8809.log" 2>&1 &
           pids+=("$!")
+          rm -f "$RUNNER_TEMP/quintal-8810.db" "$RUNNER_TEMP/quintal-8810.db-shm" "$RUNNER_TEMP/quintal-8810.db-wal"
+          PORT=8810 DB_PATH="$RUNNER_TEMP/quintal-8810.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8810.log" 2>&1 &
+          pids+=("$!")
           sleep 2
           TEST_HTTP=http://127.0.0.1:8800 npm run test:http
           TEST_WS=ws://127.0.0.1:8800 npm test
@@ -94,6 +98,7 @@ jobs:
           TEST_WS=ws://127.0.0.1:8805 npm run test:crescimento
           TEST_WS=ws://127.0.0.1:8806 npm run test:entidades
           TEST_WS=ws://127.0.0.1:8807 npm run test:movimento
+          TEST_WS=ws://127.0.0.1:8810 npm run test:estufas
           npm run test:mapa
           npm run test:audio
           npm run test:spawn
@@ -101,4 +106,4 @@ jobs:
           TEST_PERSIST_PORT=8808 npm run test:persistencia
           npm run test:colheita
           npm run test:render-config
-          for port in 8800 8801 8802 8803 8804 8805 8806 8807 8808 8809; do cat "$RUNNER_TEMP/quintal-$port.log"; done
+          for port in 8800 8801 8802 8803 8804 8805 8806 8807 8808 8809 8810; do cat "$RUNNER_TEMP/quintal-$port.log"; done

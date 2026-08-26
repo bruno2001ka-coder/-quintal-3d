@@ -55,6 +55,10 @@ function connect(token, nome) {
   assert.match(servidor, /j\.ultimoMov\s*=\s*agora\(\)\s*-\s*250/);
   assert.match(servidor, /rotaSaidaCliente\(lotes\[contexto\.cliente\.loteIndex\]\)/);
   assert.match(servidor, /Object\.create\(null\)/);
+  assert.match(servidor, /\[2\.0,3\.5,-1\.8,-1\.5999999999999999\][\s\S]*\[4\.9,6\.4,-1\.8,-1\.5999999999999999\]/,
+    'o servidor deve deixar a porta central da estufa livre');
+  assert.match(cliente, /const vaoEstufa=1\.4/,
+    'o cliente deve criar a mesma abertura de estufa');
   assert.match(cliente, /escaparHTML\(kid\.nome/);
   assert.match(cliente, /mpLimparEntidades\(\)/);
   assert.match(cliente, /sem conexão com o servidor/);
