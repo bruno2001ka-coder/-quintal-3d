@@ -34,7 +34,7 @@ async function waitHealth() {
 }
 function startServer() {
   const child = spawn(process.execPath, [SERVER], {
-    env: { ...process.env, PORT: String(PORT), DB_PATH, AUTH_SECRET },
+    env: { ...process.env, PORT: String(PORT), DB_PATH, AUTH_SECRET, ALLOW_ANONYMOUS: '0' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let logs = '';
@@ -51,34 +51,47 @@ function stopServer(child) {
     child.kill('SIGTERM');
   });
 }
-function connect(token = '') {
+function connect() {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
     const messages = [];
     const timer = setTimeout(() => {
-      ws.close(); reject(new Error('timeout no handshake/estado'));
+      ws.close(); reject(new Error('timeout abrindo WebSocket de persistência'));
     }, 6000);
-    ws.on('open', () => ws.send(JSON.stringify({
-      t: 'hello', token, nome: 'Persistência', avatarId: 'verde', sementeBase: BASE
-    })));
+    ws.once('open', () => { clearTimeout(timer); resolve({ ws, messages }); });
+    ws.once('error', err => { clearTimeout(timer); reject(err); });
     ws.on('message', raw => {
-      let m; try { m = JSON.parse(raw); } catch (_) { return; }
-      messages.push(m);
-      if (m.t === 'estado') { clearTimeout(timer); resolve({ ws, messages }); }
+      try { messages.push(JSON.parse(String(raw))); } catch (_) {}
     });
-    ws.on('error', err => { clearTimeout(timer); reject(err); });
   });
 }
-function waitMessage(messages, type, ws, predicate = () => true) {
+function waitFor(client, predicate, label, timeout = 6000) {
+  const found = client.messages.find(predicate);
+  if (found) return Promise.resolve(found);
   return new Promise((resolve, reject) => {
-    const found = [...messages].reverse().find(m => m.t === type && predicate(m));
-    if (found) return resolve(found);
-    const timer = setTimeout(() => reject(new Error(`timeout aguardando ${type}`)), 4000);
+    const timer = setTimeout(() => {
+      client.ws.off('message', onMessage);
+      reject(new Error(`timeout aguardando ${label}`));
+    }, timeout);
     const onMessage = raw => {
-      let m; try { m = JSON.parse(raw); } catch (_) { return; }
-      if (m.t === type && predicate(m)) { clearTimeout(timer); ws.off('message', onMessage); resolve(m); }
+      let msg;
+      try { msg = JSON.parse(String(raw)); } catch (_) { return; }
+      client.messages.push(msg);
+      if (predicate(msg)) {
+        clearTimeout(timer);
+        client.ws.off('message', onMessage);
+        resolve(msg);
+      }
     };
-    ws.on('message', onMessage);
+    client.ws.on('message', onMessage);
+  });
+}
+function fechar(client) {
+  if (!client || !client.ws || client.ws.readyState >= WebSocket.CLOSED) return Promise.resolve();
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, 1000);
+    client.ws.once('close', () => { clearTimeout(timer); resolve(); });
+    client.ws.close();
   });
 }
 function totalSeeds(state) {
@@ -87,49 +100,71 @@ function totalSeeds(state) {
 
 (async () => {
   for (const suffix of ['', '-shm', '-wal']) fs.rmSync(DB_PATH + suffix, { force: true });
+  const usuario = `conta_${Date.now().toString(36)}`.slice(0, 24);
+  const senha = 'SenhaPersist9!';
   let server = startServer();
+  let first = null;
+  let second = null;
   try {
     await waitHealth();
-    const first = await connect();
-    const session = first.messages.find(m => m.t === 'sessao');
-    const lote = first.messages.find(m => m.t === 'lote_atribuido');
-    const estadoInicial = first.messages.find(m => m.t === 'estado');
-    assert.ok(session && session.token, 'primeira sessão deve entregar token');
-    assert.ok(lote && lote.posicao, 'primeira sessão deve entregar posição');
+
+    first = await connect();
+    first.ws.send(JSON.stringify({ t: 'hello', nome: 'antes do cadastro', avatarId: 'verde', sementeBase: BASE }));
+    await waitFor(first, m => m.t === 'login_required', 'login obrigatório inicial');
+    first.ws.send(JSON.stringify({ t: 'auth_register', usuario, senha, nome: 'Conta Persistente', avatarId: 'verde', aparelhoId: 'teste-restart', sementeBase: BASE }));
+    const criado = await waitFor(first, m => m.t === 'auth_ok' && m.novo === true, 'cadastro da conta');
+    const sessao = await waitFor(first, m => m.t === 'sessao' && m.token, 'token inicial');
+    const lote = await waitFor(first, m => m.t === 'lote_atribuido' && m.posicao, 'lote inicial');
+    const estadoInicial = await waitFor(first, m => m.t === 'estado' && Number.isFinite(m.cash), 'carteira inicial');
+    assert.equal(criado.usuario, usuario);
     assert.equal(estadoInicial.cash, 350, 'carteira inicial deve ter R$350');
+    assert.ok((estadoInicial.bank || []).some(e => e.s && e.qtd >= 2), 'conta nova deve receber sementes iniciais');
+
     first.ws.send(JSON.stringify({ t: 'comprar', oq: 'semente', strain: BASE }));
-    const comprado = await waitMessage(first.messages, 'estado', first.ws, m => m.cash === 292 && totalSeeds(m) >= 3);
-    assert.equal(comprado.cash, 292, 'compra deve persistir saldo R$292 antes do restart');
-    assert.ok(totalSeeds(comprado) >= 3, 'compra deve aumentar o total de sementes antes do restart');
+    const comprado = await waitFor(first, m => m.t === 'estado' && m.cash === 292 && totalSeeds(m) >= 3, 'compra antes do restart');
+    assert.equal(comprado.cash, 292, 'compra deve reduzir o saldo para R$292');
     const destino = { x: lote.posicao.x, y: 0, z: lote.posicao.z + 2.7, ry: 0 };
     first.ws.send(JSON.stringify({ t: 'input', seq: 1, ...destino, arma: 0 }));
     await sleep(250);
-    first.ws.close();
-    await sleep(150);
+    await fechar(first);
+    first = null;
+    await sleep(120);
     await stopServer(server);
     server = startServer();
     await waitHealth();
-    const second = await connect(session.token);
-    const retomada = second.messages.find(m => m.t === 'lote_atribuido');
-    const restaurado = second.messages.find(m => m.t === 'estado');
-    assert.ok(retomada, 'segunda sessão deve entregar o lote');
+
+    // Depois do restart, a senha deve recuperar a mesma conta sem depender de token em memória.
+    second = await connect();
+    second.ws.send(JSON.stringify({ t: 'hello', nome: 'nome ignorado', avatarId: 'roxo', sementeBase: BASE }));
+    await waitFor(second, m => m.t === 'login_required', 'login após restart');
+    second.ws.send(JSON.stringify({ t: 'auth_login', usuario, senha, avatarId: 'verde', aparelhoId: 'teste-restart-2' }));
+    const reconhecida = await waitFor(second, m => m.t === 'auth_ok' && m.novo === false, 'conta após restart');
+    const retomada = await waitFor(second, m => m.t === 'lote_atribuido' && m.posicao, 'lote após restart');
+    const restaurado = await waitFor(second, m => m.t === 'estado' && Number.isFinite(m.cash), 'carteira após restart');
+    assert.equal(reconhecida.usuario, usuario);
+    assert.equal(retomada.loteIndex, lote.loteIndex, 'a conta deve recuperar o mesmo lote');
     assert.equal(retomada.retomada, true, 'restart deve indicar retomada da posição persistida');
     assert.ok(Math.hypot(retomada.posicao.x - destino.x, retomada.posicao.z - destino.z) < 1.2,
       `posição não restaurada: ${JSON.stringify(retomada.posicao)}`);
     assert.equal(restaurado.cash, 292, 'saldo deve sobreviver ao restart com SQLite');
     assert.ok(totalSeeds(restaurado) >= 3, 'sementes compradas devem sobreviver ao restart com SQLite');
-    second.ws.close();
+    await fechar(second);
+    second = null;
     console.log('PERSISTENCE_RESTART_OK', JSON.stringify({
-      cash: restaurado.cash,
-      sementes: totalSeeds(restaurado),
-      x: retomada.posicao.x,
-      z: retomada.posicao.z
+      usuario, loteIndex: retomada.loteIndex, cash: restaurado.cash,
+      sementes: totalSeeds(restaurado), x: retomada.posicao.x, z: retomada.posicao.z
     }));
   } catch (err) {
     console.error('PERSISTENCE_RESTART_FAILED:', err.stack || err.message);
+    if (server && server._logs) console.error(server._logs());
     process.exitCode = 1;
   } finally {
+    await fechar(first);
+    await fechar(second);
     await stopServer(server);
     for (const suffix of ['', '-shm', '-wal']) fs.rmSync(DB_PATH + suffix, { force: true });
   }
 })();
+
+// O token retornado no primeiro login é deliberadamente validado em test-login-conta.js;
+// este teste concentra a prova complementar de senha + banco depois do restart.

@@ -70,5 +70,15 @@ assert.match(html, /cashQuickValue/,
   'o celular deve manter apenas o saldo resumido fora do menu');
 assert.match(html, /const temProducao=G\.lotes\.some\(/,
   'o painel de produção deve aparecer somente quando houver produção');
+assert.match(html, /id="authUser"[^>]*autocomplete="username"/,
+  'a tela inicial deve pedir um usuário individual');
+assert.match(html, /id="authPass"[^>]*type="password"/,
+  'a tela inicial deve pedir senha sem expô-la');
+assert.match(html, /t:tipo,usuario,senha,nome/,
+  'login e cadastro devem usar o mesmo WebSocket authoritative');
+assert.match(html, /localStorage\.setItem\('quintal3d-account-token',mpToken\)/,
+  'o token da conta deve sobreviver a recarregamento e troca de aba');
+assert.match(html, /msg\.t==='login_required'/,
+  'o cliente deve bloquear o jogo até a conta ser reconhecida');
 
 console.log('CLIENT_UI_REGRESSION_OK');

@@ -68,6 +68,10 @@ function carregarAuthSecret() {
 }
 const AUTH_SECRET       = carregarAuthSecret();
 const AUTH_TTL_MS       = 1000 * 60 * 60 * 24 * 30;
+const AUTH_USER_MAX     = 24;
+const AUTH_PASS_MAX     = 128;
+const AUTH_PASS_MIN     = 8;
+const ALLOW_ANONYMOUS   = process.env.ALLOW_ANONYMOUS === '1';
 const RATE_BURST        = 60;                    // balde de tokens
 const RATE_RECARGA      = 40;                    // tokens por segundo
 const VEL_MAX           = 14;                    // m/s — corrida é ~6, folga pra lag
@@ -288,7 +292,11 @@ function iniciarBanco() {
       pg = new Pool({ connectionString: DATABASE_URL,
         ssl: DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false } });
       dbTipo = 'postgres';
-      pg.query(`CREATE TABLE IF NOT EXISTS usuarios (
+      pg.query(`CREATE TABLE IF NOT EXISTS contas (
+        usuario TEXT PRIMARY KEY, chave TEXT UNIQUE NOT NULL, nome TEXT,
+        senha_salt TEXT NOT NULL, senha_hash TEXT NOT NULL,
+        criado BIGINT, atualizado BIGINT);
+      CREATE TABLE IF NOT EXISTS usuarios (
         chave TEXT PRIMARY KEY, nome TEXT, cash INTEGER DEFAULT 0,
         bank TEXT DEFAULT '[]', estoque TEXT DEFAULT '[]',
         up TEXT DEFAULT '{}', armas TEXT DEFAULT '{}', fert TEXT DEFAULT '{}',
@@ -317,7 +325,11 @@ function iniciarBanco() {
     const Database = require('better-sqlite3');
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
-    db.exec(`CREATE TABLE IF NOT EXISTS usuarios (
+    db.exec(`CREATE TABLE IF NOT EXISTS contas (
+      usuario TEXT PRIMARY KEY, chave TEXT UNIQUE NOT NULL, nome TEXT,
+      senha_salt TEXT NOT NULL, senha_hash TEXT NOT NULL,
+      criado INTEGER, atualizado INTEGER);
+    CREATE TABLE IF NOT EXISTS usuarios (
       chave TEXT PRIMARY KEY, nome TEXT, cash INTEGER DEFAULT 0,
       bank TEXT DEFAULT '[]', estoque TEXT DEFAULT '[]',
       up TEXT DEFAULT '{}', armas TEXT DEFAULT '{}', fert TEXT DEFAULT '{}',
@@ -1641,6 +1653,116 @@ function resumoLote(l, incluirPlots = false) {
     tipos: TIPO_PLOT, plots: incluirPlots ? l.plots : [] };
 }
 
+function normalizarUsuario(v) {
+  const u = String(v == null ? '' : v).trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9_.-]{2,23}$/.test(u) ? u : null;
+}
+function senhaValida(v) {
+  return typeof v === 'string' && v.length >= AUTH_PASS_MIN && v.length <= AUTH_PASS_MAX;
+}
+function criarHashSenha(senha, salt) {
+  return crypto.pbkdf2Sync(senha, salt, 120000, 32, 'sha256').toString('hex');
+}
+function senhaConfere(senha, salt, esperado) {
+  if (!senhaValida(senha) || typeof salt !== 'string' || typeof esperado !== 'string') return false;
+  const atual = Buffer.from(criarHashSenha(senha, salt), 'hex');
+  const alvo = Buffer.from(esperado, 'hex');
+  return atual.length === alvo.length && crypto.timingSafeEqual(atual, alvo);
+}
+function contaRow(row) {
+  return row && row.usuario && row.chave ? {
+    usuario: String(row.usuario), chave: String(row.chave), nome: nomeSeguro(row.nome),
+    senhaSalt: String(row.senha_salt || ''), senhaHash: String(row.senha_hash || '')
+  } : null;
+}
+function carregarContaUsuario(usuario) {
+  if (dbTipo !== 'sqlite' || !db) return null;
+  try { return contaRow(db.prepare('SELECT usuario,chave,nome,senha_salt,senha_hash FROM contas WHERE usuario = ?').get(usuario)); }
+  catch (e) { console.error('erro ao ler conta:', e.message); return null; }
+}
+async function carregarContaUsuarioAsync(usuario) {
+  if (dbTipo !== 'postgres' || !pg) return null;
+  try {
+    const r = await pg.query('SELECT usuario,chave,nome,senha_salt,senha_hash FROM contas WHERE usuario = $1', [usuario]);
+    return contaRow(r.rows[0]);
+  } catch (e) { console.error('erro ao ler conta (pg):', e.message); return null; }
+}
+async function criarConta(usuario, nome, senha) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = criarHashSenha(senha, salt);
+  const chave = novaIdentidade();
+  const agoraConta = Date.now();
+  try {
+    if (dbTipo === 'sqlite' && db) {
+      db.prepare(`INSERT INTO contas (usuario,chave,nome,senha_salt,senha_hash,criado,atualizado)
+        VALUES (?,?,?,?,?,?,?)`).run(usuario, chave, nome, salt, hash, agoraConta, agoraConta);
+    } else if (dbTipo === 'postgres' && pg) {
+      await pg.query(`INSERT INTO contas (usuario,chave,nome,senha_salt,senha_hash,criado,atualizado)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)`, [usuario, chave, nome, salt, hash, agoraConta, agoraConta]);
+    } else return null;
+    return { usuario, chave, nome, senhaSalt:salt, senhaHash:hash };
+  } catch (e) {
+    if (!/unique|duplicate|constraint/i.test(e.message || '')) console.error('erro ao criar conta:', e.message);
+    return null;
+  }
+}
+function sessaoJaConectada(chave, idAtual) {
+  for (const [oid, outro] of jogadores) {
+    if (oid !== idAtual && outro.autenticado && outro.chave === chave) return true;
+  }
+  return false;
+}
+async function ativarSessao(j, chave, dados = {}) {
+  if (!chave || sessaoJaConectada(chave, j.id)) {
+    enviar(j, { t: dados.falhaAuth ? 'auth_error' : 'recusado', motivo: 'esta conta já está conectada em outro lugar' });
+    metricas.rejeitadas++;
+    return false;
+  }
+  j.chave = chave;
+  j.autenticado = true;
+  j.aparelho = str(dados.aparelhoId, 40) || null;
+  j.fundador = ehFundador(j);
+  if (dados.nome) j.nome = nomeSeguro(dados.nome) || j.nome;
+  j.avatarId = avatarCatalogado(dados.avatarId || j.avatarId);
+  enviar(j, { t: 'sessao', token: emitirToken(j.chave), persistId: j.chave,
+    conta: dados.usuario ? { usuario:dados.usuario, nome:j.nome } : null });
+  // A carteira é carregada antes do spawn, inclusive no Postgres assíncrono.
+  const k = j.chave;
+  if (dbTipo === 'postgres' && !carteiras.has(k)) {
+    const salva = await carregarCarteiraAsync(k);
+    if (salva) carteiras.set(k, salva);
+  }
+  const c = sincronizarEquipamento(j);
+  const retomada = consumirPosicaoRetomada(j.chave) || posicaoCarteira(c);
+  const idx = atribuirLote(j.chave, j.nome);
+  const loteInicial = idx !== null ? lotes[idx] : null;
+  const spawn = retomada || (loteInicial ? {
+    x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
+  } : spawnOficial(j));
+  j.x = spawn.x; j.y = 0; j.z = spawn.z; j.ry = spawn.ry || 0;
+  j.vy = 0; j.onGround = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
+  enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: !!retomada,
+    posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null });
+  paraTodos({ t: 'nome', id:j.id, nome:j.nome, avatarId:j.avatarId }, j.id);
+  for (const nomeTerr of Object.keys(c.territorios || {})) {
+    const terr = TERRITORIOS.find(x => x.nome === nomeTerr);
+    if (terr && (!terr.ownerKey || terr.ownerKey === j.chave)) {
+      terr.ownerKey = j.chave; terr.ownerNome = j.nome;
+    }
+  }
+  restaurarFuncionarios(j, c);
+  j.carteiraPronta = true;
+  if (!c._iniciado) {
+    c._iniciado = true;
+    const semBase = sementeCatalogada(dados.sementeBase) || CATALOGO_SEMENTES[0];
+    bankAdd(c, semBase, 2);
+    salvarCarteira(k);
+  }
+  enviarEstado(j);
+  if (j.fundador) enviar(j, { t: 'fundador', ok: true });
+  return true;
+}
+
 wss.on('connection', (ws, req) => {
   if (!bancoPronto) { ws.close(1013, 'persistência inicializando'); return; }
   if (jogadores.size >= MAX_CONEXOES) {
@@ -1658,7 +1780,7 @@ wss.on('connection', (ws, req) => {
     municao: { pistola: { pente: 12, reserva: 24 } },
     ultimoTiro: 0, ultimoCrime: 0,
     lotesVisiveis: new Set(),
-    posIniciada: false, autenticado: false, carteiraPronta: false,
+    posIniciada: false, autenticado: false, helloRecebido: false, carteiraPronta: false,
     ultimoInputSeq: 0,
     vy: 0, onGround: true,
     ultimoMov: agora(),
@@ -1691,7 +1813,7 @@ wss.on('connection', (ws, req) => {
     let m;
     try { m = JSON.parse(raw); } catch (e) { metricas.rejeitadas++; return; }
     if (!m || typeof m !== 'object' || typeof m.t !== 'string') { metricas.rejeitadas++; return; }
-    if (!j.autenticado && m.t !== 'hello' && m.t !== 'pong') {
+    if (!j.autenticado && !['hello','pong','auth_login','auth_register'].includes(m.t)) {
       enviar(j, { t: 'recusado', motivo: 'hello necessário antes desta ação' });
       metricas.rejeitadas++;
       return;
@@ -1714,84 +1836,90 @@ wss.on('connection', (ws, req) => {
           metricas.rejeitadas++;
           break;
         }
+        j.helloRecebido = true;
         const token = str(m.token, 512);
         let chave = validarToken(token);
         if (token && !chave) {
-          enviar(j, { t: 'recusado', motivo: 'sessão inválida ou expirada' });
+          enviar(j, { t: 'login_required', motivo: 'sessão inválida ou expirada — entre com sua conta' });
           metricas.rejeitadas++;
-          try { j.ws.close(1008, 'sessão inválida'); } catch (_) {}
           break;
         }
-        // Sem token, cria uma identidade nova. O persistId antigo não é
-        // aceito como prova de posse; o cliente recebe um token assinado.
+        // Produção não cria mais jogador anônimo: sem conta ou token válido,
+        // o cliente deve registrar/entrar para que a progressão seja recuperável.
+        if (!chave && !ALLOW_ANONYMOUS) {
+          enviar(j, { t: 'login_required', motivo: 'crie uma conta ou entre para jogar' });
+          break;
+        }
+        // O fallback anônimo existe apenas para os testes automatizados locais.
         if (!chave) chave = novaIdentidade();
-        for (const [oid, outro] of jogadores) {
-          if (oid !== j.id && outro.autenticado && outro.chave === chave) {
-            enviar(j, { t: 'recusado', motivo: 'sessão já conectada' });
-            metricas.rejeitadas++;
-            try { j.ws.close(1008, 'sessão já conectada'); } catch (_) {}
+        if (chave) {
+          (async () => {
+            await ativarSessao(j, chave, { aparelhoId:m.aparelhoId, nome:m.nome, avatarId:m.avatarId,
+              sementeBase:m.sementeBase });
+          })().catch(e => {
+            console.error('erro ao ativar sessão:', e.message);
+            enviar(j, { t:'auth_error', motivo:'não foi possível carregar sua conta' });
+          });
+        }
+        break;
+      }
+
+      case 'auth_register': {
+        if (!j.helloRecebido || j.autenticado) {
+          enviar(j, { t:'auth_error', motivo:'abra uma nova conexão para entrar' });
+          break;
+        }
+        if (dbTipo === 'memoria') {
+          enviar(j, { t:'auth_error', motivo:'login exige banco persistente configurado' });
+          break;
+        }
+        const usuario = normalizarUsuario(m.usuario);
+        const senha = typeof m.senha === 'string' ? m.senha : '';
+        const nome = nomeSeguro(m.nome) || (usuario ? usuario.slice(0, 18) : 'Jogador');
+        if (!usuario || !senhaValida(senha)) {
+          enviar(j, { t:'auth_error', motivo:'usuário: 3–24 letras/números; senha: 8–128 caracteres' });
+          break;
+        }
+        (async () => {
+          const conta = await criarConta(usuario, nome, senha);
+          if (!conta) {
+            enviar(j, { t:'auth_error', motivo:'usuário já existe ou não foi possível criar a conta' });
             return;
           }
+          enviar(j, { t:'auth_ok', usuario:conta.usuario, nome:conta.nome, novo:true });
+          await ativarSessao(j, conta.chave, { usuario:conta.usuario, nome:conta.nome,
+            aparelhoId:m.aparelhoId, avatarId:m.avatarId, sementeBase:m.sementeBase, falhaAuth:true });
+        })().catch(e => {
+          console.error('erro no cadastro:', e.message);
+          enviar(j, { t:'auth_error', motivo:'não foi possível criar a conta' });
+        });
+        break;
+      }
+
+      case 'auth_login': {
+        if (!j.helloRecebido || j.autenticado) {
+          enviar(j, { t:'auth_error', motivo:'abra uma nova conexão para entrar' });
+          break;
         }
-        j.chave = chave;
-        j.autenticado = true;
-        // identidade do APARELHO — só usada pra conferir o fundador.
-        // Nunca é repassada a outros jogadores nem entra em broadcast.
-        j.aparelho = str(m.aparelhoId, 40) || null;
-        j.fundador = ehFundador(j);
-        if (j.fundador) console.log('fundador conectado: ' + j.nome);
-        if (m.nome) j.nome = nomeSeguro(m.nome) || j.nome;
-        j.avatarId = avatarCatalogado(m.avatarId);
-        enviar(j, { t: 'sessao', token: emitirToken(j.chave), persistId: j.chave });
-        // A carteira é carregada antes do spawn. Sem isso, o Postgres só era
-        // lido depois de lote_atribuido e o cliente já recebia o spawn padrão.
-        // Em restart isso causava o retorno visual ao lote mesmo com a posição
-        // salva no banco.
+        const usuario = normalizarUsuario(m.usuario);
+        const senha = typeof m.senha === 'string' ? m.senha : '';
+        if (!usuario || !senhaValida(senha)) {
+          enviar(j, { t:'auth_error', motivo:'usuário ou senha inválidos' });
+          break;
+        }
         (async () => {
-          const k = j.chave || j.id;
-          if (dbTipo === 'postgres' && !carteiras.has(k)) {
-            const salva = await carregarCarteiraAsync(k);
-            if (salva) carteiras.set(k, salva);
+          const conta = dbTipo === 'postgres' ? await carregarContaUsuarioAsync(usuario) : carregarContaUsuario(usuario);
+          if (!conta || !senhaConfere(senha, conta.senhaSalt, conta.senhaHash)) {
+            enviar(j, { t:'auth_error', motivo:'usuário ou senha inválidos' });
+            return;
           }
-          const c = sincronizarEquipamento(j);
-          const retomada = consumirPosicaoRetomada(j.chave) || posicaoCarteira(c);
-          const idx = atribuirLote(j.chave, j.nome);
-          const loteInicial = idx !== null ? lotes[idx] : null;
-          const spawn = retomada || (loteInicial ? {
-            x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
-          } : spawnOficial(j));
-          // Queda curta ou restart retoma a última posição válida persistida.
-          // Sem ela, nasce no ponto oficial do lote ou na cidade pública.
-          j.x = spawn.x; j.y = 0; j.z = spawn.z; j.ry = spawn.ry || 0;
-          j.vy = 0; j.onGround = true;
-          j.ultimoMov = agora() - 250;
-          j.posIniciada = true;
-          enviar(j, {
-            t: 'lote_atribuido',
-            loteIndex: idx,
-            retomada: !!retomada,
-            posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry },
-            lote: loteInicial ? resumoLote(loteInicial, true) : null
-          });
-          paraTodos({ t: 'nome', id, nome: j.nome, avatarId: j.avatarId }, id);
-          for (const nomeTerr of Object.keys(c.territorios || {})) {
-            const terr = TERRITORIOS.find(x => x.nome === nomeTerr);
-            if (terr && (!terr.ownerKey || terr.ownerKey === j.chave)) {
-              terr.ownerKey = j.chave; terr.ownerNome = j.nome;
-            }
-          }
-          restaurarFuncionarios(j, c);
-          j.carteiraPronta = true;
-          if (!c._iniciado) {
-            c._iniciado = true;
-            const semBase = sementeCatalogada(m.sementeBase) || CATALOGO_SEMENTES[0];
-            bankAdd(c, semBase, 2);
-            salvarCarteira(k);
-          }
-          enviarEstado(j);
-          // avisa SÓ este jogador. Não vai em broadcast.
-          if (j.fundador) enviar(j, { t: 'fundador', ok: true });
-        })();
+          enviar(j, { t:'auth_ok', usuario:conta.usuario, nome:conta.nome, novo:false });
+          await ativarSessao(j, conta.chave, { usuario:conta.usuario, nome:conta.nome,
+            aparelhoId:m.aparelhoId, avatarId:m.avatarId, sementeBase:m.sementeBase, falhaAuth:true });
+        })().catch(e => {
+          console.error('erro no login:', e.message);
+          enviar(j, { t:'auth_error', motivo:'não foi possível entrar agora' });
+        });
         break;
       }
 

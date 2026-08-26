@@ -192,6 +192,19 @@ h2.mt{font-size:11px;letter-spacing:3px;color:#8fe063;margin-bottom:3px}
  box-shadow:0 6px 30px rgba(143,224,99,.26);transition:transform .12s,box-shadow .12s}
 #overlay button:hover{transform:translateY(-2px);box-shadow:0 10px 38px rgba(143,224,99,.4)}
 #overlay button:active{transform:translateY(0)}
+#authPanel{position:relative;z-index:1;width:min(94vw,390px);margin:-18px auto 16px;padding:13px 14px;background:rgba(8,12,8,.58);border:1px solid rgba(143,224,99,.22);border-radius:4px;text-align:left}
+#authPanel[hidden]{display:none}
+#authPanel .authTitle{color:#8fe063;font-size:11px;letter-spacing:2px;margin-bottom:9px;text-align:center}
+#authPanel .authFields{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#authPanel input{width:100%;min-width:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:3px;color:#fff;padding:9px 10px;font:inherit;font-size:11px;outline:none}
+#authPanel input:focus{border-color:#8fe063;box-shadow:0 0 0 2px rgba(143,224,99,.12)}
+#authPanel #authName{grid-column:1/-1}
+#authPanel .authActions{display:flex;gap:6px;margin-top:8px}
+#authPanel .authActions button{flex:1;margin:0;padding:9px 8px;font-size:10px;letter-spacing:1px;box-shadow:none}
+#authPanel #authRegisterBtn{background:transparent;color:#8fe063;border:1px solid rgba(143,224,99,.5)}
+#authStatus{min-height:14px;margin-top:8px;color:#e8d264;font-size:10px;line-height:1.4;text-align:center}
+#authStatus.error{color:#f0b8ac}
+#authPanel .authHint{margin-top:6px;color:rgba(255,255,255,.5);font-size:9px;line-height:1.45;text-align:center}
 #continuarBtn{background:transparent;color:#8fe063;border:1px solid rgba(143,224,99,.45);
  box-shadow:none;margin-top:12px;padding:12px 34px;font-size:clamp(10px,2.5vw,12px)}
 #loadStatus{position:relative;z-index:1;margin-top:22px;font-size:11px;letter-spacing:1.5px;
@@ -320,7 +333,18 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
     <h1><span>QUINTAL</span>3D</h1>
     <div id="tagline">MUNDO ABERTO · MULTIPLAYER</div>
   </div>
-  <button id="startBtn">ENTRAR NO MUNDO</button>
+  <div id="authPanel">
+    <div class="authTitle">IDENTIDADE DO JOGADOR</div>
+    <div class="authFields">
+      <input id="authUser" autocomplete="username" maxlength="24" placeholder="usuário (3–24 caracteres)">
+      <input id="authPass" type="password" autocomplete="current-password" maxlength="128" placeholder="senha (mínimo 8)">
+      <input id="authName" autocomplete="name" maxlength="18" placeholder="nome que aparecerá no jogo (no cadastro)">
+    </div>
+    <div class="authActions"><button id="authLoginBtn">ENTRAR</button><button id="authRegisterBtn">CRIAR CONTA</button></div>
+    <div id="authStatus">conectando ao servidor…</div>
+    <div class="authHint">Sua conta identifica o jogador e recupera sua progressão em outro navegador.</div>
+  </div>
+  <button id="startBtn" style="display:none">ENTRAR NO MUNDO</button>
   <button id="continuarBtn" style="display:none">CONTINUAR</button>
   <div id="loadStatus"></div>
   <div id="rodapeMenu"><span id="netMenu">conectando ao servidor…</span></div>
@@ -2228,6 +2252,7 @@ function aplicarEstado(d){
  renderSeeds();updHUD();renderStock();
   if($('banca')&&$('banca').classList.contains('on'))renderBanca();
   if(Number.isInteger(meuLoteIndex))atualizarMarcadoresBancada(lotesOnline[meuLoteIndex]);
+  if(mpConnected&&mpReady)mostrarJogoDisponivel();
 }
 function bankAdd(s,n){ /* ETAPA B: quem adiciona semente é o servidor */ }
 function libAll(){const m=new Map();BASE.forEach(s=>m.set(s.id,s));
@@ -3592,7 +3617,7 @@ function applySave(d){
 setInterval(()=>{if(G.running)saveGame(true)},20000);
 setInterval(()=>{if(G.running&&ONLINE)syncLeaderboard()},50000);
 addEventListener('visibilitychange',()=>{if(document.hidden&&G.running)saveGame(true)});
-addEventListener('pagehide',()=>{if(G.running)saveGame(true)});
+addEventListener('pagehide',()=>{if(G.running)saveGame(true);if(mpWs&&mpWs.readyState<2){try{mpWs.close(1000,'navegação')}catch(e){}}});
 addEventListener('keydown',e=>{if(e.code==='F5')return;if(e.code==='KeyP')saveGame()});
 // os controles agora aparecem DENTRO do jogo, em dicas contextuais
 
@@ -4509,9 +4534,32 @@ const MP_URL=(()=>{
 })();
 let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0;
 let mpInputSeq=0,mpLastCorrectionSeq=0,mpJumpQueued=false;
-let mpToken='',mpAvatarId='carmo';
+let mpToken='',mpAvatarId='carmo',contaUsuario='';
 try{mpAvatarId=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
-try{mpToken=sessionStorage.getItem('quintal3d-session-token')||''}catch(e){}
+try{mpToken=localStorage.getItem('quintal3d-account-token')||sessionStorage.getItem('quintal3d-session-token')||''}catch(e){}
+function authStatus(text,erro=false){const el=$('authStatus');if(!el)return;el.textContent=text;el.classList.toggle('error',!!erro)}
+function mostrarAuth(text){
+ const p=$('authPanel'),b=$('startBtn');if(p)p.hidden=false;if(b)b.style.display='none';
+ if(text)authStatus(text);
+}
+function mostrarJogoDisponivel(){
+ const p=$('authPanel'),b=$('startBtn');if(p)p.hidden=true;if(b)b.style.display='';
+ const pass=$('authPass');if(pass)pass.value='';
+}
+function enviarAuth(tipo){
+ if(!mpConnected||!mpWs||mpWs.readyState!==1){authStatus('sem conexão com o servidor',true);return}
+ const usuario=String($('authUser')?.value||'').trim().toLowerCase();
+ const senha=String($('authPass')?.value||'');
+ const nome=String($('authName')?.value||'').trim();
+ if(!/^[a-z0-9][a-z0-9_.-]{2,23}$/.test(usuario)){authStatus('usuário: 3–24 letras, números, ponto, hífen ou sublinhado',true);return}
+ if(senha.length<8||senha.length>128){authStatus('a senha precisa ter entre 8 e 128 caracteres',true);return}
+ authStatus(tipo==='auth_register'?'criando sua conta…':'entrando…');
+ try{mpWs.send(JSON.stringify({t:tipo,usuario,senha,nome,avatarId:mpAvatarId,
+   aparelhoId:chaveAparelho(),sementeBase:BASE[0]}))}catch(e){authStatus('não foi possível enviar o login',true)}
+}
+$('authLoginBtn')?.addEventListener('click',()=>enviarAuth('auth_login'));
+$('authRegisterBtn')?.addEventListener('click',()=>enviarAuth('auth_register'));
+['authUser','authPass','authName'].forEach(id=>$(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')enviarAuth('auth_login')}));
 // atraso proposital de renderização: mostramos os outros jogadores ~120ms
 // no passado e interpolamos entre snapshots. É isso que tira o tranco da
 // rede — sem isso o boneco teleporta a cada pacote.
@@ -4788,9 +4836,23 @@ function mpConnect(){
      (L.plots||[]).forEach((pl,i)=>aplicarPlotOnline(L.index,i,pl));
     });
     // o lote atribuído chega depois do hello.
+   } else if(msg.t==='login_required'){
+     mpToken='';
+     try{localStorage.removeItem('quintal3d-account-token');sessionStorage.removeItem('quintal3d-session-token')}catch(e){}
+     mostrarAuth(msg.motivo||'entre com sua conta para jogar');
+   } else if(msg.t==='auth_error'){
+     mostrarAuth(msg.motivo||'usuário ou senha inválidos');
+     authStatus(msg.motivo||'usuário ou senha inválidos',true);
+   } else if(msg.t==='auth_ok'){
+     contaUsuario=msg.usuario||'';meuNome=msg.nome||meuNome;
+     authStatus(msg.novo?'conta criada; carregando seu jogador…':'conta reconhecida; carregando seu jogador…');
+     const p=$('authPanel');if(p)p.hidden=true;
    } else if(msg.t==='sessao'){
      mpToken=msg.token||'';
-     try{sessionStorage.setItem('quintal3d-session-token',mpToken)}catch(e){}
+     try{
+      sessionStorage.setItem('quintal3d-session-token',mpToken);
+      localStorage.setItem('quintal3d-account-token',mpToken);
+    }catch(e){}
    } else if(msg.t==='join'){
     mpAddPlayer(msg.id,msg.nome,player.position.x,0,player.position.z+3,0,msg.avatarId);
     toast(`${msg.nome} entrou no servidor`);
@@ -4917,6 +4979,7 @@ function mpConnect(){
       if(msg.lote&&msg.lote.plots)
        msg.lote.plots.forEach((pl,i)=>aplicarPlotOnline(meuLoteIndex,i,pl));
       mpReady=true;mpReentrada=false;
+      if(estadoDoServidor)mostrarJogoDisponivel();
       toast(`seu lote é o nº ${meuLoteIndex+1} — vai lá plantar`);
      }
     }
@@ -4985,8 +5048,12 @@ function mpConnect(){
     aplicarEstado(msg);
    } else if(msg.t==='recusado'){
     const motivo=String(msg.motivo||'');
-    if(/sessão inválida|expirada|já conectada|hello necessário/i.test(motivo)){
-     mpToken='';try{sessionStorage.removeItem('quintal3d-session-token')}catch(e){}
+    if(/já conectada/i.test(motivo)){
+     // O token continua válido; outra aba/aparelho está usando a conta.
+     // Não apagamos a credencial, para a retomada funcionar assim que a sessão anterior sair.
+     mostrarAuth(motivo);authStatus(motivo,true);mpReady=false;estadoDoServidor=false;
+    } else if(/sessão inválida|expirada|hello necessário/i.test(motivo)){
+     mpToken='';try{localStorage.removeItem('quintal3d-account-token');sessionStorage.removeItem('quintal3d-session-token')}catch(e){}
      mpReady=false;estadoDoServidor=false;toast('sessão reiniciada — conectando novamente');
     } else toast(motivo||'operação recusada');
     blip(160,.12,'square',.05);

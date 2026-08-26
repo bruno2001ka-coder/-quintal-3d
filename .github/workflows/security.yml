@@ -35,6 +35,8 @@ jobs:
           node --check testes/test-reconexao-posicao.js
           node --check testes/test-clientes-casa.js
           node --check testes/test-plantio-proprio.js
+          node --check testes/test-crescimento.js
+          node --check testes/test-login-conta.js
           node --check testes/test-colheita-estoque.js
           node --check testes/test-protecao-entidades.js
           node --check testes/test-audio-mixer.js
@@ -49,6 +51,7 @@ jobs:
       - name: Run isolated regression servers and tests
         env:
           AUTH_SECRET: ci-only-session-secret
+          ALLOW_ANONYMOUS: '1'
         run: |
           set -euo pipefail
           pids=()
@@ -71,16 +74,24 @@ jobs:
           rm -f "$RUNNER_TEMP/quintal-8807.db" "$RUNNER_TEMP/quintal-8807.db-shm" "$RUNNER_TEMP/quintal-8807.db-wal"
           PORT=8807 DB_PATH="$RUNNER_TEMP/quintal-8807.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8807.log" 2>&1 &
           pids+=("$!")
+          rm -f "$RUNNER_TEMP/quintal-8808.db" "$RUNNER_TEMP/quintal-8808.db-shm" "$RUNNER_TEMP/quintal-8808.db-wal"
+          ALLOW_ANONYMOUS=0 PORT=8808 DB_PATH="$RUNNER_TEMP/quintal-8808.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8808.log" 2>&1 &
+          pids+=("$!")
+          rm -f "$RUNNER_TEMP/quintal-8809.db" "$RUNNER_TEMP/quintal-8809.db-shm" "$RUNNER_TEMP/quintal-8809.db-wal"
+          ALLOW_ANONYMOUS=0 PORT=8809 DB_PATH="$RUNNER_TEMP/quintal-8809.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8809.log" 2>&1 &
+          pids+=("$!")
           sleep 2
           TEST_HTTP=http://127.0.0.1:8800 npm run test:http
           TEST_WS=ws://127.0.0.1:8800 npm test
           TEST_WS=ws://127.0.0.1:8800 npm run test:p0
           TEST_WS=ws://127.0.0.1:8800 npm run test:p1
           TEST_WS=ws://127.0.0.1:8801 npm run test:aoi
+          TEST_WS=ws://127.0.0.1:8809 npm run test:login
           TEST_WS=ws://127.0.0.1:8802 TEST_HTTP=http://127.0.0.1:8802 npm run test:carga
           TEST_WS=ws://127.0.0.1:8803 npm run test:reconexao
           TEST_WS=ws://127.0.0.1:8804 npm run test:clientes
           TEST_WS=ws://127.0.0.1:8805 npm run test:plantio
+          TEST_WS=ws://127.0.0.1:8805 npm run test:crescimento
           TEST_WS=ws://127.0.0.1:8806 npm run test:entidades
           TEST_WS=ws://127.0.0.1:8807 npm run test:movimento
           npm run test:mapa
@@ -90,4 +101,4 @@ jobs:
           TEST_PERSIST_PORT=8808 npm run test:persistencia
           npm run test:colheita
           npm run test:render-config
-          for port in 8800 8801 8802 8803 8804 8805 8806 8807; do cat "$RUNNER_TEMP/quintal-$port.log"; done
+          for port in 8800 8801 8802 8803 8804 8805 8806 8807 8808 8809; do cat "$RUNNER_TEMP/quintal-$port.log"; done

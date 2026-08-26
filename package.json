@@ -12,6 +12,7 @@
     "test:aoi": "node testes/test-multiplayer-aoi.js",
     "test:carga": "node testes/test-carga.js",
     "test:reconexao": "node testes/test-reconexao-posicao.js",
+    "test:login": "node testes/test-login-conta.js",
     "test:clientes": "node testes/test-clientes-casa.js",
     "test:plantio": "node testes/test-plantio-proprio.js",
     "test:crescimento": "node testes/test-crescimento.js",

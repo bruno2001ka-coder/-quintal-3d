@@ -37,8 +37,8 @@ function connect(token, nome) {
 
 (async () => {
   const expirado = await connect(tokenExpirado(), 'token expirado');
-  const recusaExpirada = await expirado.wait(m => m.t === 'recusado');
-  assert.match(recusaExpirada.motivo, /sessão inválida|expirada/i);
+  const recusaExpirada = await expirado.wait(m => m.t === 'login_required');
+  assert.match(recusaExpirada.motivo, /sessão inválida|expirada|conta/i);
   expirado.ws.close();
 
   const a = await connect('', 'sessão A');
@@ -46,7 +46,7 @@ function connect(token, nome) {
   await a.wait(m => m.t === 'estado');
   const b = await connect(sessao.token, 'sessão duplicada');
   const recusaDuplicada = await b.wait(m => m.t === 'recusado');
-  assert.match(recusaDuplicada.motivo, /já conectada/i);
+  assert.match(recusaDuplicada.motivo, /conectada/i);
   a.ws.close(); b.ws.close();
 
   const servidor = fs.readFileSync(path.join(__dirname, '..', 'servidor-1.js'), 'utf8');
