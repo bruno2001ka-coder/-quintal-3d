@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node servidor-1.js",
     "test": "node test-seguranca.js",
+    "test:p0": "node test-regressao-p0.js",
+    "test:p1": "node test-regressao-p1.js",
     "test:aoi": "node test-multiplayer-aoi.js",
     "test:carga": "node test-carga.js",
     "test:reconexao": "node test-reconexao-posicao.js",

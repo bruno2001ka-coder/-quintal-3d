@@ -104,7 +104,9 @@ async function moveTo(c, x, z, step = 7, delay = 650) {
   b.send({ t:'portao', id:bi.lote.lote.portaoId });
   await b.waitFor(m => m.t === 'portao_estado' && m.aberto === true, 3000, 'portão B');
   await moveTo(b, 2, 42, 5, 500);
-  await moveTo(b, 50, 42, 7, 650);
+  // O servidor limita cada input a VEL_MAX * 250ms + folga = 5,5m.
+  // Passos maiores são corrigidos e não representam movimento válido.
+  await moveTo(b, 50, 42, 5, 400);
   const mensagensDepoisDoMovimento = b.messages.length;
   await sleep(3500);
   const novas = b.messages.slice(mensagensDepoisDoMovimento);

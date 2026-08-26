@@ -27,6 +27,8 @@ jobs:
         run: |
           node --check servidor-1.js
           node --check test-seguranca.js
+          node --check test-regressao-p0.js
+          node --check test-regressao-p1.js
           node --check test-multiplayer-aoi.js
           node --check test-carga.js
           node --check test-reconexao-posicao.js
@@ -65,6 +67,8 @@ jobs:
           pids+=("$!")
           sleep 2
           TEST_WS=ws://127.0.0.1:8800 npm test
+          TEST_WS=ws://127.0.0.1:8800 npm run test:p0
+          TEST_WS=ws://127.0.0.1:8800 npm run test:p1
           TEST_WS=ws://127.0.0.1:8801 npm run test:aoi
           TEST_WS=ws://127.0.0.1:8802 TEST_HTTP=http://127.0.0.1:8802 npm run test:carga
           TEST_WS=ws://127.0.0.1:8803 npm run test:reconexao

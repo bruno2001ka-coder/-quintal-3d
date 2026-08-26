@@ -300,7 +300,7 @@ function iniciarBanco() {
         .then(() => { console.log('banco: Postgres pronto'); return carregarLotes(); })
         .then(() => carregarTerritoriosPersistidos())
         .then(() => { bancoPronto = true; })
-        .catch(e => { console.error('Postgres falhou:', e.message); pg = null; dbTipo = 'memoria'; bancoPronto = true; });
+        .catch(e => { console.error('Postgres falhou:', e.message); pg = null; dbTipo = 'indisponivel'; bancoPronto = false; });
       return;
     } catch (e) {
       console.error('pg indisponível:', e.message);
@@ -548,6 +548,20 @@ function exigirHandshake(j) {
   metricas.rejeitadas++;
   return false;
 }
+function exigirJogadorVivo(j) {
+  if (!exigirHandshake(j)) return false;
+  if (!j.carteiraPronta) {
+    enviar(j, { t:'recusado', motivo:'carteira ainda carregando' });
+    metricas.rejeitadas++;
+    return false;
+  }
+  if (j.morto || !j.vivo) {
+    enviar(j, { t:'recusado', motivo:'jogador morto — aguarde o respawn' });
+    metricas.rejeitadas++;
+    return false;
+  }
+  return true;
+}
 function exigirDistancia(j, x, z, raio, motivo = 'longe demais') {
   if (Math.hypot(j.x - x, j.z - z) <= raio) return true;
   enviar(j, { t: 'recusado', motivo });
@@ -572,27 +586,27 @@ const LOCAL_COLHEITA_MS    = 30000;
 const JANELA_LOCAL_MS      = 300000;
 
 // catálogos: os preços vivem AQUI. Antes o cliente calculava e mandava.
-const CAT_UPG = { vasos:520, led:680, irrig:900, rack:340, auto:980 };
-const CAT_IMOVEIS = {
+const CAT_UPG = Object.freeze(Object.assign(Object.create(null), { vasos:520, led:680, irrig:900, rack:340, auto:980 }));
+const CAT_IMOVEIS = Object.freeze(Object.assign(Object.create(null), {
   casanova: { custo:1800, nivel:1, renda:60, x:69, z:64 },
   predio1: { custo:4200, nivel:2, renda:110, x:-.6, z:19.6 },
   predio2: { custo:6800, nivel:4, renda:180, x:14.4, z:19.6 },
   predio3: { custo:11000, nivel:6, renda:290, x:29.4, z:19.6 },
   fazenda: { custo:26000, nivel:8, renda:0, x:0, z:168 }
-};
-const CAT_ADUBO = { organico:60, crescimento:110, floracao:180 };
-const CAT_ARMA = { punho:0, pistola:450, smg:1500, rifle:3600 };
-const CAT_MUNICAO = {
+}));
+const CAT_ADUBO = Object.freeze(Object.assign(Object.create(null), { organico:60, crescimento:110, floracao:180 }));
+const CAT_ARMA = Object.freeze(Object.assign(Object.create(null), { punho:0, pistola:450, smg:1500, rifle:3600 }));
+const CAT_MUNICAO = Object.freeze(Object.assign(Object.create(null), {
   pistola: { qtd: 12, custo: 54 },
   smg: { qtd: 34, custo: 180 },
   rifle: { qtd: 78, custo: 432 }
-};
-const CAT_ARMA_ESTADO = {
+}));
+const CAT_ARMA_ESTADO = Object.freeze(Object.assign(Object.create(null), {
   punho:   { dano: 0,  mag: 0,  reserva: 0, rate: 0.00, alcance: 0  },
   pistola: { dano: 26, mag: 12, reserva: 24, rate: 0.34, alcance: 34 },
   smg:     { dano: 19, mag: 30, reserva: 34, rate: 0.11, alcance: 30 },
   rifle:   { dano: 42, mag: 24, reserva: 78, rate: 0.19, alcance: 52 }
-};
+}));
 const ARMA_INDEX = ['punho', 'pistola', 'smg', 'rifle'];
 const AVATAR_IDS = new Set(['carmo', 'verde', 'azul', 'roxo']);
 function avatarCatalogado(v) {
@@ -629,6 +643,10 @@ function carteiraDe(j) {
       rackMax: 6, up: {}, avatarId: avatarCatalogado(j.avatarId), armas: { pistola: true }, fert: {}, municao: {}, funcs: [] });
   }
   const c = carteiras.get(k);
+  for (const lote of (Array.isArray(c.estoque) ? c.estoque : [])) {
+    const id = Number(lote && lote.id);
+    if (Number.isSafeInteger(id) && id >= 0 && id < 1e9) proxLoteId = Math.max(proxLoteId, id + 1);
+  }
   c.armas = c.armas || {};
   c.municao = c.municao || {};
   c.imoveis = Array.isArray(c.imoveis) ? c.imoveis : [];
@@ -915,22 +933,30 @@ const TERRITORIOS = [
   { nome:'Saída da BR', x:-16, z:79, raio:8, demanda:2.4, renda:120 }
 ];
 function aplicarTerritoriosPersistidos(rows) {
+  const escolhido = new Map();
   for (const row of rows || []) {
     let mapa = {};
     try { mapa = JSON.parse(row.territorios || '{}'); } catch (_) { mapa = {}; }
+    const ts = Number(row.atualizado) || 0;
     for (const nome of Object.keys(mapa)) {
-      const t = TERRITORIOS.find(x => x.nome === nome);
-      if (t && !t.ownerKey) { t.ownerKey = row.chave; t.ownerNome = nomeSeguro(row.nome) || row.chave; }
+      if (!mapa[nome] || !TERRITORIOS.some(x => x.nome === nome)) continue;
+      const anterior = escolhido.get(nome);
+      if (!anterior || ts >= anterior.ts) escolhido.set(nome, { chave:row.chave, nome:row.nome, ts });
     }
+  }
+  for (const t of TERRITORIOS) {
+    const dono = escolhido.get(t.nome);
+    t.ownerKey = dono ? dono.chave : null;
+    t.ownerNome = dono ? (nomeSeguro(dono.nome) || dono.chave) : null;
   }
 }
 function carregarTerritoriosPersistidos() {
   if (dbTipo === 'sqlite' && db) {
-    const rows = db.prepare('SELECT chave,nome,territorios FROM usuarios').all();
+    const rows = db.prepare('SELECT chave,nome,territorios,atualizado FROM usuarios').all();
     aplicarTerritoriosPersistidos(rows); return Promise.resolve();
   }
   if (dbTipo === 'postgres' && pg) {
-    return pg.query('SELECT chave,nome,territorios FROM usuarios')
+    return pg.query('SELECT chave,nome,territorios,atualizado FROM usuarios')
       .then(r => aplicarTerritoriosPersistidos(r.rows));
   }
   return Promise.resolve();
@@ -972,10 +998,8 @@ const ESTACOES_PUBLICAS = {
   secagem: { x: 1.4, z: -11.4, raio: 3.2 }
 };
 function estacaoSecagemValida(j) {
-  const publica = ESTACOES_PUBLICAS.secagem;
-  if (Math.hypot(j.x - publica.x, j.z - publica.z) <= publica.raio) return true;
   const lote = loteDoJogador(j);
-  if (!lote) return false;
+  if (!lote || lote.donoChave !== j.chave) return false;
   return Math.hypot(j.x - (lote.x + 6.8), j.z - (lote.z + 3.6)) <= 3.2;
 }
 function encontrarPontoVenda(j) {
@@ -1038,12 +1062,12 @@ const RUAS_Z_SRV = [15, 47, 79, 111, 143];
    Nesta F1 só a EXISTÊNCIA migra: catálogo, custo, ID, dono e envio por
    AOI. Movimento, tarefas e diária continuam onde estão — vêm nas
    próximas fases. */
-const CAT_FUNC = {
+const CAT_FUNC = Object.freeze(Object.assign(Object.create(null), {
   zelador:  { nome:'Nego Du',  papel:'Zelador',           custo:1200, diaria:45  },
   colhedor: { nome:'Val',      papel:'Colhedora',         custo:2200, diaria:70  },
   caseiro:  { nome:'Seu Bené', papel:'Caseiro da fazenda',custo:4800, diaria:130,
               bloqueado:'a fazenda ainda não existe no servidor' }
-};
+}));
 const funcionarios = [];            // entidades vivas
 const funcsDe = new Map();          // chave persistente -> [ids]
 
@@ -1059,16 +1083,33 @@ function resumoFunc(f) {
 }
 function restaurarFuncionarios(j, c) {
   const meus = funcsDoJogador(j.chave);
-  for (const registro of (c.funcs || [])) {
-    const cargo = typeof registro === 'string' ? null : str(registro && registro.cargo, 16);
-    const def = cargo && CAT_FUNC[cargo];
-    if (!def || meus.some(id => { const e=entidades.get(id); return e && e.ref && e.ref.cargo===cargo; })) continue;
-    const f = { cargo, nome:def.nome, dono:j.chave, loteIndex:loteDe.get(j.chave) ?? null, x:j.x+1.5, z:j.z+1.5,
-      ry:0, alvo:null, estado:'parado', proximaTarefa:agora()+5000 };
-    const ent = registrar('fn', j.chave, f);
-    f.id = ent.id; funcionarios.push(f); meus.push(ent.id);
-    if (!c.funcs.some(x => x && x.id === ent.id)) c.funcs.push({ id:ent.id, cargo });
+  const existentes = new Map();
+  for (const id of meus) {
+    const e = entidades.get(id);
+    if (e && e.ref && !existentes.has(e.ref.cargo)) existentes.set(e.ref.cargo, e.ref);
   }
+  const novosRegistros = [];
+  const cargos = new Set();
+  for (const registro of (Array.isArray(c.funcs) ? c.funcs : [])) {
+    const cargo = typeof registro === 'string' ? str(registro, 16) : str(registro && registro.cargo, 16);
+    const def = cargo && CAT_FUNC[cargo];
+    if (!def || cargos.has(cargo)) continue;
+    let f = existentes.get(cargo);
+    if (!f) {
+      const sx = Number(registro && registro.x), sz = Number(registro && registro.z), sry = Number(registro && registro.ry);
+      f = { cargo, nome:def.nome, dono:j.chave, loteIndex:loteDe.get(j.chave) ?? null,
+        x:Number.isFinite(sx) ? sx : j.x+1.5, z:Number.isFinite(sz) ? sz : j.z+1.5,
+        ry:Number.isFinite(sry) ? sry : 0, alvo:null, estado:str(registro && registro.estado, 16) || 'parado',
+        proximaTarefa:agora()+5000 };
+      const ent = registrar('fn', j.chave, f);
+      f.id = ent.id; funcionarios.push(f); meus.push(ent.id);
+    }
+    cargos.add(cargo);
+    novosRegistros.push({ id:f.id, cargo, x:f.x, z:f.z, ry:f.ry, estado:f.estado });
+  }
+  // Uma carteira antiga pode conter vários registros do mesmo cargo ou IDs
+  // de um processo anterior. Persistimos uma entrada canônica por cargo.
+  c.funcs = novosRegistros;
 }
 function passoFuncionario(f, dt) {
   const lote = lotes.find(l => l.donoChave === f.dono);
@@ -1531,8 +1572,9 @@ wss.on('connection', (ws, req) => {
     municao: { pistola: { pente: 12, reserva: 24 } },
     ultimoTiro: 0, ultimoCrime: 0,
     lotesVisiveis: new Set(),
-    posIniciada: false, autenticado: false,
+    posIniciada: false, autenticado: false, carteiraPronta: false,
     ultimoInputSeq: 0,
+    vy: 0, onGround: true,
     ultimoMov: agora(),
     vivo: true, ultimoPong: agora(),
     tokens: RATE_BURST, ultimaRecarga: agora(),
@@ -1575,6 +1617,12 @@ wss.on('connection', (ws, req) => {
         break;
 
       case 'hello': {
+        if (!bancoPronto || dbTipo === 'indisponivel') {
+          enviar(j, { t:'recusado', motivo:'persistência indisponível — tente novamente' });
+          metricas.rejeitadas++;
+          try { j.ws.close(1013, 'persistência indisponível'); } catch (_) {}
+          break;
+        }
         if (j.autenticado) {
           enviar(j, { t: 'recusado', motivo: 'hello já recebido' });
           metricas.rejeitadas++;
@@ -1618,7 +1666,9 @@ wss.on('connection', (ws, req) => {
         // Queda curta retoma a posição authoritative anterior. Sem posição
         // recente, nasce no ponto oficial do lote ou, se todos estiverem
         // ocupados, numa posição pública da cidade — nunca no ponto enviado.
-        j.x = spawn.x; j.y = spawn.y || 0; j.z = spawn.z; j.ry = spawn.ry || 0;
+        j.x = spawn.x; j.y = 0; j.z = spawn.z; j.ry = spawn.ry || 0;
+        j.vy = 0; j.onGround = true;
+        j.ultimoMov = agora() - 250;
         j.posIniciada = true;
         enviar(j, {
           t: 'lote_atribuido',
@@ -1646,6 +1696,7 @@ wss.on('connection', (ws, req) => {
             }
           }
           restaurarFuncionarios(j, c);
+          j.carteiraPronta = true;
           if (!c._iniciado) {
             c._iniciado = true;
             const semBase = sementeCatalogada(m.sementeBase) || CATALOGO_SEMENTES[0];
@@ -1681,42 +1732,49 @@ wss.on('connection', (ws, req) => {
         // movimento com checagem de velocidade — anti-teleporte
         if (!j.autenticado || j.morto) return;
         const nx = num(m.x, -2000, 2000, j.x);
-        const ny = num(m.y, 0, 3.5, j.y);
         const nz = num(m.z, -2000, 2000, j.z);
         const inputSeq = Number.isSafeInteger(Number(m.seq)) ? Math.max(0, Math.min(1e9, Number(m.seq))) : 0;
         if (inputSeq) j.ultimoInputSeq = Math.max(j.ultimoInputSeq || 0, inputSeq);
-        /* BUG GRAVE CORRIGIDO — o jogador nascia em (0,0) aqui, mas o
-           cliente o coloca na propriedade dele (ex: -34,31). A primeira
-           mensagem de posição parecia um teleporte de 30m e era recusada.
-           Como a recusa não movia nada, TODA mensagem seguinte também era
-           recusada: o servidor achava que o jogador estava eternamente em
-           (0,0). Isso quebrava perseguição de bot, AOI e tudo que depende
-           de posição — e explicava as centenas de "rejeitadas" no /metrics.
-
-           Agora a PRIMEIRA posição é sempre aceita (é o nascimento, não há
-           o que validar), e depois disso a checagem de velocidade vale. */
+        /* O cliente envia posição prevista e intenção de salto. A altura
+           oficial nunca vem do cliente: ela é integrada aqui, com gravidade,
+           chão e um único salto por toque. */
+        const dtMov = Math.min(.25, Math.max(.001, (t - j.ultimoMov) / 1000));
+        if (m.salto === true && j.onGround) {
+          j.vy = 4.9;
+          j.onGround = false;
+        }
+        j.vy = Math.max(-20, j.vy - 15 * dtMov);
+        const yAuthoritative = Math.max(0, j.y + j.vy * dtMov);
+        if (yAuthoritative <= 0) {
+          j.y = 0; j.vy = 0; j.onGround = true;
+        } else {
+          j.y = Math.min(3.5, yAuthoritative); j.onGround = false;
+        }
         if (!j.posIniciada) {
           enviar(j, { t: 'recusado', motivo: 'lote ainda não atribuído' });
           metricas.rejeitadas++;
           return;
+        }
+        const dist = Math.hypot(nx - j.x, nz - j.z);
+        const limite = VEL_MAX * dtMov + 2;   // folga pra lag
+        if (dist > limite) {
+          metricas.rejeitadas++;
+          enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z });
         } else {
-          const dtMov = Math.max(.001, (t - j.ultimoMov) / 1000);
-          const dist = Math.hypot(nx - j.x, nz - j.z);
-          const limite = VEL_MAX * dtMov + 2;   // folga pra lag
-          if (dist > limite) {
+          // COLISÃO NO SERVIDOR: antes só a velocidade era checada, então
+          // um cliente modificado atravessava qualquer parede. Agora o
+          // servidor recusa a travessia e devolve a posição válida.
+          const r = moverComColisao(j.x, j.z, nx, nz, RAIO_JOGADOR);
+          if (Math.hypot(r.x - nx, r.z - nz) > .25) {
             metricas.rejeitadas++;
-            enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z });
-          } else {
-            // COLISÃO NO SERVIDOR: antes só a velocidade era checada, então
-            // um cliente modificado atravessava qualquer parede. Agora o
-            // servidor recusa a travessia e devolve a posição válida.
-            const r = moverComColisao(j.x, j.z, nx, nz, RAIO_JOGADOR);
-            if (Math.hypot(r.x - nx, r.z - nz) > .25) {
-              metricas.rejeitadas++;
-              enviar(j, { t: 'correcao', seq: inputSeq, x: r.x, y: ny, z: r.z });
-            }
-            j.x = r.x; j.y = ny; j.z = r.z;
+            enviar(j, { t: 'correcao', seq: inputSeq, x: r.x, y: j.y, z: r.z });
           }
+          j.x = r.x; j.z = r.z;
+        }
+        const yEnviado = num(m.y, 0, 20, 0);
+        if (Math.abs(yEnviado - j.y) > .55) {
+          metricas.rejeitadas++;
+          enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z });
         }
         j.ry = num(m.ry, -Math.PI * 4, Math.PI * 4, j.ry);
         const armaSolicitada = ARMA_INDEX[num(m.arma, 0, ARMA_INDEX.length - 1, 0) | 0];
@@ -1727,7 +1785,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'plantar': {
-        if (!exigirHandshake(j)) return;
+        if (!exigirJogadorVivo(j)) return;
         const lote = loteDoJogador(j);
         const pi = num(m.plot, 0, PLOTS_POR_LOTE - 1, -1) | 0;
         if (!exigirPlotDoJogador(j, lote, pi)) return;
@@ -1746,7 +1804,7 @@ wss.on('connection', (ws, req) => {
         const s = limparStrain(entrada.s);
         if (!s || !bankTirar(c, s.id, 1)) { metricas.rejeitadas++; return; }
         // A planta vira entidade com ID e dono.
-        const novaPl = { s, prog: 0, agua: 1, saude: 1, praga: 0, estagio: 0 };
+        const novaPl = { s, prog: 0, agua: 1, saude: 1, praga: 0, estagio: 0, adubOrg:0, adubCres:0, adubFlor:false };
         const entPl = registrar('pl', j.chave || j.id, novaPl);
         novaPl.id = entPl.id;
         novaPl.loteIndex = lote.index;
@@ -1760,6 +1818,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'regar': {
+        if (!exigirJogadorVivo(j)) return;
         // ETAPA C — caminho novo: id de entidade, com dono validado.
         if (m.id) {
           const ent = entidadeDoJogador(j, m.id, 'pl');
@@ -1789,33 +1848,80 @@ wss.on('connection', (ws, req) => {
       }
 
       /* ═════ ETAPA B — dinheiro, sementes e estoque ═════ */
+      case 'adubo': {
+        if (!exigirJogadorVivo(j)) return;
+        const lote = loteDoJogador(j);
+        const pi = num(m.plot, 0, PLOTS_POR_LOTE - 1, -1) | 0;
+        if (!exigirPlotDoJogador(j, lote, pi)) return;
+        const p = lote && lote.plots[pi];
+        const k = str(m.k, 16);
+        const c = sincronizarEquipamento(j);
+        if (!p || !p.s || !(k in CAT_ADUBO) || !(Number(c.fert && c.fert[k]) > 0)) {
+          enviar(j, { t:'recusado', motivo:'planta ou adubo inválido' });
+          metricas.rejeitadas++; return;
+        }
+        const spot = posPlot(lote, pi);
+        if (!spot || !exigirDistancia(j, spot.x, spot.z, 3.2, 'longe do canteiro')) return;
+        if (p.estagio === 4) { enviar(j, { t:'recusado', motivo:'planta já está pronta' }); metricas.rejeitadas++; return; }
+        if (k === 'organico') {
+          if (Number(p.adubOrg) > 0) { enviar(j, { t:'recusado', motivo:'adubo orgânico já aplicado' }); metricas.rejeitadas++; return; }
+          p.saude = Math.min(1, Number(p.saude) + .35); p.praga = 0; p.adubOrg = 90;
+        } else if (k === 'crescimento') {
+          if (Number(p.adubCres) > 0) { enviar(j, { t:'recusado', motivo:'adubo de crescimento ainda ativo' }); metricas.rejeitadas++; return; }
+          p.adubCres = 100;
+        } else {
+          if (p.adubFlor) { enviar(j, { t:'recusado', motivo:'booster já aplicado' }); metricas.rejeitadas++; return; }
+          p.adubFlor = true;
+        }
+        c.fert[k] = Math.max(0, Number(c.fert[k]) - 1);
+        const ev = { t:'lote_update', loteIndex:lote.index, plotIndex:pi, plot:p };
+        metricas.loteUpdates++; paraInteresse(ev, lote.x, lote.z, lote.donoChave); marcarSuja(j);
+        enviar(j, { t:'adubo_ok', k, plot:pi }); enviarEstado(j); break;
+      }
+
       case 'comprar': {
+        if (!exigirJogadorVivo(j)) return;
         const c = carteiraDe(j);
         const oq = str(m.oq, 16);
         let custo = 0, aplicar = null;
 
         if (oq === 'semente') {
-          const sem = limparStrain(m.strain);
-          if (!sem) { metricas.rejeitadas++; return; }
+          // O cliente escolhe apenas uma semente do catálogo visual. A genética
+          // completa é conferida aqui; atributos inventados nunca entram na
+          // carteira e não podem ser propagados por plantio/cruzamento.
+          const sem = sementeCatalogada(m.strain);
+          if (!sem) {
+            enviar(j, { t:'recusado', motivo:'semente fora do catálogo' });
+            metricas.rejeitadas++; return;
+          }
           custo = precoSemente(sem);
           // o fenótipo é sorteado AQUI: o cliente não escolhe a raridade
           const r = Math.random();
           const rar = r < .06 ? 'hibrida' : r < .20 ? 'laranja' : r < .38 ? 'roxa' : 'comum';
-          const filho = Object.assign({}, sem, { id: Date.now() % 1e9 + Math.floor(Math.random()*999), rar });
+          const filho = Object.assign({}, sem, { id: crypto.randomInt(1, 1e9), rar });
           aplicar = () => bankAdd(c, filho, 1);
         } else if (oq === 'upg') {
           const k = str(m.k, 12);
-          if (!(k in CAT_UPG) || c.up[k]) { metricas.rejeitadas++; return; }
+          if (!(k in CAT_UPG) || c.up[k]) {
+            enviar(j, { t:'recusado', motivo:'catálogo inválido ou melhoria já ativa' });
+            metricas.rejeitadas++; return;
+          }
           custo = CAT_UPG[k];
           aplicar = () => { c.up[k] = true; if (k === 'rack') c.rackMax = 10; };
         } else if (oq === 'adubo') {
           const k = str(m.k, 12);
-          if (!(k in CAT_ADUBO)) { metricas.rejeitadas++; return; }
+          if (!(k in CAT_ADUBO)) {
+            enviar(j, { t:'recusado', motivo:'adubo fora do catálogo' });
+            metricas.rejeitadas++; return;
+          }
           custo = CAT_ADUBO[k];
           aplicar = () => { c.fert = c.fert || {}; c.fert[k] = (c.fert[k] || 0) + 1; };
         } else if (oq === 'arma') {
           const k = str(m.k, 12);
-          if (!(k in CAT_ARMA) || k === 'punho') { metricas.rejeitadas++; return; }
+          if (!(k in CAT_ARMA) || k === 'punho') {
+            enviar(j, { t:'recusado', motivo:'arma fora do catálogo' });
+            metricas.rejeitadas++; return;
+          }
           if (c.armas[k]) {
             const pacote = CAT_MUNICAO[k];
             if (!pacote) { metricas.rejeitadas++; return; }
@@ -1837,6 +1943,10 @@ wss.on('connection', (ws, req) => {
           aplicar = () => { c.armor = 100; j.armor = 100; };
         } else { metricas.rejeitadas++; return; }
 
+        if (!Number.isFinite(custo) || custo < 0 || !Number.isFinite(c.cash)) {
+          enviar(j, { t:'recusado', motivo:'catálogo inválido' });
+          metricas.rejeitadas++; return;
+        }
         if (c.cash < custo) { enviar(j, { t: 'recusado', motivo: 'sem dinheiro' }); return; }
         c.cash -= custo;
         aplicar();
@@ -1845,6 +1955,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'cruzar': {
+        if (!exigirJogadorVivo(j)) return;
         const c = carteiraDe(j);
         const idA = num(m.a, 0, 1e9, -1), idB = num(m.b, 0, 1e9, -1);
         if (idA < 0 || idB < 0) { metricas.rejeitadas++; return; }
@@ -1862,6 +1973,7 @@ wss.on('connection', (ws, req) => {
         const filho = gerarFilhoServer(ea.s, eb.s);
         c.cash -= CUSTO_CRUZAR;
         bankAdd(c, filho, 2);
+        enviar(j, { t:'cruzamento_ok', filho });
         enviarEstado(j);
         break;
       }
@@ -1882,6 +1994,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'lote_estagio': {
+        if (!exigirJogadorVivo(j)) return;
         // O cronômetro visual é do cliente, mas o estágio OFICIAL é daqui.
         // Confere também se o jogador está numa estação válida.
         if (!estacaoSecagemValida(j)) {
@@ -1906,6 +2019,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'vender': {
+        if (!exigirJogadorVivo(j)) return;
         const c = carteiraDe(j);
         const id = num(m.id, 0, 1e9, -1);
         const lote = c.estoque.find(l => l.id === id);
@@ -1940,17 +2054,25 @@ wss.on('connection', (ws, req) => {
         if (contexto.cliente) {
           contexto.cliente.vendeu = true;
           contexto.cliente.fase = 'saindo';
-          contexto.cliente.destX = contexto.cliente.x;
-          contexto.cliente.destZ = contexto.cliente.z;
+          const rotaSaida = rotaSaidaCliente(lotes[contexto.cliente.loteIndex]);
+          contexto.cliente.rota = rotaSaida;
+          contexto.cliente.rotaPos = 0;
+          contexto.cliente.destX = rotaSaida[0].x;
+          contexto.cliente.destZ = rotaSaida[0].z;
           contexto.cliente.esperaAte = agora();
           paraInteresse({ t: 'cliente_vendeu', id: contexto.cliente.id, qtd: q, valor }, contexto.cliente.x, contexto.cliente.z, contexto.cliente.dono);
         }
-        enviar(j, { t: 'venda_ok', valor, qtd: q });
+        const pontoConfirmado = contexto.tipo === 'ponto' ? encontrarPontoVenda(j) : null;
+        enviar(j, { t:'venda_ok', valor, qtd:q, estoqueId:id,
+          onde:contexto.tipo, clienteId:contexto.cliente ? contexto.cliente.id : null,
+          pontoNome:pontoConfirmado ? pontoConfirmado.nome : null,
+          demanda:pontoConfirmado ? pontoConfirmado.demanda : null });
         enviarEstado(j);
         break;
       }
 
       case 'comprar_imovel': {
+        if (!exigirJogadorVivo(j)) return;
         const c = sincronizarEquipamento(j);
         const k = str(m.k, 16);
         const def = CAT_IMOVEIS[k];
@@ -1970,10 +2092,17 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'capturar_territorio': {
+        if (!exigirJogadorVivo(j)) return;
         const nome = str(m.nome, 40);
         const p = TERRITORIOS.find(x => x.nome === nome);
         if (!p || p.ownerKey === j.chave) { metricas.rejeitadas++; return; }
         if (!exigirDistancia(j, p.x, p.z, p.raio + 2.2, 'longe do território')) return;
+        const antigo = p.ownerKey;
+        if (antigo && antigo !== j.chave) {
+          const carteiraAntiga = carteiras.get(antigo);
+          if (carteiraAntiga && carteiraAntiga.territorios) delete carteiraAntiga.territorios[p.nome];
+          if (carteiraAntiga) marcarSuja({ chave: antigo });
+        }
         p.ownerKey = j.chave;
         p.ownerNome = j.nome;
         p.demanda = Math.max(.6, p.demanda || 1);
@@ -1986,6 +2115,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'contratar_func': {
+        if (!exigirJogadorVivo(j)) return;
         /* F1 — o SERVIDOR contrata. O cliente só pede o cargo: preço,
            saldo, ID e dono são decididos aqui. Um cliente modificado não
            consegue escolher preço nem criar funcionário por conta. */
@@ -2025,6 +2155,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'portao': {
+        if (!exigirJogadorVivo(j)) return;
         /* ETAPA C — o portão era 100% do cliente: abrir não aparecia pra
            mais ninguém. Agora é entidade com dono e estado no servidor. */
         const ent = entidadeDoJogador(j, m.id, 'pt');
@@ -2041,6 +2172,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'crime': {
+        if (!exigirJogadorVivo(j)) return;
         // O aviso é rate-limited e o peso é fixo; o cliente não escolhe
         // quantas unidades de procurado quer gerar nem pode spammar polícia.
         if (t - j.ultimoCrime < 1200) { metricas.rejeitadas++; return; }
@@ -2069,6 +2201,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'tiro_bot': {
+        if (!exigirJogadorVivo(j)) return;
         // O cliente só informa a intenção e o alvo visual. Arma, dano,
         // cadência e munição pertencem ao servidor.
         if (!exigirHandshake(j) || !j.vivo) return;
@@ -2112,6 +2245,7 @@ wss.on('connection', (ws, req) => {
         break;
       }
       case 'colher': {
+        if (!exigirJogadorVivo(j)) return;
         // ETAPA C — caminho novo por id de entidade
         if (m.id) {
           const ent = entidadeDoJogador(j, m.id, 'pl');
@@ -2241,8 +2375,8 @@ setInterval(() => {
     }
     if (j.morto && agora() >= j.respawnEm) {
       const p = spawnOficial(j);
-      j.x = p.x; j.y = p.y; j.z = p.z; j.hp = 100; j.armor = 0;
-      j.morto = false; j.vivo = true; j.posIniciada = true;
+      j.x = p.x; j.y = 0; j.z = p.z; j.vy = 0; j.onGround = true; j.hp = 100; j.armor = 0;
+      j.morto = false; j.vivo = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
       const c = sincronizarEquipamento(j); c.armor = 0;
       enviar(j, { t:'respawn', x:j.x, y:j.y, z:j.z, hp:j.hp, armor:j.armor });
       enviarEstado(j);

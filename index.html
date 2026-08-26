@@ -2089,7 +2089,7 @@ function mostrarCarregando(){
 function statusServidor(ok){
  const el=$('netMenu');
  if(!el)return;
- el.textContent = ok ? 'servidor online' : 'servidor indisponível · modo offline';
+  el.textContent = ok ? 'servidor online' : 'sem conexão · tente novamente';
  el.classList.toggle('ok',!!ok);
 }
 // Cada dica aparece uma única vez, quando a situação acontece. É isso que
@@ -2122,7 +2122,8 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');
 let estadoDoServidor=false;   // true depois do primeiro 'estado' recebido
 function pedirAoServidor(msg){
  if(!mpConnected){toast('sem conexão com o servidor');return false}
- try{ mpWs.send(JSON.stringify(msg)); return true }catch(e){ return false }
+ if(!mpReady||!estadoDoServidor){toast('aguarde o servidor carregar seu estado');return false}
+ try{ mpWs.send(JSON.stringify(msg)); return true }catch(e){toast('conexão perdida com o servidor');return false}
 }
 function aplicarEstado(d){
  estadoDoServidor=true;
@@ -2145,6 +2146,7 @@ function aplicarEstado(d){
  });
   G.rackMax=d.rackMax||6;
   if(d.municao)G.municao=JSON.parse(JSON.stringify(d.municao));
+  if(d.fert)G.fert=Object.assign({organico:0,crescimento:0,floracao:0},d.fert);
   if(d.armor!==undefined)G.armor=Math.max(0,Math.min(100,Number(d.armor)||0));
   if(d.wanted!==undefined)G.wanted=Math.max(0,Math.min(5,Number(d.wanted)||0));
   if(d.nivel!==undefined)G.nivel=Math.max(1,Math.min(12,Number(d.nivel)||1));
@@ -2220,13 +2222,14 @@ function renderBanca(){
   r.innerHTML='<div class="info">'+(crossPick.length===2?'pronto pra cruzar':'selecione duas')+'</div>';
   const btn=document.createElement('button');btn.textContent='CRUZAR · R$ 120';
   btn.disabled=!(crossPick.length===2&&G.cash>=120);
-  btn.onclick=()=>{const L=libAll();
-   const a=L.find(x=>x.id===crossPick[0]),c=L.find(x=>x.id===crossPick[1]);
-   if(!a||!c)return;const kid=cross(a,c);
- pedirAoServidor({t:'cruzar',a:a.id,b:c.id,filho:kid});crossPick=[];
-   blip(560,.14,'triangle',.07);setTimeout(()=>blip(840,.16,'triangle',.06),110);
-   toast(`nova linhagem: ${kid.nome}`+(kid.marks.length?` — dominante em ${kid.marks.join(', ')}`:''));
-   renderBanca();updHUD()};
+  btn.onclick=()=>{
+   const L=libAll(),a=L.find(x=>x.id===crossPick[0]),c=L.find(x=>x.id===crossPick[1]);
+   if(!a||!c||btn.disabled)return;
+   btn.disabled=true;btn.textContent='CRUZANDO…';
+   if(!pedirAoServidor({t:'cruzar',a:a.id,b:c.id})){
+    btn.disabled=false;btn.textContent='CRUZAR · R$ 120';
+   }
+  };
   r.appendChild(btn);b.appendChild(r)}
  else if(bancaTab==='melh'){
   b.innerHTML+='<h2 class="mt">ESTRUTURA</h2><div class="sub">Compra uma vez, vale a partida toda.</div>';
@@ -2317,12 +2320,13 @@ function renderVenda(cli){
    <div class="info">${l.s.nome} · ${l.qtd} un · qualidade ${Math.round(l.qual*100)}%
    <small>${tr.n} ${l.s.t[cli.want]} — ${matchLabel(l.s.t[cli.want])}</small></div>`;
    const btn=document.createElement('button');btn.textContent=`VENDER ${q} · R$ ${v}`;
-   btn.onclick=()=>{if(!pedirAoServidor({t:'vender',id:l.id,qtd:q,onde:'balcao',clienteId:cli.id,demanda:cli.mult||1}))return;
-   // CORRIGIDO — antes tinha 'G.cash+=v' aqui. O servidor também somava e
-   // devolvia o estado, então o valor piscava na tela e podia divergir.
-   // Quem soma é o servidor; o cliente só reage ao 'venda_ok'.
-   cli.done=true;cli.leaving=true;if(!mpConnected)ganharXP(Math.round(v/12));
-   closeAll();updHUD();renderStock()};
+   btn.onclick=()=>{
+    if(btn.disabled)return;
+    btn.disabled=true;btn.textContent='CONFIRMANDO…';
+    if(!pedirAoServidor({t:'vender',id:l.id,qtd:q,onde:'balcao',clienteId:cli.id})){
+     btn.disabled=false;btn.textContent=`VENDER ${q} · R$ ${v}`;
+    }
+   };
   r.appendChild(btn);b.appendChild(r)})}
 
 function renderPonto(t){
@@ -2340,12 +2344,12 @@ function renderPonto(t){
    <small>aroma ${l.s.t.aroma} · brilho ${l.s.t.brilho}</small></div>`;
   const btn=document.createElement('button');btn.textContent=`ABASTECER · R$ ${v}`;
   btn.onclick=()=>{
-   if(!pedirAoServidor({t:'vender',id:l.id,qtd:l.qtd,onde:'ponto',demanda:t.demanda}))return;
-    if(!mpConnected)ganharXP(Math.round(v/10));
-    t.demanda=Math.max(.6,t.demanda-.12);
-   G.heat=Math.min(100,G.heat+q*2.2);
-   blip(700,.15,'sine',.08);toast(`+R$ ${v} · a área esquentou`);
-   closeAll();updHUD();renderStock()};
+   if(btn.disabled)return;
+   btn.disabled=true;btn.textContent='CONFIRMANDO…';
+   if(!pedirAoServidor({t:'vender',id:l.id,qtd:l.qtd,onde:'ponto'})){
+    btn.disabled=false;btn.textContent=`ABASTECER · R$ ${v}`;
+   }
+  };
   r.appendChild(btn);b.appendChild(r)})}
 
 function renderStock(){const el=$('stockList');
@@ -2414,24 +2418,14 @@ function chaveAparelho(){
  }catch(e){ return 'sem-armazenamento' }
 }
 function idJogador(){
- // sessionStorage é POR ABA: duas abas do mesmo navegador viram dois
- // jogadores de verdade, com lotes separados. localStorage seria
- // compartilhado entre as abas — foi o que fez 3 abas dividirem 1 lote.
- // A aba mantém a mesma identidade ao recarregar (F5), que é o que
- // importa pra não perder o lote sem querer.
+ // A identidade de sessão é própria de cada aba. A identidade do aparelho
+ // fica separada em chaveAparelho() e nunca é usada como posse de carteira.
  try{
   let s=sessionStorage.getItem('quintal3d-id');
-  if(s)return s;
-  s=localStorage.getItem('quintal3d-id');   // primeira aba herda o id antigo
-  if(!s){ s='j'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-   localStorage.setItem('quintal3d-id',s) }
-  else if(sessionStorage.getItem('quintal3d-herdou')){
-   s='j'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-  }
-  sessionStorage.setItem('quintal3d-id',s);
-  sessionStorage.setItem('quintal3d-herdou','1');
+  if(!s){s='j'+Date.now().toString(36)+Math.random().toString(36).slice(2,9);
+   sessionStorage.setItem('quintal3d-id',s)}
   return s;
- }catch(e){ return 'j'+Math.random().toString(36).slice(2,9) }
+ }catch(e){return 'j'+Date.now().toString(36)+Math.random().toString(36).slice(2,9)}
 }
 async function garantirNome(){
  if(meuNome)return meuNome;
@@ -2446,8 +2440,9 @@ async function garantirNome(){
  try{ await window.storage.set('perfil',JSON.stringify({nome:meuNome}),false) }catch(e){}
  return meuNome;
 }
+function escaparHTML(v){return String(v==null?'':v).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 async function trocarNome(novo){
- novo=(novo||'').trim().slice(0,18);
+ novo=(novo||'').trim().replace(/[^\p{L}\p{N} _-]/gu,'').slice(0,18);
  if(!novo)return;
  meuNome=novo;
  try{ await window.storage.set('perfil',JSON.stringify({nome:meuNome}),false) }catch(e){}
@@ -2455,32 +2450,14 @@ async function trocarNome(novo){
  toast('apelido salvo: '+meuNome);
 }
 async function loadWorldTerritories(){
- if(!ONLINE)return;
- try{
-  const r=await window.storage.get('mundo:territorios',true);
-  if(!r||!r.value)return;
-  const claims=JSON.parse(r.value);
-  TERR.forEach(t=>{
-   const c=claims[t.nome];
-   if(c && c.id!==meuId && t.dono==='rival'){
-    t.dono='jogador';t.donoNome=c.nome;
-    t.ring.material.color.setHex(0x5aa8e0);t.disc.material.color.setHex(0x5aa8e0);
-    for(let i=G.inimigos.length-1;i>=0;i--){
-     if(G.inimigos[i].terr===t){scene.remove(G.inimigos[i].g);G.inimigos.splice(i,1)}}}});
-  updHUD();
- }catch(e){}}
+ // O servidor authoritative é a única fonte de posse online. Claims do
+ // storage local pertencem ao legado e não podem sobrescrever snapshots.
+ return;
+}
 async function claimTerritoryOnline(t){
- if(mpConnected&&mpWs){
-  try{mpWs.send(JSON.stringify({t:'capturar_territorio',nome:t.nome}))}catch(e){}
-  return;
- }
- if(!ONLINE||!meuId)return;
- try{
-  let claims={};
-  try{const r=await window.storage.get('mundo:territorios',true);if(r&&r.value)claims=JSON.parse(r.value)}catch(e){}
-  claims[t.nome]={nome:meuNome||'Anônimo',id:meuId,ts:Date.now()};
-  await window.storage.set('mundo:territorios',JSON.stringify(claims),true);
- }catch(e){}}
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return false}
+ return pedirAoServidor({t:'capturar_territorio',nome:t.nome});
+}
 async function syncLeaderboard(){
  if(!ONLINE||!meuId||!meuNome)return;
  try{
@@ -2501,10 +2478,12 @@ async function abrirMundo(){
   const r=await window.storage.get('mundo:placar',true);
   const board=(r&&r.value)?JSON.parse(r.value):[];
   if(!board.length){b.innerHTML='<div class="sub">ninguém salvou progresso ainda — seja o primeiro</div>';return}
-  b.innerHTML=board.map((p,i)=>`<div class="row"><div class="info">
-    <b style="color:${p.id===meuId?'#8fe063':'#fff'}">${i+1}. ${p.nome}${p.id===meuId?' (você)':''}</b>
-    <small>nível ${p.nivel} · ${p.pontos} território(s) · dia ${p.dia}</small></div>
-    <div style="color:#e8d264;font-size:13px;white-space:nowrap">R$ ${p.cash}</div></div>`).join('');
+  b.innerHTML=board.map((p,i)=>{
+   const nome=escaparHTML(p.nome),nivel=Math.max(1,Math.floor(Number(p.nivel)||1));
+   const pontos=Math.max(0,Math.floor(Number(p.pontos)||0)),dia=Math.max(1,Math.floor(Number(p.dia)||1));
+   const cash=Math.max(0,Math.floor(Number(p.cash)||0));
+   return `<div class="row"><div class="info"><b style="color:${p.id===meuId?'#8fe063':'#fff'}">${i+1}. ${nome}${p.id===meuId?' (você)':''}</b><small>nível ${nivel} · ${pontos} território(s) · dia ${dia}</small></div><div style="color:#e8d264;font-size:13px;white-space:nowrap">R$ ${cash}</div></div>`;
+  }).join('');
  }catch(e){b.innerHTML='<div class="sub">não consegui carregar agora — tenta de novo</div>'}}
 // ─── diagnóstico: ver e copiar a chave deste aparelho ───
 // Fica só aqui, nesta caixa. Não vai pro placar, não vai em broadcast,
@@ -2631,6 +2610,7 @@ const FOV_HIP=60, FOV_AIM=44;
 function armaAtual(){return ARMAS[G.arma]}
 function hitmark(){const h=$('hitmark');h.classList.remove('on');void h.offsetWidth;h.classList.add('on')}
 function atirar(){
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
  const a=armaAtual();
  if(a.k==='punho'){toast('sem arma — compra na bancada');return}
  const mu=G.municao[a.k];
@@ -2707,8 +2687,8 @@ function ganharXP(n){
  if(novo>G.nivel){G.nivel=novo;toast(`SUBIU PRO NÍVEL ${novo}`);
   blip(700,.2,'triangle',.09);setTimeout(()=>blip(1050,.24,'triangle',.08),160)}}
 function tomarPonto(t){
- if(mpConnected){claimTerritoryOnline(t);return}
- t.dono='seu';t.donoNome=null;ganharXP(220);claimTerritoryOnline(t);
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ claimTerritoryOnline(t);
  t.ring.material.color.setHex(0x8fe063);t.disc.material.color.setHex(0x8fe063);
  toast(`${t.nome} é seu — abastece o ponto com E`);
  blip(520,.18,'triangle',.08);setTimeout(()=>blip(780,.2,'triangle',.07),140);
@@ -2734,6 +2714,7 @@ function morrer(){
  toast(`você apagou — perdeu R$ ${perda}`);
  blip(90,.5,'sawtooth',.08);updHUD()}
 function recarregar(){
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
  const a=armaAtual();if(a.k==='punho')return;
  if(mpConnected){pedirAoServidor({t:'recarregar'});return}
  const mu=G.municao[a.k];if(!mu||mu.reserva<=0){toast('sem reserva');return}
@@ -2744,6 +2725,7 @@ function recarregar(){
 /* ═════════ INPUT ═════════ */
 const keys={};let jumpPressed=false;
 addEventListener('keydown',e=>{keys[e.code]=true;
+ if(e.code==='Space'){jumpPressed=true;mpJumpQueued=true}
  if(e.code==='KeyE')doAction();
  if(e.code==='KeyR')recarregar();
  if(e.code==='KeyI')openInventory();
@@ -2813,7 +2795,7 @@ function bindHold(el,onDown,onUp){
  el.addEventListener('pointercancel',up);
 }
 bindHold($('act'),()=>doAction());
-bindHold($('jmp'),()=>{jumpPressed=true});
+bindHold($('jmp'),()=>{jumpPressed=true;mpJumpQueued=true});
 bindHold($('rel'),()=>{recarregar()});
 bindHold($('fire'),()=>{fireHeld=true},()=>{fireHeld=false});
 bindHold($('aimb'),()=>{aiming=!aiming;document.body.classList.toggle('aim',aiming)});
@@ -2850,10 +2832,9 @@ surface.addEventListener('lostpointercapture',pEnd);
 /* ═════════ FOCO / AÇÃO ═════════ */
 let focus=null;
 function findFocus(){
- // Enquanto o servidor ainda não devolveu o lote e a posição authoritative,
- // não existe foco válido. Sem este bloqueio a prévia continuava no quintal
- // antigo e a tecla E podia capturar um território público por engano.
- if(mpConnected&&!mpReady)return null;
+ // O jogo é online-only: sem lote, estado de carteira ou conexão não há
+ // foco válido. Assim o fallback nunca altera economia ou plantas locais.
+ if(!mpConnected||!mpReady||!estadoDoServidor)return null;
  const p=player.position;
  if(Math.hypot(p.x-GATEX,p.z-C.z1)<2.4)return{t:'gate'};
  // portão da casa: detecta antes dos canteiros
@@ -2909,24 +2890,14 @@ function plantaMaisPerto(){
   if(d<bd){bd=d;best=p}}
  return best}
 function aplicarAdubo(ad){
- if(G.fert[ad.k]<=0)return;
- const p=plantaMaisPerto();
- if(!p){toast('chega perto de uma planta primeiro');return}
- const pl=p.plant;
- if(pl.estagio===4){toast('essa já está pronta');return}
- if(ad.k==='organico'){
-  if(pl.adubOrg>0){toast('essa já recebeu composto');return}
-  pl.saude=Math.min(1,pl.saude+.35);pl.praga=0;pl.adubOrg=90}
- else if(ad.k==='crescimento'){
-  if(pl.adubCres>0){toast('o adubo dessa ainda tá valendo');return}
-  pl.adubCres=100}
- else{
-  if(pl.adubFlor){toast('essa já levou booster');return}
-  pl.adubFlor=true}
- G.fert[ad.k]--;
- blip(440,.16,'sine',.07);
- toast(`${ad.nome} aplicado em ${pl.s.nome}`);
- renderBanca();updHUD()}
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ const lote=Number.isInteger(meuLoteIndex)?lotesOnline[meuLoteIndex]:null;
+ if(!lote){toast('seu lote ainda está carregando');return}
+ let melhor=null,bd=2.4;
+ for(const P of lote.plots){const d=P.dados;if(!d)continue;const dist=Math.hypot(player.position.x-P.x,player.position.z-P.z);if(dist<bd){bd=dist;melhor=P}}
+ if(!melhor){toast('chega perto de uma planta do seu lote');return}
+ if(pedirAoServidor({t:'adubo',k:ad.k,plot:melhor.plotIndex})){blip(520,.12,'triangle',.06);toast(ad.nome+' solicitado')}
+}
 // ─── FUNCIONÁRIOS ───
 const FUNCS=[
  {k:'zelador',nome:'Nego Du',papel:'Zelador',custo:1200,diaria:45,
@@ -2936,28 +2907,11 @@ const FUNCS=[
  {k:'caseiro',nome:'Seu Bené',papel:'Caseiro da fazenda',custo:4800,diaria:130,
   d:'cuida sozinho dos canteiros da fazenda'}];
 function contratar(f){
- // F1 — ONLINE: quem contrata é o SERVIDOR. O cliente não escolhe preço,
- // não desconta dinheiro e não cria o boneco: só pede o cargo e espera.
- // Assim A e B veem o MESMO funcionário, com o mesmo ID.
- if(mpConnected){
-  pedirAoServidor({t:'contratar_func',cargo:f.k});
-  return;
- }
- // OFFLINE: comportamento antigo preservado, pra jogar sem servidor
- if(G.func[f.k]){toast('já está contratado');return}
- if(G.cash<f.custo){toast('sem dinheiro');return}
- if(f.k==='caseiro'&&!IMOVEIS.find(i=>i.k==='fazenda').comprado){
-  toast('compra a fazenda primeiro');return}
- G.cash-=f.custo;
- const h=humanoid(pick([0x6f88a0,0x8a9268,0xb08a5a]),pick([0x39424c,0x4a3f34]),
-  pick([0xc98d63,0xa06d47,0xe0b48c]));
- const base=f.k==='caseiro'
-  ?new THREE.Vector3((FAZ.x0+FAZ.x1)/2-6,0,(FAZ.z0+FAZ.z1)/2)
-  :new THREE.Vector3(-3,0,-8);
- h.g.position.copy(base);scene.add(h.g);
- G.func[f.k]={def:f,g:h.g,L:h.L,alvo:null,walk:0,cd:rnd(1,4),base};
- blip(600,.16,'sine',.07);toast(`${f.nome} contratado — ${f.papel}`);
- renderBanca();updHUD()}
+ // O servidor decide existência, preço, cargo, ID e entidade. O cliente
+ // apenas pede a contratação; não existe uma segunda implementação local.
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ pedirAoServidor({t:'contratar_func',cargo:f.k});
+}
 function tickFuncs(dt){
   if(mpConnected)return;
   for(const k in G.func){
@@ -3065,8 +3019,8 @@ $('wipeBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropaga
 $('invBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();openInventory()},{passive:false});
 function doAction(){
  if(!G.running)return;
- if(mpConnected&&!mpReady){
-  toast('aguarde: carregando seu quintal multiplayer');
+ if(!mpConnected||!mpReady||!estadoDoServidor){
+  toast('sem conexão com o servidor — ação bloqueada');
   return;
  }
  if(modalOpen()){closeAll();return}
@@ -3313,53 +3267,30 @@ let mapaT=0;
 
 /* ═════════ START ═════════ */
 function start(){
- Object.assign(G,{running:true,cash:350,sel:0,day:1,clock:6*60,rain:0,rainTimer:rnd(40,90),
-  cliTimer:8,rackMax:6,vy:0,onGround:true,hp:100,armor:0,arma:0,heat:0,wanted:0,crimeT:0});
- G.bank=[];G.lotes=[];
- G.municao={pistola:{pente:12,reserva:48}};G.arma=1;
+ if(!mpConnected||!mpReady||!estadoDoServidor){
+  statusServidor(false);mostrarCarregando();$('loadStatus').textContent='sem conexão ou estado ainda carregando — tente novamente';toast('sem conexão com o servidor');return;
+ }
+ if(G.running)return;
+ // Online-only: o servidor já entregou carteira, lote e posição. Não
+ // redefinir cash, sementes, imóveis, plantas ou progressão com defaults locais.
+ Object.assign(G,{running:true,day:1,clock:6*60,rain:0,rainTimer:rnd(40,90),cliTimer:8,heat:0,crimeT:0});
  G.clientes.forEach(c=>scene.remove(c.g));G.clientes=[];
  G.inimigos.forEach(e=>scene.remove(e.g));G.inimigos=[];
  G.policia.forEach(e=>scene.remove(e.g));G.policia=[];
- G.up={vasos:false,led:false,rack:false,placa:false,auto:false,irrig:false};
- G.gate.open=false;if(gateCol)gateCol.active=true;if(gateLeaf)gateLeaf.rotation.y=0;
- G.fert={organico:0,crescimento:0,floracao:0};
- G._nasceuNoLote=false;G._esperandoLote=false;
- for(const k in G.func){if(G.func[k])scene.remove(G.func[k].g)}
- G.func={};G.nivel=1;G.xp=0;
- IMOVEIS.forEach(im=>{im.comprado=false;im.ring.material.color.setHex(0xe8d264)});
- fazPlots.forEach(p=>{p.locked=true;p.group.visible=false;
-  if(p.plant){scene.remove(p.plant.mesh);p.plant=null}});
- if(fazPortao)fazPortao.visible=true;
- casaNovaPlots.forEach(p=>{p.locked=true;p.group.visible=false;
-  if(p.plant){scene.remove(p.plant.mesh);p.plant=null}});
- plots.forEach((p,i)=>{if(p.plant){scene.remove(p.plant.mesh);p.plant=null}});
- TERR.forEach(t=>{t.dono='rival';t.demanda=t.demanda0||t.demanda;
-  t.ring.material.color.setHex(0xe0503c);t.disc.material.color.setHex(0xe0503c);
-  povoarTerritorio(t)});
- if(ONLINE){garantirNome().then(loadWorldTerritories)}
- bankAdd(BASE[0],2);
- // arma inicial — ninguém sai de casa pelado numa cidade com rival armado
- G.municao.pistola={pente:12,reserva:24};G.arma=1;
- // nasce na própria propriedade se o servidor já atribuiu; senão, no
- // quintal (modo offline ou servidor ainda respondendo)
- if(!nascerNaPropriedade()){
-  player.position.set(GATEX,0,C.z1-4);player.rotation.y=Math.PI;camYaw=0;
-  // o lote ainda não chegou: assim que chegar, o jogador é movido
-  G._esperandoLote=true;
- } else { G._nasceuNoLote=true;G._esperandoLote=false; }
+ plots.concat(fazPlots,casaNovaPlots).forEach(p=>{
+  if(p.plant){scene.remove(p.plant.mesh);p.plant=null}
+  if(p.group)p.group.visible=false;
+ });
+ setModoMultiplayerVisual(true);
+ if(!G._nasceuNoLote){toast('aguarde sua posição authoritative');G.running=false;return}
  $('overlay').classList.add('hide');
  renderSeeds();renderStock();updHUD();
- // dicas de entrada, no lugar da antiga parede de texto
- setTimeout(()=>{
-  dica('mover', isTouch
-   ? 'Você está na sua propriedade. Use o <b>analógico</b> pra andar e <b>arraste a tela</b> pra olhar em volta.'
-   : 'Você está na sua propriedade. <b>WASD</b> pra andar, <b>clique na tela</b> pra travar o mouse e olhar em volta.');
- },900);
- setTimeout(()=>{
-  dica('acao', isTouch
-   ? 'O botão <b>AÇÃO</b> faz quase tudo: plantar, regar, colher, abrir o portão.'
-   : 'A tecla <b>E</b> faz quase tudo: plantar, regar, colher, abrir o portão.');
- },7000);
+ setTimeout(()=>dica('mover',isTouch
+  ? 'Você está na sua propriedade. Use o <b>analógico</b> pra andar e <b>arraste a tela</b> pra olhar em volta.'
+  : 'Você está na sua propriedade. <b>WASD</b> pra andar, <b>clique na tela</b> pra travar o mouse e olhar em volta.'),900);
+ setTimeout(()=>dica('acao',isTouch
+  ? 'O botão <b>AÇÃO</b> faz quase tudo: plantar, regar, colher e abrir o portão.'
+  : 'A tecla <b>E</b> faz quase tudo: plantar, regar, colher e abrir o portão.'),7000);
  if(!isTouch&&$('clickHint'))$('clickHint').style.display='block';
  ativarAudio()}
 $('startBtn').onclick=()=>{
@@ -3446,22 +3377,16 @@ function snapshot(){
   terr:TERR.map(t=>({dono:t.dono,demanda:t.demanda}))}}
 async function saveGame(quiet){
  if(!G.running)return;
- const data=JSON.stringify(snapshot());
- try{
-  if(window.storage&&window.storage.set) await window.storage.set(SAVEKEY,data);
-  else localStorage.setItem(SAVEKEY,data);
-  if(!quiet)toast('progresso salvo');
- }catch(e){ if(!quiet)toast('não deu pra salvar aqui') }}
+ if(!mpConnected||!mpReady||!estadoDoServidor){if(!quiet)toast('sem conexão — o servidor ainda não salvou');return}
+ if(!quiet)toast('progresso salvo pelo servidor');
+}
 async function loadRaw(){
- try{
-  if(window.storage&&window.storage.get){const r=await window.storage.get(SAVEKEY);return r?r.value:null}
-  return localStorage.getItem(SAVEKEY);
- }catch(e){return null}}
+ // Não há save local de partida: a carteira online vem somente do servidor.
+ return null;
+}
 async function apagarSave(){
- try{
-  if(window.storage&&window.storage.delete) await window.storage.delete(SAVEKEY);
-  else localStorage.removeItem(SAVEKEY);
- }catch(e){}}
+ toast('a carteira online não pode ser apagada pelo navegador');
+}
 function applySave(d){
  sid=Math.max(sid,(d.sid|0));
  Object.assign(G,{running:true,cash:d.cash,day:d.day,clock:d.clock,sel:d.sel||0,
@@ -3543,7 +3468,7 @@ function applySave(d){
  const b=$('continuarBtn');
  if(!b)return;
  b.style.display='';
- b.onclick=()=>{mostrarCarregando();setTimeout(()=>applySave(d),40)};
+  b.onclick=()=>{statusServidor(false);toast('sem conexão — continue somente após entrar no mundo online')};
  $('startBtn').textContent='NOVO MUNDO';
 })();
 // autosave a cada 20s e ao sair
@@ -3564,16 +3489,7 @@ function tick(){
 
  if(G.running){
   G.clock+=dt*(1440/G.DAYLEN);
-  if(G.clock>=1440){G.clock-=1440;G.day++;
-   if(!mpConnected){
-   const n=plots.filter(p=>p.indoor&&p.plant).length;
-   if(n){const c=n*(G.up.led?12:9);G.cash=Math.max(0,G.cash-c);toast(`conta de luz: −R$ ${c}`)}
-   let renda=0;TERR.forEach(x=>{if(x.dono==='seu'){renda+=x.renda;x.demanda=Math.min(1.6,x.demanda+.18)}});
-   IMOVEIS.forEach(im=>{if(im.comprado&&im.renda)renda+=im.renda});
-   let folha=0;for(const k in G.func){if(G.func[k])folha+=G.func[k].def.diaria}
-   if(folha){G.cash=Math.max(0,G.cash-folha);toast(`folha de pagamento: −R$ ${folha}`)}
-   if(renda){G.cash+=renda;toast(`repasse dos pontos: +R$ ${renda}`)}
-   G.heat=Math.max(0,G.heat-30)}}}
+  if(G.clock>=1440){G.clock-=1440;G.day++;}
  const hour=G.clock/60,dayT=Math.max(0,Math.sin((hour-6)/12*Math.PI)),isDay=hour>=6&&hour<18;
  const ang=(hour-6)/12*Math.PI;
  sun.position.set(player.position.x+Math.cos(ang)*24,Math.max(1.5,Math.sin(ang)*28),player.position.z+10);
@@ -3608,11 +3524,9 @@ function tick(){
  const mag=Math.hypot(ix,iz);
  const run=(keys.ShiftLeft||keys.ShiftRight||mag>.85)&&!aiming;
  const spd=aiming?2.7:(run?5.6:3.1);
- // A reconexão não pode congelar o controle: depois que o jogador já
- // nasceu no lote, ele continua andando localmente enquanto o servidor
- // retorna. Só bloqueamos a janela inicial, antes da primeira posição
- // authoritative, para não andar no quintal antigo.
- const aguardandoPrimeiroLote=mpConnected&&!mpReady&&!G._nasceuNoLote;
+ // Online-only: sem conexão, lote ou carteira authoritative, não há
+ // simulação local. O cliente fica visualmente parado até reconectar.
+ const aguardandoPrimeiroLote=!mpConnected||!mpReady||!estadoDoServidor;
  if(mag>.05&&G.running&&!modalOpen()&&!aguardandoPrimeiroLote){
   const nx=ix/mag,nz=iz/mag;
   // direção derivada direto do ângulo da câmera (mesma fórmula usada pro
@@ -3980,7 +3894,7 @@ function tick(){
   radarT+=dt;if(radarT>.08){radarT=0;drawRadar()}
   atualizarRota(dt);
   if($('mapPanel').classList.contains('on')){mapaT-=dt;if(mapaT<=0){mapaT=.5;drawWorldMap()}}
-  if(G.running)tickFuncs(dt);
+  if(G.running&&mpConnected&&estadoDoServidor)tickFuncs(dt);
  if(G.running)streamLotes(dt);
  // primeira vez que sai da própria propriedade
  if(G.running&&meuLoteIndex!==null&&lotesOnline[meuLoteIndex]){
@@ -4461,10 +4375,10 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
 // funcionando normal — multiplayer nunca pode travar o modo solo.
 const MP_URL='wss://quintal-3d.onrender.com';
 let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0;
-let mpInputSeq=0,mpLastCorrectionSeq=0;
+let mpInputSeq=0,mpLastCorrectionSeq=0,mpJumpQueued=false;
 let mpToken='',mpAvatarId='carmo';
 try{mpAvatarId=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
-try{mpToken=localStorage.getItem('quintal3d-session-token')||''}catch(e){}
+try{mpToken=sessionStorage.getItem('quintal3d-session-token')||''}catch(e){}
 // atraso proposital de renderização: mostramos os outros jogadores ~120ms
 // no passado e interpolamos entre snapshots. É isso que tira o tranco da
 // rede — sem isso o boneco teleporta a cada pacote.
@@ -4662,12 +4576,19 @@ function mpRemovePlayer(id){
  const p=mpPlayers.get(id);
  if(p){scene.remove(p.g);mpPlayers.delete(id)}
 }
+function mpLimparEntidades(){
+ for(const id of [...mpPlayers.keys()])mpRemovePlayer(id);
+ for(const id of [...mpBots.keys()])mpRemoveBot(id);
+ for(const id of [...mpClientes.keys()])mpRemoveCliente(id);
+ for(const id of [...mpFuncs.keys()])mpRemoveFunc(id);
+}
 function mpConnect(){
  if(!MP_URL)return;
  try{ mpWs=new WebSocket(MP_URL) }catch(e){ return }
  mpWs.onopen=()=>{
-  mpReentrada=mpReconnecting; mpConnected=true; mpReady=false; mpReconnecting=false; mpHadConnection=true; mpTentativas=0;
+  mpReentrada=mpReconnecting; mpConnected=true; mpReady=false; estadoDoServidor=false; mpJumpQueued=false; mpReconnecting=false; mpHadConnection=true; mpTentativas=0;
   setModoMultiplayerVisual(true);
+  mpLimparEntidades();
   const nt=$('netTag'); if(nt){nt.textContent='online';nt.classList.add('on')}
   statusServidor(true);
   // Se o jogo começou offline e os bots locais nasceram, eles somem agora:
@@ -4686,14 +4607,14 @@ function mpConnect(){
    avatarId:mpAvatarId})) }catch(e){}
  };
  mpWs.onclose=()=>{
-  mpConnected=false; mpReady=false; mpReconnecting=mpHadConnection;
+  mpConnected=false; mpReady=false; estadoDoServidor=false; mpJumpQueued=false; mpReconnecting=mpHadConnection;
   // Depois que o multiplayer já conectou, não reativamos a simulação local
   // durante a queda: isso faria o jogador andar num mundo paralelo e voltar
   // ao ponto antigo quando a sessão fosse retomada.
-  setModoMultiplayerVisual(mpReconnecting);
+  setModoMultiplayerVisual(true);
   const nt=$('netTag'); if(nt){nt.textContent=mpReconnecting?'reconectando':'offline';nt.classList.toggle('on',mpReconnecting)}
   statusServidor(false);if(mpReconnecting){const el=$('netMenu');if(el)el.textContent='reconectando…';}
-  for(const id of [...mpPlayers.keys()]) mpRemovePlayer(id);
+  mpLimparEntidades();
   // reconexão com espera crescente + jitter aleatório. Sem o jitter,
   // se o servidor reinicia todo mundo volta no mesmo instante e derruba
   // ele de novo — é o problema conhecido de "avalanche de reconexão".
@@ -4726,8 +4647,8 @@ function mpConnect(){
     });
     // o lote atribuído chega depois do hello.
    } else if(msg.t==='sessao'){
-    mpToken=msg.token||'';
-    try{localStorage.setItem('quintal3d-session-token',mpToken)}catch(e){}
+     mpToken=msg.token||'';
+     try{sessionStorage.setItem('quintal3d-session-token',mpToken)}catch(e){}
    } else if(msg.t==='join'){
     mpAddPlayer(msg.id,msg.nome,player.position.x,0,player.position.z+3,0,msg.avatarId);
     toast(`${msg.nome} entrou no servidor`);
@@ -4928,9 +4849,21 @@ function mpConnect(){
    } else if(msg.t==='estado'){
     aplicarEstado(msg);
    } else if(msg.t==='recusado'){
-    toast(msg.motivo||'operação recusada');blip(160,.12,'square',.05);
+    const motivo=String(msg.motivo||'');
+    if(/sessão inválida|expirada|já conectada|hello necessário/i.test(motivo)){
+     mpToken='';try{sessionStorage.removeItem('quintal3d-session-token')}catch(e){}
+     mpReady=false;estadoDoServidor=false;toast('sessão reiniciada — conectando novamente');
+    } else toast(motivo||'operação recusada');
+    blip(160,.12,'square',.05);
+   } else if(msg.t==='cruzamento_ok'){
+    const kid=msg.filho||{};crossPick=[];blip(560,.14,'triangle',.07);setTimeout(()=>blip(840,.16,'triangle',.06),110);
+    toast(`nova linhagem: ${escaparHTML(kid.nome||'semente')}`);renderBanca();updHUD();
    } else if(msg.t==='venda_ok'){
-    blip(880,.12,'triangle',.07);toast(`vendeu ${msg.qtd} un · +R$ ${msg.valor}`);
+    if(msg.clienteId!==null&&msg.clienteId!==undefined){
+     const c=mpClientes.get(msg.clienteId);if(c){c.done=true;c.leaving=true}
+    }
+    if(msg.pontoNome){const t=TERR.find(x=>x.nome===msg.pontoNome);if(t&&Number.isFinite(Number(msg.demanda)))t.demanda=Number(msg.demanda)}
+    blip(880,.12,'triangle',.07);toast(`vendeu ${msg.qtd} un · +R$ ${msg.valor}`);closeAll();renderStock();updHUD();
    } else if(msg.t==='colheita'){
     // servidor confirmou a colheita: entra na bancada local normalmente
     if(G.lotes.length<G.rackMax){
@@ -4947,9 +4880,9 @@ function mpConnect(){
  mpSendT+=dt;
  if(mpConnected&&mpReady&&G.running&&mpSendT>.1){
   mpSendT=0;
-  try{ mpWs.send(JSON.stringify({t:'input',seq:++mpInputSeq,
-   x:player.position.x,y:player.position.y,z:player.position.z,ry:player.rotation.y,
-   arma:G.arma||0})) }catch(e){}
+   try{ mpWs.send(JSON.stringify({t:'input',seq:++mpInputSeq,
+    x:player.position.x,y:player.position.y,z:player.position.z,ry:player.rotation.y,
+    arma:G.arma||0,salto:mpJumpQueued}));mpJumpQueued=false }catch(e){}
  }
  // ─── interpolação de entidades ───
  // Renderiza cada jogador no ponto exato entre os dois snapshots que
