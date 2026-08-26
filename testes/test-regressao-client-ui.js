@@ -50,5 +50,25 @@ assert.match(html, /if\(hit\)\{dist=Math\.max\(\.55,s-\.35\);break\}\}/,
 const objetivo = html.slice(html.indexOf('function objetivoAtual()'), html.indexOf('function atualizarRota'));
 assert.ok(objetivo.indexOf("G.lotes.some(l=>l.stage==='sec'||l.stage==='cura')") < objetivo.indexOf('const vazio=lote.plots.find'),
   'a rota deve priorizar a bancada quando há produto secando ou curando');
+assert.match(html, /id="menuBtn"[^>]*aria-controls="gameMenu"/,
+  'o celular deve ter um botão de menu recolhível');
+assert.match(html, /id="gameMenu"[^>]*aria-label="Menu do jogo"/,
+  'o menu mobile deve ter uma área própria e identificável');
+assert.match(html, /function inicializarMenuMobile\(\)/,
+  'a montagem do menu deve ser centralizada em uma função única');
+assert.match(html, /\['topBar','stats','daybox','zone','perfBox'\]/,
+  'ações, estatísticas, zona e configurações devem ser movidas para o menu');
+assert.match(html, /body\.touch #hud > #topBar\{display:none\}/,
+  'a barra cheia de ações não pode permanecer sobre o jogo no celular');
+assert.match(html, /body\.touch\.gameStarted #menuBtn\{display:block/,
+  'o botão MENU não deve ficar visível e bloqueado sobre a tela inicial');
+assert.match(html, /body\.menuOpen #touch\{display:none!important\}/,
+  'abrir o menu deve liberar a tela de toque e impedir comandos acidentais');
+assert.match(html, /perfBox\.style\.display=\(!isTouch&&!outroModal\)\|\|\(isTouch&&menuAberto\)\?'block':'none'/,
+  'FPS e configurações devem ficar ocultos no celular até abrir o menu');
+assert.match(html, /cashQuickValue/,
+  'o celular deve manter apenas o saldo resumido fora do menu');
+assert.match(html, /const temProducao=G\.lotes\.some\(/,
+  'o painel de produção deve aparecer somente quando houver produção');
 
 console.log('CLIENT_UI_REGRESSION_OK');

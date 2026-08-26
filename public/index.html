@@ -21,6 +21,29 @@ canvas{display:block;touch-action:none}
 #topBar button{pointer-events:auto;font:600 clamp(8.5px,2.3vmin,12px) ui-monospace;
  letter-spacing:.8px;padding:clamp(6px,1.7vmin,9px) clamp(10px,3vmin,16px);
  border-radius:18px;cursor:pointer;white-space:nowrap}
+#menuBtn{display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:7;
+ pointer-events:auto;padding:7px 16px;border:1px solid rgba(143,224,99,.7);border-radius:18px;
+ background:rgba(12,16,12,.82);color:#dff5cd;font:700 11px ui-monospace;letter-spacing:1.5px;
+ cursor:pointer;box-shadow:0 3px 16px rgba(0,0,0,.22)}
+#menuBtn:active{transform:translateX(-50%) scale(.97)}
+#cashQuick{display:none;position:absolute;top:8px;left:10px;z-index:7;pointer-events:none;
+ padding:5px 9px;border-radius:14px;background:rgba(12,16,12,.72);border:1px solid rgba(232,210,100,.42);
+ color:#e8d264;font:700 12px ui-monospace;letter-spacing:.5px}
+#gameMenu .modalTitle{font-size:13px;letter-spacing:3px;color:#8fe063;margin-bottom:4px}
+#gameMenu .menuBody{display:flex;flex-direction:column;gap:10px}
+#gameMenu #topBar{position:static;transform:none;display:flex;max-width:none;width:100%;
+ padding:0;gap:6px;justify-content:flex-start;pointer-events:auto}
+#gameMenu #topBar button{flex:1 1 calc(50% - 6px);min-width:0}
+#gameMenu #stats,#gameMenu #daybox,#gameMenu #zone{position:static;top:auto;left:auto;right:auto;text-align:left;width:100%;max-width:none}
+#gameMenu #stats,#gameMenu #daybox{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12)}
+#gameMenu #zone{padding:7px 9px;border:1px solid rgba(255,255,255,.1);border-radius:3px;font-size:11px;letter-spacing:1px;opacity:.85}
+#gameMenu #perfBox{position:static!important;top:auto!important;right:auto!important;bottom:auto!important;
+ transform:none!important;width:100%;padding:9px 10px;border-radius:3px;box-shadow:none;box-sizing:border-box}
+#gameMenu #perfBox label{justify-content:space-between}
+#gameMenu #perfBox select{min-width:92px;padding:4px}
+#gameMenu .menuNote{font-size:10px;line-height:1.55;color:rgba(255,255,255,.62)}
+body.menuOpen #touch{display:none!important}
+body.menuOpen #menuBtn{background:#8fe063;color:#0e120e}
 #invBtn{background:rgba(143,224,99,.2);border:1px solid rgba(143,224,99,.6);color:#dff5cd}
 #saveBtn{background:rgba(232,210,100,.18);border:1px solid rgba(232,210,100,.55);color:#f0e6b8}
 #mundoBtn{background:rgba(90,168,224,.2);border:1px solid rgba(90,168,224,.6);color:#c8e4f5}
@@ -40,7 +63,8 @@ body.touch #zona{top:calc(8px + clamp(30px,8.5vmin,40px) + 66px)}
 #stats{top:10px;left:10px}#stats b{color:#8fe063;font-weight:600}
 #stats .cash{color:#e8d264;font-size:16px;letter-spacing:1px}
 #daybox{top:10px;right:10px;text-align:right;letter-spacing:.8px}#daybox .h{font-size:17px}
-#stock{top:96px;right:10px;text-align:right;max-width:200px;font-size:10.5px}
+#stock{top:96px;right:10px;text-align:right;max-width:200px;font-size:10.5px;display:none}
+#stock.hasProduction{display:block}
 #stock .ttl{color:#8fe063;letter-spacing:2px;font-size:9px;opacity:.8}
 #stock i{color:#e8d264;font-style:normal}
 #stock .stockLine{display:block;white-space:nowrap;line-height:1.45}
@@ -205,6 +229,14 @@ h2.mt{font-size:11px;letter-spacing:3px;color:#8fe063;margin-bottom:3px}
 #rel.vazio{animation:pisca .7s infinite}
 @keyframes pisca{0%,100%{background:rgba(232,210,100,.22)}50%{background:rgba(232,120,60,.55)}}
 body.touch #touch{display:block}
+body.touch.gameStarted #menuBtn{display:block;top:calc(var(--pad) - 2px);font-size:clamp(10px,2.7vmin,15px);padding:clamp(7px,1.9vmin,11px) clamp(14px,4.2vmin,25px)}
+body.touch #cashQuick{display:block;top:var(--pad);font-size:clamp(10px,2.7vmin,15px);padding:clamp(5px,1.4vmin,8px) clamp(8px,2.4vmin,13px)}
+body.touch #hud > #topBar{display:none}
+body.touch #stats,body.touch #daybox,body.touch #zone{display:none}
+body.touch #gameMenu #stats,body.touch #gameMenu #daybox,body.touch #gameMenu #zone{display:block}
+body.touch #ver{display:none}
+body.touch #stock{top:calc(var(--pad) + clamp(40px,10vmin,56px));right:var(--pad);max-width:45vw;font-size:clamp(9px,2.3vmin,13px)}
+body.touch #stock .ttl{font-size:clamp(8px,2vmin,11px)}
 body.touch #routeHint{top:calc(8px + clamp(30px,8.5vmin,40px) + 82px);left:var(--pad);max-width:62vw;font-size:clamp(9px,2.4vmin,14px)}
 body.touch #vitals{bottom:calc(var(--pad) + var(--btn) * 1.4);left:var(--pad);width:clamp(130px,34vmin,210px);font-size:clamp(9px,2.4vmin,14px)}
 body.touch #radar{display:none}
@@ -212,10 +244,15 @@ body.touch #seeds{display:none}
 body.touch .panel{font-size:clamp(10px,2.5vmin,15px)}
 body.touch #invBtn{font-size:clamp(11px,2.8vmin,16px);padding:clamp(8px,2.2vmin,14px) clamp(16px,4.5vmin,30px)}
 body.touch #prompt{font-size:clamp(11px,2.8vmin,16px);bottom:calc(var(--pad) + var(--btn) * 3.4)}
+body.menuOpen #cashQuick,body.menuOpen #netTag,body.menuOpen #stock,body.menuOpen #routeHint,body.menuOpen #vitals,body.menuOpen #dica,body.menuOpen #prompt,body.menuOpen #clickHint,body.menuOpen #wanted{display:none!important}
+body.touch #gameMenu{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);padding:14px}
+body.touch #gameMenu .modalTitle{font-size:clamp(13px,3.5vmin,18px)}
+body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
 </style>
 </head>
 <body>
 <div id="hud">
+  <div id="cashQuick">R$ <b id="cashQuickValue">0</b></div>
   <div class="panel" id="stats"><span class="cash">R$ <b id="cash">0</b></span><br>
     plantas <b id="alive">0</b> · lotes <b id="lotes">0</b> · pontos <b id="terr">0</b>/10<b id="cliCount" style="color:#e8d264"></b><br>nível <b id="lvl">1</b></div>
   <div class="panel" id="daybox">dia <b id="day">1</b><br><span class="h" id="hour">06:00</span><br><span id="wx" style="opacity:.6"></span></div>
@@ -227,11 +264,18 @@ body.touch #prompt{font-size:clamp(11px,2.8vmin,16px);bottom:calc(var(--pad) + v
   <div id="wanted"></div>
   <div id="ver">v21</div>
   <div id="topBar"><button id="invBtn">INVENTÁRIO</button><button id="mapBtn">MAPA</button><button id="mundoBtn">MUNDO</button><button id="saveBtn">SALVAR</button><button id="wipeBtn">APAGAR</button><div id="adminTag">ADMIN</div></div>
+  <button id="menuBtn" aria-controls="gameMenu" aria-expanded="false">MENU</button>
   <div id="netTag">offline</div>
   <div id="dica"></div>
   <div id="prompt"></div><div id="clickHint">clique na tela do jogo pra travar o mouse e olhar em volta</div><div id="toast"></div><div id="reticle"><span class="dot"></span></div><div id="hurt"></div><div id="hitmark"></div>
   <div id="radar"><canvas id="radarC" width="236" height="236"></canvas></div>
   <div id="seeds"></div>
+</div>
+<div class="modal" id="gameMenu" aria-label="Menu do jogo">
+  <div class="modalTitle">MENU DO JOGO</div>
+  <div class="menuNote">A tela fica limpa durante a partida. Abra aqui inventário, mapa, mundo, salvamento, configurações e diagnóstico.</div>
+  <div class="menuBody" id="menuBody"></div>
+  <button class="close" data-close>FECHAR MENU</button>
 </div>
 <div class="modal mapPanel" id="mapPanel"><h2>MAPA DO QUINTAL</h2><div class="mapSub">Toque em FECHAR para voltar ao jogo. O ponto verde é você; o amarelo é o próximo objetivo.</div><canvas id="worldMapC" width="720" height="520"></canvas><div id="mapLegend"><span><i class="mapDot" style="background:#8fe063"></i>você / seu lote</span><span><i class="mapDot" style="background:#e8d264"></i>objetivo</span><span><i class="mapDot" style="background:#5aa8e0"></i>jogador / polícia</span><span><i class="mapDot" style="background:#e0503c"></i>rival</span></div><button class="close" data-close>FECHAR MAPA</button></div>
 <div class="modal" id="banca">
@@ -490,7 +534,11 @@ const perfBox=document.createElement('div');
 perfBox.style.cssText='position:fixed;right:10px;top:10px;z-index:20;padding:7px 9px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(12,16,15,.72);color:#dce9d7;font:11px system-ui;backdrop-filter:blur(4px);pointer-events:auto';
 perfBox.innerHTML='<label style="display:flex;gap:6px;align-items:center">qualidade <select id="qualitySelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="alto">Alto</option><option value="medio">Médio</option><option value="baixo">Baixo</option></select></label><label style="display:flex;gap:6px;align-items:center;margin-top:4px">som <select id="soundSelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="ativo">Ativo</option><option value="mudo">Mudo</option></select></label><label style="display:flex;gap:6px;align-items:center;margin-top:4px">avatar <select id="avatarSelect" style="color:#eaf5e6;background:#1d2820;border:1px solid #526652;border-radius:4px;font-size:11px"><option value="carmo">Carmo</option><option value="verde">Verde</option><option value="azul">Azul</option><option value="roxo">Roxo</option></select></label><div id="perfReadout" style="margin-top:4px;opacity:.75">medindo…</div>';
 perfBox.id='perfBox';document.body.appendChild(perfBox);
-function atualizarVisibilidadePerf(){perfBox.style.display=modalOpen()?'none':'block'}
+function atualizarVisibilidadePerf(){
+ const menuAberto=$('gameMenu')?.classList.contains('on');
+ const outroModal=['banca','venda','ponto','mundo','mapPanel'].some(id=>$(id)?.classList.contains('on'));
+ perfBox.style.display=(!isTouch&&!outroModal)||(isTouch&&menuAberto)?'block':'none';
+}
 const qualitySelect=document.getElementById('qualitySelect');qualitySelect.value=qualidade;
 qualitySelect.onchange=()=>{qualidade=qualitySelect.value;try{localStorage.setItem('quintal3d-qualidade',qualidade)}catch(e){};renderer.setPixelRatio(Math.min(devicePixelRatio||1,cfgQual().pixel));renderer.shadowMap.enabled=cfgQual().sombras;renderer.shadowMap.type=cfgQual().tipo;sun.castShadow=cfgQual().sombras;sun.shadow.mapSize.set(cfgQual().mapa,cfgQual().mapa);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}toast('qualidade '+qualitySelect.options[qualitySelect.selectedIndex].text+' aplicada');};
 const soundSelect=document.getElementById('soundSelect');soundSelect.value=somAtivo?'ativo':'mudo';soundSelect.onchange=()=>{
@@ -2343,8 +2391,26 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
  t.classList.add('on');bancaTab=t.dataset.t;crossPick=[];renderBanca()});
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=closeAll);
-function closeAll(){['banca','venda','ponto','mundo','mapPanel'].forEach(id=>$(id).classList.remove('on'));atualizarVisibilidadePerf()}
-const modalOpen=()=>['banca','venda','ponto','mundo','mapPanel'].some(id=>$(id).classList.contains('on'));
+function fecharMenuMobile(){
+ const menu=$('gameMenu'),btn=$('menuBtn');
+ if(menu)menu.classList.remove('on');
+ document.body.classList.remove('menuOpen');
+ if(btn){btn.setAttribute('aria-expanded','false');btn.textContent='MENU'}
+}
+function closeAll(){['gameMenu','banca','venda','ponto','mundo','mapPanel'].forEach(id=>$(id)?.classList.remove('on'));document.body.classList.remove('menuOpen');const btn=$('menuBtn');if(btn){btn.setAttribute('aria-expanded','false');btn.textContent='MENU'}atualizarVisibilidadePerf()}
+const modalOpen=()=>['gameMenu','banca','venda','ponto','mundo','mapPanel'].some(id=>$(id)?.classList.contains('on'));
+function inicializarMenuMobile(){
+ if(!isTouch)return;
+ const menu=$('gameMenu'),body=$('menuBody'),btn=$('menuBtn');
+ if(!menu||!body||!btn)return;
+ ['topBar','stats','daybox','zone','perfBox'].forEach(id=>{const el=$(id);if(el)body.appendChild(el)});
+ btn.addEventListener('click',()=>{
+  const aberto=!menu.classList.contains('on');
+  if(aberto){menu.classList.add('on');document.body.classList.add('menuOpen');btn.textContent='FECHAR';btn.setAttribute('aria-expanded','true')}
+  else fecharMenuMobile();
+  atualizarVisibilidadePerf();
+   });
+}
 
 const matchLabel=v=>v>=78?'exatamente o perfil dele':v>=58?'atende bem':v>=38?'serve, paga menos':'não é o que ele quer';
 const rarMult=s=>(RARIDADES[s&&s.rar]||RARIDADES.comum).mult;
@@ -2394,10 +2460,13 @@ function renderPonto(t){
   r.appendChild(btn);b.appendChild(r)})}
 
 function renderStock(){const el=$('stockList');
+ const temProducao=G.lotes.some(l=>Number(l.qtd)>0&&['sec','cura','pronto'].includes(l.stage));
+ $('stock').classList.toggle('hasProduction',temProducao);
  el.innerHTML=linhasProducao(G.lotes,5)||'sem produção';
  if(Number.isInteger(meuLoteIndex))atualizarMarcadoresBancada(lotesOnline[meuLoteIndex])}
 function updHUD(){
- $('cash').textContent=Math.floor(G.cash);
+  $('cash').textContent=Math.floor(G.cash);
+  const cashQuick=$('cashQuickValue');if(cashQuick)cashQuick.textContent=Math.floor(G.cash);
  $('alive').textContent=plots.concat(fazPlots,casaNovaPlots).filter(p=>p.plant).length;
  $('lotes').textContent=G.lotes.length;
  $('terr').textContent=TERR.filter(t=>t.dono==='seu').length;
@@ -2546,8 +2615,8 @@ function ligarDiagnostico(){
  };
  pintarChave();
 }
-$('mundoBtn').addEventListener('click',()=>{abrirMundo();ligarDiagnostico()});
-$('mundoBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();abrirMundo()});
+$('mundoBtn').addEventListener('click',()=>{fecharMenuMobile();abrirMundo();ligarDiagnostico()});
+$('mundoBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fecharMenuMobile();abrirMundo()});
 function salvarNomeUI(){const v=$('nomeInput').value;
  if(v.trim().toLowerCase()==='admin'){alternarAdmin();$('nomeInput').value='';return}
  trocarNome(v).then(()=>{$('nomeInput').value=''});}
@@ -2784,7 +2853,7 @@ let camYaw=0,camPitch=.22,camDist=6.2,dragging=false,lx=0,ly=0;
 // sem precisar segurar botão nenhum pra olhar em volta — isso é o que causava
 // "sem direção, tem que adivinhar". Botão esquerdo só atira, direito só mira.
 const isTouch=matchMedia('(pointer:coarse)').matches;
-if(isTouch)document.body.classList.add('touch');
+if(isTouch){document.body.classList.add('touch');inicializarMenuMobile()}
 renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
 renderer.domElement.style.cursor='crosshair';
 function requestLock(){
@@ -3044,10 +3113,11 @@ function openInventory(){
  if(!G.running)return;
  renderBanca();$('banca').classList.add('on');
 }
-$('invBtn').addEventListener('click',openInventory);
-$('mapBtn').addEventListener('click',()=>{if(!G.running)return;$('mapPanel').classList.add('on');drawWorldMap();atualizarVisibilidadePerf()});
-$('saveBtn').addEventListener('click',()=>saveGame());
-$('saveBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();saveGame()});
+function abrirInventarioMenu(){fecharMenuMobile();openInventory()}
+$('invBtn').addEventListener('click',abrirInventarioMenu);
+$('mapBtn').addEventListener('click',()=>{if(!G.running)return;fecharMenuMobile();$('mapPanel').classList.add('on');drawWorldMap();atualizarVisibilidadePerf()});
+$('saveBtn').addEventListener('click',()=>{fecharMenuMobile();saveGame()});
+$('saveBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fecharMenuMobile();saveGame()});
 let confirmaApagar=false;
 function pedirApagarSave(){
  if(!confirmaApagar){confirmaApagar=true;$('wipeBtn').textContent='TOCA DE NOVO PRA CONFIRMAR';
@@ -3055,9 +3125,9 @@ function pedirApagarSave(){
  confirmaApagar=false;$('wipeBtn').textContent='APAGAR SAVE';
  apagarSave().then(()=>location.reload());
 }
-$('wipeBtn').addEventListener('click',pedirApagarSave);
-$('wipeBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();pedirApagarSave()});
-$('invBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();openInventory()},{passive:false});
+$('wipeBtn').addEventListener('click',()=>{fecharMenuMobile();pedirApagarSave()});
+$('wipeBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fecharMenuMobile();pedirApagarSave()});
+$('invBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();abrirInventarioMenu()},{passive:false});
 function doAction(){
  if(!G.running)return;
  if(!mpConnected||!mpReady||!estadoDoServidor){
@@ -3317,6 +3387,7 @@ function start(){
  // Online-only: o servidor já entregou carteira, lote e posição. Não
  // redefinir cash, sementes, imóveis, plantas ou progressão com defaults locais.
  Object.assign(G,{running:true,day:1,clock:6*60,rain:0,rainTimer:rnd(40,90),cliTimer:8,heat:0,crimeT:0});
+  document.body.classList.add('gameStarted');
  G.clientes.forEach(c=>scene.remove(c.g));G.clientes=[];
  G.inimigos.forEach(e=>scene.remove(e.g));G.inimigos=[];
  G.policia.forEach(e=>scene.remove(e.g));G.policia=[];
