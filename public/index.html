@@ -1581,6 +1581,9 @@ const casaNovaPlots=[];
 
 /* ═════════ PLANTA ═════════ */
 const STAGE=['semente','broto','jovem','adulta','pronta'];
+// A mesma regra do servidor é mantida no fallback local para não haver duas
+// experiências de crescimento diferentes. O servidor continua authoritative.
+const PLANTA_DRENO_AGUA=.0045,PLANTA_AGUA_SECA=.35,PLANTA_CRESCIMENTO_MULT=1.35;
 // limiares dos 5 estágios: 0 / 25 / 50 / 75 / 100 (igual a arte-conceito)
 function estagioDe(prog){return prog>=100?4:prog>=75?3:prog>=50?2:prog>=25?1:0}
 // ─── folíolo de verdade: contorno com serrilha, não mais um cone ───
@@ -1732,39 +1735,39 @@ function buildPlant(s){
  const sparkM=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.7});
  const sparkGeo=new THREE.SphereGeometry(.009,4,3);
  const buds=new THREE.Group();
- const colas=[{x:0,y:H-.06,z:0,s:1,alt:.46},
-              {x:.26,y:H*.58,z:.09,s:.58,alt:.26},
-              {x:-.24,y:H*.54,z:-.10,s:.55,alt:.24}];
+ const colas=[{x:0,y:H-.06,z:0,s:.78,alt:.34},
+              {x:.22,y:H*.58,z:.08,s:.42,alt:.20},
+              {x:-.20,y:H*.54,z:-.09,s:.40,alt:.18}];
  colas.forEach(c=>{
   const cola=new THREE.Group();
    const camadas=Math.max(2,Math.round(lod.camadas+s.t.rendimento/100*(lod.camadas===4?4:2)));
   for(let L=0;L<camadas;L++){
    const ct=L/(camadas-1||1);
    const yy=ct*c.alt;
-   const raio=(.115*(1-ct*.72)+.02)*c.s;    // afina pro topo, formato de cone
+   const raio=(.075*(1-ct*.72)+.014)*c.s;    // afina pro topo, formato de cone
    const nCal=L===camadas-1?Math.max(2,lod.calices-2):lod.calices;
    for(let i=0;i<nCal;i++){
     const a=(i/nCal)*6.283+L*.7;
     // cálice: esfera achatada, agrupada
-    const cal=new THREE.Mesh(new THREE.IcosahedronGeometry(.052*c.s*(1-ct*.35),0),bm);
+    const cal=new THREE.Mesh(new THREE.IcosahedronGeometry(.042*c.s*(1-ct*.35),0),bm);
     cal.scale.set(1,1.35,1);
     cal.position.set(Math.cos(a)*raio,yy,Math.sin(a)*raio);
     cal.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));
     cal.castShadow=lod.sombras;cola.add(cal);
     // pistilos saindo do cálice
     for(let pz=0;pz<1;pz++){
-     const ph=new THREE.Mesh(new THREE.CylinderGeometry(.0028,.0055,.075*c.s,3),pistilM);
+     const ph=new THREE.Mesh(new THREE.CylinderGeometry(.0022,.0042,.058*c.s,3),pistilM);
      ph.position.copy(cal.position);ph.position.y+=.03*c.s;
      ph.rotation.set(rnd(-.9,.9),rnd(0,6.283),rnd(-.9,.9));cola.add(ph)}
     // sugar leaf pequena espetando pra fora
     if(i%2===0&&qualidade!=='baixo'){
-     const sl=new THREE.Mesh(leafletGeo(.1*c.s,.019*c.s),sugarM);
+     const sl=new THREE.Mesh(leafletGeo(.075*c.s,.015*c.s),sugarM);
      sl.position.copy(cal.position);
      sl.rotation.set(-1.0+rnd(-.4,.4),a,rnd(-.5,.5));cola.add(sl)}
    }
   }
   for(let k=0;k<lod.sparks;k++){
-   const sp=new THREE.Mesh(sparkGeo,sparkM),a=rnd(0,6.283),rr=rnd(0,.13*c.s);
+   const sp=new THREE.Mesh(sparkGeo,sparkM),a=rnd(0,6.283),rr=rnd(0,.09*c.s);
    sp.position.set(Math.cos(a)*rr,rnd(0,c.alt),Math.sin(a)*rr);cola.add(sp)}
   cola.position.set(c.x,c.y,c.z);buds.add(cola)});
  buds.visible=false;g.add(buds);
@@ -1780,7 +1783,7 @@ function escalaPlantaCultivada(prog){return .10+clamp(Number(prog)||0,0,100)/100
 function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
  const ud=mesh&&mesh.userData||{},e=clamp(Math.floor(Number(estagio)||0),0,4),p=clamp(Number(prog)||0,0,100);
  if(ud.fans){const n=e===0?2:e===1?5:e===2?8:ud.fans.length;ud.fans.forEach((fan,i)=>fan.visible=i<n)}
- if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.4+Math.min(1,Math.max(0,(p-62)/38))*(.6+(Number(rendimento)||0)/100*.6))}
+ if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.32+Math.min(1,Math.max(0,(p-62)/38))*(.46+(Number(rendimento)||0)/100*.28))}
 }
 function plantSeed(plot,e){
  const g=buildPlant(e.s);
@@ -3438,7 +3441,7 @@ function catchUpPlantas(elapsedSec){
    if(p.tipo==='grow'&&G.up.irrig&&pl.agua<.5)pl.agua=Math.min(1,pl.agua+dt*.4);
    if(p.tipo==='estufa'&&G.up.auto&&pl.agua<.45)pl.agua=Math.min(1,pl.agua+dt*.35);
    const sedeMul=p.indoor?1.25:(chovendo?.2:(.55+dayT*.85));
-   pl.agua=Math.max(0,pl.agua-dt*.022*(.6+(100-s.t.resistencia)/100*.9)*sedeMul);
+   pl.agua=Math.max(0,pl.agua-dt*PLANTA_DRENO_AGUA*(.6+(100-s.t.resistencia)/100*.9)*sedeMul);
    if(pl.adubOrg>0)pl.adubOrg=Math.max(0,pl.adubOrg-dt);
    if(pl.adubCres>0)pl.adubCres=Math.max(0,pl.adubCres-dt);
    if(pl.adubOrg<=0&&Math.random()<dt*.0022*(1.6-s.t.resistencia/100)&&pl.estagio>0&&!pl.praga)pl.praga=1;
@@ -3447,10 +3450,10 @@ function catchUpPlantas(elapsedSec){
    else if(pl.agua>.35&&!pl.praga)pl.saude=Math.min(1,pl.saude+dt*.013);
    const luzBase=p.indoor?(G.up.led?1.35:1.05):(isDay?(.35+dayT*.85):0);
    const luz=s.auto?Math.max(.82,luzBase):luzBase;
-   const aguaF=pl.agua<.1?0:Math.min(1,pl.agua*1.7);
+   const aguaF=PLANTA_AGUA_SECA+Math.min(1-PLANTA_AGUA_SECA,Math.max(0,pl.agua)*1.7);
    const ciclo=(s.auto?86:150)-s.t.ritmo*(s.auto?.45:.95);
    const fCres=pl.adubCres>0?1.45:1;
-   const taxa=(100/ciclo)*luz*aguaF*(.55+pl.saude*.45)*(pl.praga?.45:1)*fCres;
+   const taxa=(100/ciclo)*PLANTA_CRESCIMENTO_MULT*luz*aguaF*(.55+pl.saude*.45)*(pl.praga?.45:1)*fCres;
    if(pl.estagio<4)pl.prog=Math.min(100,pl.prog+taxa*dt);
    pl.estagio=estagioDe(pl.prog);
   }
@@ -3763,7 +3766,7 @@ function tick(){
   if(p.tipo==='grow'&&G.up.irrig&&pl.agua<.5)pl.agua=Math.min(1,pl.agua+dt*.4);
   if(p.tipo==='estufa'&&G.up.auto&&pl.agua<.45)pl.agua=Math.min(1,pl.agua+dt*.35);
   const sedeMul=p.indoor?1.25:(G.rain>0?.2:(.55+dayT*.85));
-  pl.agua=Math.max(0,pl.agua-dt*.022*(.6+(100-s.t.resistencia)/100*.9)*sedeMul);
+  pl.agua=Math.max(0,pl.agua-dt*PLANTA_DRENO_AGUA*(.6+(100-s.t.resistencia)/100*.9)*sedeMul);
   if(pl.adubOrg<=0&&Math.random()<dt*.0022*(1.6-s.t.resistencia/100)&&pl.estagio>0&&!pl.praga)pl.praga=1;
   if(pl.praga>0)pl.saude=Math.max(.12,pl.saude-dt*.03);
   if(pl.agua<.12)pl.saude=Math.max(.12,pl.saude-dt*.05*(1.4-s.t.resistencia/100));
@@ -3771,13 +3774,13 @@ function tick(){
   // autoflorescente fecha o ciclo pelo relógio dela, não pela luz
   const luzBase=p.indoor?(G.up.led?1.35:1.05):(isDay?(.35+dayT*.85):0);
   const luz=s.auto?Math.max(.82,luzBase):luzBase;
-  const aguaF=pl.agua<.1?0:Math.min(1,pl.agua*1.7);
+  const aguaF=PLANTA_AGUA_SECA+Math.min(1-PLANTA_AGUA_SECA,Math.max(0,pl.agua)*1.7);
   const ciclo=(s.auto?86:150)-s.t.ritmo*(s.auto?.45:.95);
   // adubos: buff temporário de ritmo e proteção do composto
   if(pl.adubCres>0)pl.adubCres=Math.max(0,pl.adubCres-dt);
   if(pl.adubOrg>0)pl.adubOrg=Math.max(0,pl.adubOrg-dt);
   const fCres=pl.adubCres>0?1.45:1;
-  const taxa=(100/ciclo)*luz*aguaF*(.55+pl.saude*.45)*(pl.praga?.45:1)*fCres;
+  const taxa=(100/ciclo)*PLANTA_CRESCIMENTO_MULT*luz*aguaF*(.55+pl.saude*.45)*(pl.praga?.45:1)*fCres;
   pl.ciclo=ciclo;
   if(pl.estagio<4)pl.prog=Math.min(100,pl.prog+taxa*dt);
   const est=estagioDe(pl.prog);

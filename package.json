@@ -14,6 +14,7 @@
     "test:reconexao": "node testes/test-reconexao-posicao.js",
     "test:clientes": "node testes/test-clientes-casa.js",
     "test:plantio": "node testes/test-plantio-proprio.js",
+    "test:crescimento": "node testes/test-crescimento.js",
     "test:colheita": "node testes/test-colheita-estoque.js",
     "test:entidades": "node testes/test-protecao-entidades.js",
     "test:audio": "node testes/test-audio-mixer.js",

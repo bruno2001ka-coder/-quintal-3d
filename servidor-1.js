@@ -83,6 +83,11 @@ const TIPO_PLOT = [
 ];
 const DAYLEN            = 600;                   // seg reais = 1 dia de jogo (igual o cliente)
 const GROW_MS           = 1000;                  // recalcula plantas a cada 1s
+// Crescimento agrícola: a água deve exigir atenção, não congelar a colheita.
+// O valor anterior esvaziava o reservatório em cerca de 50s e travava prog.
+const PLANTA_DRENO_AGUA = 0.0045;
+const PLANTA_AGUA_SECA = 0.35;                    // cresce devagar mesmo sem rega
+const PLANTA_CRESCIMENTO_MULT = 1.35;            // ciclo jogável sem esperar horas
 /* ───────── util ───────── */
 const num = (v, min, max, def = 0) => {
   const n = Number(v);
@@ -177,14 +182,14 @@ function crescer(pl, dt, clockMin, tipo, up) {
   }
   const chovendo = Math.random() < dt / 6000;
   const sede = chovendo ? .2 : (.55 + luz * .85);
-  pl.agua = Math.max(0, pl.agua - dt * .022 * (.6 + (100 - s.t.resistencia) / 100 * .9) * sede);
+  pl.agua = Math.max(0, pl.agua - dt * PLANTA_DRENO_AGUA * (.6 + (100 - s.t.resistencia) / 100 * .9) * sede);
   if (Math.random() < dt * .0022 * (1.6 - s.t.resistencia / 100) && pl.estagio > 0 && !pl.praga) pl.praga = 1;
   if (pl.praga) pl.saude = Math.max(.12, pl.saude - dt * .03);
   else if (pl.agua < .12) pl.saude = Math.max(.12, pl.saude - dt * .05 * (1.4 - s.t.resistencia / 100));
   else if (pl.agua > .35) pl.saude = Math.min(1, pl.saude + dt * .013);
-  const aguaF = pl.agua < .1 ? 0 : Math.min(1, pl.agua * 1.7);
+  const aguaF = PLANTA_AGUA_SECA + Math.min(1 - PLANTA_AGUA_SECA, Math.max(0, pl.agua) * 1.7);
   const ciclo = (s.auto ? 86 : 150) - s.t.ritmo * (s.auto ? .45 : .95);
-  const taxa = (100 / ciclo) * luz * aguaF * (.55 + pl.saude * .45) * (pl.praga ? .45 : 1);
+  const taxa = (100 / ciclo) * PLANTA_CRESCIMENTO_MULT * luz * aguaF * (.55 + pl.saude * .45) * (pl.praga ? .45 : 1);
   pl.prog = Math.min(100, pl.prog + taxa * dt);
   // 5 estágios: semente/broto/jovem/adulta/pronta — igual o cliente
   pl.estagio = pl.prog >= 100 ? 4 : pl.prog >= 75 ? 3 : pl.prog >= 50 ? 2 : pl.prog >= 25 ? 1 : 0;
