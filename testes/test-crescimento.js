@@ -40,8 +40,16 @@ assert.match(client, /if\(est===4\)\{toast\(`\$\{s\.nome\} pronta pra colher`/,
   'a mensagem de colheita só pode aparecer no estágio pronto');
 assert.doesNotMatch(client, /if\(est===3\)\{toast\(`\$\{s\.nome\} pronta pra colher`/,
   'o estágio adulto ainda não pode ser tratado como pronto');
-assert.match(client, /function escalaPlantaCultivada\(prog\)\{return \.07\+clamp\(Number\(prog\)\|\|0,0,100\)\/100\*\.65\}/,
-  'a escala deve crescer de muda pequena até uma planta adulta compacta');
+assert.match(client, /function escalaPlantaCultivada\(prog,mesh\)\{return mesh&&mesh\.userData&&mesh\.userData\.art\?1:\.07\+clamp\(Number\(prog\)\|\|0,0,100\)\/100\*\.65\}/,
+  'a escala deve manter o modo visual por estágio e o fallback procedural compacto');
+assert.match(client, /const PLANT_STAGE_ART=Object\.freeze\(\[/,
+  'o cliente deve declarar as artes dos cinco estágios');
+assert.match(client, /const mapa=plantArtTextures\[e\]\|\|null/,
+  'a planta deve trocar o mapa conforme o estágio authoritative');
+assert.match(client, /sp\.visible=true/,
+  'o sprite único deve permanecer visível conforme o estágio');
+assert.doesNotMatch(client, /ud\.art\.forEach\(\(sp,i\)=>\{sp\.visible=i===e;\}\)/,
+  'a planta não deve criar cinco sprites ocultos por instância');
 
 function simulaCiclo(segundos) {
   let prog = 0, agua = 1, saude = 1, relogio = 360;

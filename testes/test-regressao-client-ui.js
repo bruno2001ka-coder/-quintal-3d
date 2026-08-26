@@ -39,9 +39,9 @@ assert.match(html, /function linhasProducao\(lotes,limite=6\)/,
   'HUD e inventário devem usar uma renderização única dos estágios de produção');
 assert.match(html, /levados para a bancada do seu lote para secar/,
   'a confirmação de colheita deve explicar o destino da produção');
-assert.match(html, /function escalaPlantaCultivada\(prog\)/,
-  'a escala da planta deve ser compartilhada entre local e online');
-assert.match(html, /P\.mesh\.scale\.setScalar\(escalaPlantaCultivada\(progVis\)\)/,
+assert.match(html, /function escalaPlantaCultivada\(prog,mesh\)/,
+  'a escala da planta deve aceitar o modo de arte por estágio e permanecer compartilhada');
+assert.match(html, /P\.mesh\.scale\.setScalar\(escalaPlantaCultivada\(progVis,P\.mesh\)\)/,
   'o visual online deve usar a escala compartilhada');
 assert.match(html, /lote\.producaoMarkers/,
   'a bancada de cada lote deve ter marcadores próprios de produção');
@@ -110,5 +110,25 @@ for(const slug of geneticAssetSlugs){
  assert.ok(fs.existsSync(asset),`asset ausente: ${slug}.jpg`);
  assert.match(html,new RegExp(`/assets/geneticas/${slug}\\.jpg`),`asset não referenciado no HTML: ${slug}.jpg`);
 }
+const plantStageSlugs=['stage-0-semente','stage-1-broto','stage-2-vegetativa','stage-3-floracao','stage-4-pronta'];
+assert.match(html,/const PLANT_STAGE_ART=Object\.freeze\(\[/,
+ 'o cliente deve declarar o pacote de artes dos cinco estágios');
+assert.match(html,/function buildPlantArt\(s\)/,
+ 'a planta deve ter um construtor leve baseado em imagem por estágio');
+assert.match(html,/return s&&String\(s\.nome\)==='White Widow'\?buildPlantArt\(s\):buildPlantProcedural\(s\)/,
+ 'somente a genética com pacote aprovado deve usar as artes novas');
+for(const slug of plantStageSlugs){
+ const asset=path.join(__dirname,'..','public','assets','plantas-estagios','white-widow',`${slug}.webp`);
+ assert.ok(fs.existsSync(asset),`arte de estágio ausente: ${slug}.webp`);
+ assert.match(html,new RegExp(`/assets/plantas-estagios/white-widow/${slug}\\.webp`),`arte de estágio não referenciada: ${slug}.webp`);
+}
+assert.match(html,/g\.userData=\{art:sp,stageSprite:sp,artMats:\[mat\]/,
+ 'cada White Widow deve manter um único sprite compartilhado');
+assert.match(html,/const mapa=plantArtTextures\[e\]\|\|null/,
+ 'o estágio authoritative deve trocar somente o mapa do sprite');
+assert.match(html,/sp\.visible=true/,
+ 'o sprite único deve permanecer visível após aplicar o estágio');
+assert.doesNotMatch(html,/ud\.art\.forEach\(\(sp,i\)=>\{sp\.visible=i===e;\}\)/,
+ 'a planta não deve manter cinco sprites por instância');
 
 console.log('CLIENT_UI_REGRESSION_OK');

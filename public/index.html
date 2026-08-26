@@ -407,8 +407,15 @@ const BASE=[
  mkA('Northern Auto',     0x63a05a,{ritmo:86,rendimento:60,resistencia:86,aroma:50,brilho:50})];
 const GENETICA_ART=Object.freeze({
  'Northern Lights':'/assets/geneticas/northern-lights.jpg','White Widow':'/assets/geneticas/white-widow.jpg','Skunk #1':'/assets/geneticas/skunk-1.jpg','Hindu Kush':'/assets/geneticas/hindu-kush.jpg','Amnesia Haze':'/assets/geneticas/amnesia-haze.jpg','Sour Diesel':'/assets/geneticas/sour-diesel.jpg','Blue Dream':'/assets/geneticas/blue-dream.jpg','OG Kush':'/assets/geneticas/og-kush.jpg','Purple Haze':'/assets/geneticas/purple-haze.jpg','Jack Herer':'/assets/geneticas/jack-herer.jpg','Critical':'/assets/geneticas/critical.jpg','Gorilla Glue':'/assets/geneticas/gorilla-glue.jpg','LSD 25 Auto':'/assets/geneticas/lsd-25-auto.jpg','Auto 69':'/assets/geneticas/auto-69.jpg','Critical Auto':'/assets/geneticas/critical-auto.jpg','Northern Auto':'/assets/geneticas/northern-auto.jpg'
-});
-function artGenetica(s,cls='geneticArt'){
+  });
+ const PLANT_STAGE_ART=Object.freeze([
+  '/assets/plantas-estagios/white-widow/stage-0-semente.webp',
+  '/assets/plantas-estagios/white-widow/stage-1-broto.webp',
+  '/assets/plantas-estagios/white-widow/stage-2-vegetativa.webp',
+  '/assets/plantas-estagios/white-widow/stage-3-floracao.webp',
+  '/assets/plantas-estagios/white-widow/stage-4-pronta.webp'
+ ]);
+ function artGenetica(s,cls='geneticArt'){
  const nome=String(s&&s.nome||'');const src=GENETICA_ART[nome];
  return src?`<img class="${cls}" src="${src}" alt="${escaparHTML(nome)}" loading="lazy" decoding="async">`:`<span class="${cls}" style="background:${hex(s&&s.cor||0x385235)}"></span>`;
 }
@@ -552,7 +559,17 @@ renderer.setPixelRatio(Math.min(devicePixelRatio||1,cfgQual().pixel));
 renderer.shadowMap.enabled=cfgQual().sombras;renderer.shadowMap.type=cfgQual().tipo;
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.82;
-document.body.appendChild(renderer.domElement);
+ document.body.appendChild(renderer.domElement);
+ // Cinco texturas compartilhadas; cada planta cria apenas um Sprite visível.
+ // White Widow usa a sequência visual gerada; as demais genéticas continuam no
+ // modelo procedural até receberem seu próprio pacote, sem misturar fenótipos.
+ const plantArtLoader=new THREE.TextureLoader();
+ const plantArtTextures=PLANT_STAGE_ART.map(src=>{
+  const tex=plantArtLoader.load(src);
+  tex.encoding=THREE.sRGBEncoding;tex.minFilter=THREE.LinearFilter;
+  tex.magFilter=THREE.LinearFilter;tex.generateMipmaps=false;
+  return tex;
+ });
 const skyC=cv(4,256),skyT=T(skyC);
 const skyDome=new THREE.Mesh(new THREE.SphereGeometry(230,26,18),
  new THREE.MeshBasicMaterial({map:skyT,side:THREE.BackSide,depthWrite:false,fog:false}));
@@ -1714,7 +1731,7 @@ function makeFan(mat,scale,folhas=7,sombras=true){
  peciolo.rotation.x=-1.3;peciolo.position.set(0,-.05*scale,.05*scale);fan.add(peciolo);
  return fan;
 }
-function buildPlant(s){
+function buildPlantProcedural(s){
  const g=new THREE.Group();
  const lod=qualidade==='alto'?{nodes:5,folhas:7,sombras:true,camadas:4,calices:5,sparks:6}:qualidade==='medio'?{nodes:3,folhas:5,sombras:false,camadas:3,calices:3,sparks:3}:{nodes:2,folhas:3,sombras:false,camadas:2,calices:2,sparks:1};
  // folha: textura de nervura + leve brilho de cutícula. emissive baixinho na
@@ -1811,18 +1828,51 @@ function buildPlant(s){
   const bug=new THREE.Mesh(new THREE.SphereGeometry(.11,7,6),new THREE.MeshBasicMaterial({color:0xff6a3d}));
   bug.position.y=H+.5;bug.visible=false;g.add(bug);
   g.userData={buds,drop,bug,leafM,budM:bm,fans};return g}
+function buildPlantArt(s){
+ const g=new THREE.Group(),plane=1.55;
+ // Uma planta usa um único billboard. As cinco imagens são texturas
+ // compartilhadas e apenas o mapa do sprite troca quando o servidor muda o estágio.
+ const mat=new THREE.SpriteMaterial({map:plantArtTextures[0]||null,transparent:true,
+  depthWrite:false,depthTest:true,alphaTest:.035,color:0xffffff});
+ const sp=new THREE.Sprite(mat);sp.center.set(.5,0);sp.scale.set(plane,plane,1);
+ sp.position.set(0,0,0);g.add(sp);
+ // O código antigo usa leafM para refletir saúde. O proxy mantém a mesma
+ // resposta de cor sem criar materiais ou geometrias por estágio.
+ const leafM={color:{setHSL:(h,ss,l)=>mat.color.setHSL(h,Math.min(1,ss*.45+.12),Math.min(.92,l*.9+.1))}};
+ const drop=new THREE.Mesh(new THREE.SphereGeometry(.075,6,4),new THREE.MeshBasicMaterial({color:0x5fb8ff}));
+ drop.position.y=1.48;drop.visible=false;g.add(drop);
+ const bug=new THREE.Mesh(new THREE.SphereGeometry(.085,6,4),new THREE.MeshBasicMaterial({color:0xff6a3d}));
+ bug.position.y=1.48;bug.visible=false;g.add(bug);
+ g.userData={art:sp,stageSprite:sp,artMats:[mat],artPlane:plane,leafM,buds:null,drop,bug,fans:[]};
+ return g;
+}
+function buildPlant(s){
+ return s&&String(s.nome)==='White Widow'?buildPlantArt(s):buildPlantProcedural(s);
+}
 // Escala e silhueta são compartilhadas pelo cliente local e pelo espelho online.
 // O servidor continua decidindo prog/estágio; isto só impede que a planta nasça
 // com tamanho adulto e deixa os leques aparecerem progressivamente.
-function escalaPlantaCultivada(prog){return .07+clamp(Number(prog)||0,0,100)/100*.65}
+function escalaPlantaCultivada(prog,mesh){return mesh&&mesh.userData&&mesh.userData.art?1:.07+clamp(Number(prog)||0,0,100)/100*.65}
 function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
  const ud=mesh&&mesh.userData||{},e=clamp(Math.floor(Number(estagio)||0),0,4),p=clamp(Number(prog)||0,0,100);
+ if(ud.art){
+  // Uma única imagem transparente fica visível por estágio. O conteúdo de cada
+  // WebP já tem altura padronizada; somente o mapa muda quando o servidor manda
+  // outro estágio, em vez de manter cinco sprites por planta.
+  const sp=ud.stageSprite||ud.art;
+  const mapa=plantArtTextures[e]||null;
+  if(sp.material.map!==mapa){sp.material.map=mapa;sp.material.needsUpdate=true}
+  sp.visible=true;
+  const fase=e===4?1:clamp((p-e*25)/25,0,1);const f=.94+fase*.06;
+  sp.scale.set(ud.artPlane*f,ud.artPlane*f,1);
+  return;
+ }
  if(ud.fans){const n=e===0?2:e===1?4:e===2?8:ud.fans.length;ud.fans.forEach((fan,i)=>fan.visible=i<n)}
  if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.24+Math.min(1,Math.max(0,(p-62)/38))*(.40+(Number(rendimento)||0)/100*.22))}
 }
 function plantSeed(plot,e){
  const g=buildPlant(e.s);
-  g.position.set(plot.x,plot.baseY,plot.z);g.scale.setScalar(escalaPlantaCultivada(0));scene.add(g);
+  g.position.set(plot.x,plot.baseY,plot.z);g.scale.setScalar(escalaPlantaCultivada(0,g));scene.add(g);
  plot.plant={s:e.s,prog:0,agua:1,saude:1,praga:0,estagio:0,mesh:g,sway:Math.random()*6,
   adubOrg:0,adubCres:0,adubFlor:false}}
 
@@ -3833,12 +3883,12 @@ function tick(){
   if(est!==pl.estagio){pl.estagio=est;
    if(est===4){toast(`${s.nome} pronta pra colher`);blip(880,.16,'triangle',.06)}}
   const m=pl.mesh,ud=m.userData;
-  m.scale.setScalar(escalaPlantaCultivada(pl.prog));
+  m.scale.setScalar(escalaPlantaCultivada(pl.prog,m));
   aplicarFormaPlanta(m,est,pl.prog,s.t.rendimento);
   const hsl={h:0,s:0,l:0};new THREE.Color(s.cor).getHSL(hsl);
   ud.leafM.color.setHSL(hsl.h*(.55+pl.saude*.45),hsl.s*(.45+pl.saude*.55),hsl.l*(.6+pl.saude*.4));
-  ud.drop.visible=pl.agua<.3&&!pl.praga;ud.drop.position.y=2+Math.sin(t*3)*.09;
-  ud.bug.visible=pl.praga>0;ud.bug.position.y=2+Math.sin(t*6)*.12;
+  ud.drop.visible=pl.agua<.3&&!pl.praga;ud.drop.position.y=1.48+Math.sin(t*3)*.06;
+  ud.bug.visible=pl.praga>0;ud.bug.position.y=1.48+Math.sin(t*6)*.08;
   pl.sway+=dt;m.rotation.z=Math.sin(pl.sway*1.1)*.03*(G.rain>0?2.4:1);
   // cada leque balança na sua própria fase — é isso que tira o aspecto de plástico
   if(ud.fans){const vento=G.rain>0?2.6:1;
@@ -3875,15 +3925,15 @@ function tick(){
     if(!Number.isFinite(P.visualProg))P.visualProg=Number(d.prog)||0;
     P.visualProg+=(Math.max(0,Math.min(100,Number(d.prog)||0))-P.visualProg)*Math.min(1,dt*6);
     const progVis=Math.max(0,Math.min(100,P.visualProg));
-    P.mesh.scale.setScalar(escalaPlantaCultivada(progVis));
+    P.mesh.scale.setScalar(escalaPlantaCultivada(progVis,P.mesh));
     const ud=P.mesh.userData||{};
     aplicarFormaPlanta(P.mesh,d.estagio,progVis,d.s&&d.s.t?d.s.t.rendimento:0);
     if(ud.leafM&&d.s&&d.s.cor){
      const hsl={h:0,s:0,l:0};new THREE.Color(d.s.cor).getHSL(hsl);
      const saude=Math.max(0,Math.min(1,Number(d.saude)||0));
      ud.leafM.color.setHSL(hsl.h*(.55+saude*.45),hsl.s*(.45+saude*.55),hsl.l*(.6+saude*.4));}
-    if(ud.drop){ud.drop.visible=d.agua<.3&&!d.praga;ud.drop.position.y=2+Math.sin(t*3)*.09}
-    if(ud.bug){ud.bug.visible=d.praga>0;ud.bug.position.y=2+Math.sin(t*6)*.12}
+    if(ud.drop){ud.drop.visible=d.agua<.3&&!d.praga;ud.drop.position.y=1.48+Math.sin(t*3)*.06}
+    if(ud.bug){ud.bug.visible=d.praga>0;ud.bug.position.y=1.48+Math.sin(t*6)*.08}
     P.mesh.rotation.z=Math.sin(t*1.1)*.03*(G.rain>0?2.4:1);
     // planta dos outros também balança, pra não parecer congelada
     if(ud.fans){
@@ -4564,7 +4614,7 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
   g2.position.set(P.x,P.baseY,P.z);scene.add(g2);
   P.mesh=g2;P.meshEstagio=dados.estagio;P.meshSeedId=seedId;
  }
-  if(P.mesh){P.mesh.scale.setScalar(escalaPlantaCultivada(dados.prog));aplicarFormaPlanta(P.mesh,dados.estagio,dados.prog,dados.s&&dados.s.t?dados.s.t.rendimento:0)}
+  if(P.mesh){P.mesh.scale.setScalar(escalaPlantaCultivada(dados.prog,P.mesh));aplicarFormaPlanta(P.mesh,dados.estagio,dados.prog,dados.s&&dados.s.t?dados.s.t.rendimento:0)}
 }
 
 /* ═════════ MULTIPLAYER EM TEMPO REAL — WebSocket ═════════ */
