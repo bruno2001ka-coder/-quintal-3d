@@ -1,6 +1,7 @@
 const fs = require('node:fs');
-const clientPath = fs.existsSync('quintal-cidade.html') ? 'quintal-cidade.html' : 'index.html';
-if (!fs.existsSync(clientPath)) throw new Error('client HTML not found: expected quintal-cidade.html or index.html');
+const path = require('node:path');
+const clientPath = path.join(__dirname, 'public', 'index.html');
+if (!fs.existsSync(clientPath)) throw new Error('client HTML not found: expected public/index.html');
 const html = fs.readFileSync(clientPath, 'utf8');
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
   .map(match => match[1])

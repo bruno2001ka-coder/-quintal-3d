@@ -4370,10 +4370,17 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
 }
 
 /* ═════════ MULTIPLAYER EM TEMPO REAL — WebSocket ═════════ */
-// Servidor autoritativo rodando no Render. Tudo aqui é defensivo: se a
-// conexão falhar, cair ou nunca acontecer, o jogo sozinho continua
-// funcionando normal — multiplayer nunca pode travar o modo solo.
-const MP_URL='wss://quintal-3d.onrender.com';
+// No Web Service do Render, frontend e backend usam o mesmo host. A exceção
+// é o GitHub Pages, que continua apontando para o serviço WebSocket do Render.
+// Se a conexão falhar, o cliente exibe estado sem conexão e não inventa
+// progresso authoritative local.
+const MP_URL=(()=>{
+ const remoto='wss://quintal-3d.onrender.com';
+ if(typeof location==='undefined')return remoto;
+ const local=['localhost','127.0.0.1','[::1]'].includes(location.hostname);
+ if(local||location.hostname.endsWith('.onrender.com'))return (location.protocol==='https:'?'wss://':'ws://')+location.host;
+ return remoto;
+})();
 let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0;
 let mpInputSeq=0,mpLastCorrectionSeq=0,mpJumpQueued=false;
 let mpToken='',mpAvatarId='carmo';

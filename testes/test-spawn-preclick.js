@@ -1,9 +1,10 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const assert = require('assert');
 
-const html = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 const loteInicio = html.indexOf("msg.t==='lote_atribuido'");
 const loteFim = html.indexOf("msg.t==='lote_update'", loteInicio);
 assert(loteInicio >= 0 && loteFim > loteInicio, 'handler lote_atribuido não encontrado');

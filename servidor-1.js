@@ -41,7 +41,7 @@ const fs = require('fs');
 const path = require('path');
 
 /* ───────── configuração ───────── */
-const PORT              = process.env.PORT || 8080;
+const PORT              = Number(process.env.PORT) || 8080;
 const TICK_HZ           = 20;                    // ticks por segundo
 const TICK_MS           = 1000 / TICK_HZ;
 const AOI_RAIO          = 70;                    // metros: só vê quem está perto
@@ -1478,8 +1478,69 @@ function dinamicosNaArea(x, z, raio = AOI_RAIO) {
   return out;
 }
 
+const PUBLIC_DIR = path.resolve(__dirname, 'public');
+const MIME_TYPES = Object.freeze({
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.wasm': 'application/wasm'
+});
+function caminhoPublico(url) {
+  let pathname;
+  try { pathname = decodeURIComponent(new URL(url || '/', 'http://localhost').pathname); }
+  catch (_) { return null; }
+  const relativo = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const absoluto = path.resolve(PUBLIC_DIR, relativo);
+  if (absoluto !== PUBLIC_DIR && !absoluto.startsWith(PUBLIC_DIR + path.sep)) return null;
+  return absoluto;
+}
+function servirArquivoPublico(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8', Allow: 'GET, HEAD' });
+    res.end('method not allowed');
+    return;
+  }
+  const arquivo = caminhoPublico(req.url);
+  if (!arquivo) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('bad request');
+    return;
+  }
+  fs.stat(arquivo, (erro, info) => {
+    if (erro || !info.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+      return;
+    }
+    const ext = path.extname(arquivo).toLowerCase();
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+      'Content-Length': info.size,
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600'
+    });
+    if (req.method === 'HEAD') { res.end(); return; }
+    const stream = fs.createReadStream(arquivo);
+    stream.on('error', () => { if (!res.headersSent) res.writeHead(500); res.end(); });
+    stream.pipe(res);
+  });
+}
+
 const server = http.createServer((req, res) => {
-  if (req.url === '/metrics') {
+  let pathname = '/';
+  try { pathname = new URL(req.url || '/', 'http://localhost').pathname; } catch (_) { pathname = ''; }
+  if (pathname === '/metrics') {
     const dt = (agora() - metricas.desdeT) / 1000;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -1501,13 +1562,12 @@ const server = http.createServer((req, res) => {
     }, null, 2));
     return;
   }
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end(`Quintal 3D — servidor no ar
-jogadores: ${jogadores.size}
-tick: ${tickAtual} (${TICK_HZ}Hz)
-lotes ocupados: ${lotes.filter(l => l.donoChave).length}/${NUM_LOTES}
-uptime: ${Math.round(process.uptime())}s
-`);
+  if (pathname === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, tick: tickAtual, banco: dbTipo }));
+    return;
+  }
+  servirArquivoPublico(req, res);
 });
 
 const wss = new WebSocketServer({ server, maxPayload: MAX_PAYLOAD });
@@ -2505,6 +2565,6 @@ process.on('uncaughtException', e => {
 });
 
 iniciarBanco();
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Quintal 3D — servidor autoritativo na porta ${PORT} · tick ${TICK_HZ}Hz · AOI ${AOI_RAIO}m`);
 });

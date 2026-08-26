@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: quintal-3d
+    runtime: node
+    plan: free
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: AUTH_SECRET
+        generateValue: true

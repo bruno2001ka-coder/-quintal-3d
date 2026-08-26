@@ -34,12 +34,12 @@ O `package.json` agora aponta para `servidor-1.js` e o script `npm start` execut
 | Alteração server-side de portão | Aprovado |
 | Snapshot de clientes-NPC server-side | Aprovado |
 
-O teste automatizado está em `test-seguranca.js`.
+O teste automatizado principal está em `testes/test-seguranca.js`; os demais contratos ficam nos testes irmãos dessa pasta.
 
 ## Como executar
 
 ```bash
-npm install
+npm ci
 AUTH_SECRET='defina-um-segredo-longo-e-aleatorio' npm start
 ```
 

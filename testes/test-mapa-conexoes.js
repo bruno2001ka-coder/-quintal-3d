@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const html = fs.readFileSync('index.html', 'utf8');
+const path = require('node:path');
+const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
 function extrairLiteral(nome) {
   const re = new RegExp(`const\\s+${nome}\\s*=\\s*([^;]+);`);

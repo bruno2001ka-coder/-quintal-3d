@@ -56,13 +56,13 @@ No celular, o botão **MAPA** abre o mapa completo. Ele mostra fundos, cidade, e
 
 ### 4.1 Conexão
 
-O cliente usa a URL configurada em `index.html`:
+O cliente usa a URL configurada em `public/index.html`:
 
 ```text
 wss://quintal-3d.onrender.com
 ```
 
-O protocolo começa com `hello`. O cliente envia nome, avatar, token de sessão, identificação do aparelho e semente inicial visual. O servidor responde com:
+Quando o cliente é servido pelo Render, ele troca automaticamente por WebSocket same-origin; o endereço acima permanece como fallback para o GitHub Pages. O protocolo começa com `hello`. O cliente envia nome, avatar, token de sessão, identificação do aparelho e semente inicial visual. O servidor responde com:
 
 1. `sessao`, contendo token HMAC e chave persistente da carteira;
 2. `lote_atribuido`, contendo lote, posição de nascimento e portão;
@@ -248,35 +248,34 @@ O mapa mobile é um painel de navegação, não apenas uma rota textual. Ele mos
 
 ```text
 quintal-repo/
-├── index.html                     # cliente 3D, HUD, touch, mapa e WebSocket
-├── servidor-1.js                  # servidor authoritative Node/WebSocket
+├── public/
+│   └── index.html                 # cliente 3D, HUD, touch, mapa e WebSocket
+├── servidor-1.js                  # servidor authoritative HTTP/Node/WebSocket
 ├── package.json                   # scripts, dependências e entrypoint
-├── package-lock.json              # versões instaladas pelo npm ci
+├── .gitignore                     # dependências, segredos, bancos e logs locais
+├── render.yaml                    # configuração declarativa opcional do Render
 ├── .github/
 │   └── workflows/
 │       └── security.yml           # CI de sintaxe, segurança, carga e regressão
-├── test-seguranca.js              # handshake, validações e segurança básica
-├── test-multiplayer-aoi.js        # área de interesse e snapshots
-├── test-carga.js                  # carga com múltiplos clientes
-├── test-reconexao-posicao.js      # queda e retomada de posição
-├── test-clientes-casa.js          # clientes vinculados por lote
-├── test-plantio-proprio.js        # plantio no lote do jogador
-├── test-protecao-entidades.js     # proteção da casa e entidades privadas
-├── test-movimento-fluido.js       # sequência, movimento e reconexão
-├── test-mapa-conexoes.js          # conexão estrutural do mapa
-├── test-audio-mixer.js            # mixer, mudo e recuperação de áudio
-├── test-regressao-p0.js           # regressão dos exploits P0
-├── test-regressao-p1.js           # sessão, token e contratos P1
+├── testes/
+│   ├── test-seguranca.js          # handshake, validações e segurança básica
+│   ├── test-multiplayer-aoi.js    # área de interesse e snapshots
+│   ├── test-carga.js              # carga com múltiplos clientes
+│   ├── test-clientes-casa.js      # clientes vinculados por lote
+│   ├── test-plantio-proprio.js    # plantio no lote do jogador
+│   ├── test-protecao-entidades.js # proteção da casa e entidades privadas
+│   ├── test-audio-mixer.js        # mixer, mudo e recuperação de áudio
+│   ├── test-http-static.js        # HTTP, public e health check
+│   ├── test-regressao-p0.js       # regressão dos exploits P0
+│   ├── test-regressao-p1.js       # sessão, token e contratos P1
+│   └── ...                        # demais regressões multiplayer
 ├── check-client-syntax.js         # extrai/verifica JavaScript inline do cliente
-├── AUDITORIA_COMPLETA.md          # auditoria histórica
-├── AUDITORIA_EXTREMA_FINAL_20260825.md
-│                                  # auditoria extrema e riscos encontrados
-├── AUDITORIA_TRIPLA_20260825.md   # auditoria anterior de mapa/multiplayer
-├── CORRECOES_APLICADAS.md         # histórico de correções
-├── DIAGNOSTICO_PLANTAS_DESEMPENHO.md
-├── VULNERABILIDADES_SERVIDOR.md
-├── RECOMENDACOES_PRODUCAO.md
-└── VISAO_GERAL.md                 # este documento
+├── docs/
+│   ├── AUDITORIA_COMPLETA.md      # auditoria histórica
+│   ├── CORRECOES_APLICADAS.md     # histórico de correções
+│   ├── DIAGNOSTICO_PLANTAS_DESEMPENHO.md
+│   ├── VULNERABILIDADES_SERVIDOR.md
+│   └── VISAO_GERAL.md             # este documento
 ```
 
 O projeto ainda possui um cliente monolítico. Isso facilita publicar um HTML único, mas aumenta o risco de código legado permanecer ativo junto de implementações novas. Ao alterar um sistema, deve existir uma única fonte de verdade: cliente para visualização/predição e servidor para estado/protocolo.
@@ -295,11 +294,7 @@ No diretório do projeto:
 npm ci
 ```
 
-Para um ambiente de desenvolvimento sem lockfile atualizado, pode-se usar:
-
-```bash
-npm install
-```
+O `package-lock.json` oficial é versionado para tornar a árvore de dependências reprodutível no Render, na CI e localmente. Se o lockfile precisar ser regenerado de forma intencional, use `npm install --package-lock-only` e revise o diff antes do commit.
 
 ### 11.3 Iniciar o servidor authoritative
 
@@ -321,35 +316,17 @@ $env:DB_PATH="./quintal-dev.db"
 npm start
 ```
 
-O servidor WebSocket fica em `ws://127.0.0.1:8800` e as métricas ficam em:
-
-```text
-http://127.0.0.1:8800/metrics
-```
-
-O cliente publicado aponta para `wss://quintal-3d.onrender.com`. Para testar localmente, altere temporariamente `MP_URL` em `index.html` para:
-
-```js
-const MP_URL='ws://127.0.0.1:8800';
-```
-
-Não publique essa alteração local se o destino oficial continuar sendo Render.
+O servidor HTTP/WebSocket fica em `http://127.0.0.1:8800`, as métricas ficam em `http://127.0.0.1:8800/metrics` e o health check em `http://127.0.0.1:8800/healthz`. O cliente escolhe automaticamente WebSocket same-origin em localhost e no Render; no GitHub Pages usa o endpoint seguro do Render. Não é necessário editar o HTML para testar localmente.
 
 ### 11.4 Servir o cliente
 
-O servidor authoritative expõe a rota de métricas e o WebSocket. Para abrir o HTML localmente, use um servidor estático separado na raiz do projeto. Por exemplo, com Python:
-
-```bash
-python3 -m http.server 8810
-```
-
-Depois abra:
+O próprio `servidor-1.js` entrega `public/index.html` na rota `/`, além de manter o WebSocket no mesmo listener. Com `npm start` ativo, abra:
 
 ```text
-http://127.0.0.1:8810/index.html
+http://127.0.0.1:8800/
 ```
 
-O navegador deve conseguir acessar o WebSocket configurado em `MP_URL`. Se estiver usando HTTPS, use `wss://`; navegadores normalmente bloqueiam `ws://` inseguro a partir de páginas HTTPS.
+O navegador deve conseguir acessar o WebSocket same-origin. Em páginas HTTPS o cliente usa `wss://`; em localhost ele usa `ws://` local.
 
 ### 11.5 Variáveis importantes
 
@@ -380,6 +357,7 @@ npm test
 Os demais scripts são:
 
 ```bash
+npm run test:http
 npm run test:aoi
 npm run test:carga
 npm run test:reconexao
@@ -389,6 +367,7 @@ npm run test:entidades
 npm run test:audio
 npm run test:movimento
 npm run test:mapa
+npm run test:spawn
 ```
 
 O teste P0 usa um servidor temporário e verifica catálogo, genética e altura:
@@ -407,12 +386,12 @@ Para validar sintaxe do cliente e servidor:
 
 ```bash
 node --check servidor-1.js
-node --check test-regressao-p0.js
-node --check test-regressao-p1.js
+node --check testes/test-regressao-p0.js
+node --check testes/test-regressao-p1.js
 node check-client-syntax.js
 ```
 
-A integração contínua executa `npm ci`, checa sintaxe, inicia servidores isolados em portas diferentes, roda segurança, AOI, carga, reconexão, clientes, plantio, entidades, movimento, mapa e áudio. Um teste verde confirma apenas os contratos cobertos; persistência real, navegador físico e desempenho de GPU mobile ainda precisam de validação própria.
+A integração contínua executa `npm ci`, checa sintaxe, valida HTTP/public, inicia servidores isolados em portas diferentes e roda segurança, AOI, carga, reconexão, clientes, plantio, entidades, movimento, mapa, áudio e spawn. Um teste verde confirma apenas os contratos cobertos; persistência real, navegador físico e desempenho de GPU mobile ainda precisam de validação própria.
 
 ## 13. Regra de evolução do código
 
@@ -442,7 +421,7 @@ Em particular, não devem coexistir:
 
 ## Referências
 
-[1]: ./index.html "Cliente Three.js do Quintal 3D"
+[1]: ./public/index.html "Cliente Three.js do Quintal 3D"
 
 [2]: ./servidor-1.js "Servidor authoritative Node/WebSocket"
 

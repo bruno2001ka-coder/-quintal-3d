@@ -30,7 +30,7 @@ class FakeContext {
   close() { this.state = 'closed'; return Promise.resolve(); }
 }
 
-const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 const audio = html.match(/let actx=null,sfxMaster=null,noiseBuffer=null;[\s\S]*?(?=\/\* ═════════ ARMAS)/)?.[0];
 assert.ok(audio, 'bloco de áudio deve existir');
 const context = {

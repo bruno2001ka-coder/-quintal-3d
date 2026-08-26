@@ -27,19 +27,19 @@ jobs:
       - name: Check syntax
         run: |
           node --check servidor-1.js
-          node --check test-seguranca.js
-          node --check test-regressao-p0.js
-          node --check test-regressao-p1.js
-          node --check test-multiplayer-aoi.js
-          node --check test-carga.js
-          node --check test-reconexao-posicao.js
-          node --check test-clientes-casa.js
-          node --check test-plantio-proprio.js
-          node --check test-protecao-entidades.js
-          node --check test-audio-mixer.js
-          node --check test-movimento-fluido.js
-          node --check test-mapa-conexoes.js
-          node --check test-spawn-preclick.js
+          node --check testes/test-seguranca.js
+          node --check testes/test-regressao-p0.js
+          node --check testes/test-regressao-p1.js
+          node --check testes/test-multiplayer-aoi.js
+          node --check testes/test-carga.js
+          node --check testes/test-reconexao-posicao.js
+          node --check testes/test-clientes-casa.js
+          node --check testes/test-plantio-proprio.js
+          node --check testes/test-protecao-entidades.js
+          node --check testes/test-audio-mixer.js
+          node --check testes/test-movimento-fluido.js
+          node --check testes/test-mapa-conexoes.js
+          node --check testes/test-spawn-preclick.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
       - name: Run isolated regression servers and tests
@@ -68,6 +68,7 @@ jobs:
           PORT=8807 DB_PATH="$RUNNER_TEMP/quintal-8807.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8807.log" 2>&1 &
           pids+=("$!")
           sleep 2
+          TEST_HTTP=http://127.0.0.1:8800 npm run test:http
           TEST_WS=ws://127.0.0.1:8800 npm test
           TEST_WS=ws://127.0.0.1:8800 npm run test:p0
           TEST_WS=ws://127.0.0.1:8800 npm run test:p1

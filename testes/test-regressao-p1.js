@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
 
 const URL = process.env.TEST_WS || 'ws://127.0.0.1:8920';
 const SECRET = process.env.AUTH_SECRET || 'p1-regressao';
@@ -48,8 +49,8 @@ function connect(token, nome) {
   assert.match(recusaDuplicada.motivo, /já conectada/i);
   a.ws.close(); b.ws.close();
 
-  const servidor = fs.readFileSync('servidor-1.js', 'utf8');
-  const cliente = fs.readFileSync('index.html', 'utf8');
+  const servidor = fs.readFileSync(path.join(__dirname, '..', 'servidor-1.js'), 'utf8');
+  const cliente = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.match(servidor, /carteiraPronta/);
   assert.match(servidor, /j\.ultimoMov\s*=\s*agora\(\)\s*-\s*250/);
   assert.match(servidor, /rotaSaidaCliente\(lotes\[contexto\.cliente\.loteIndex\]\)/);

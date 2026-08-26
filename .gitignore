@@ -1,0 +1,11 @@
+node_modules/
+.npm/
+*.log
+.env
+.env.*
+!.env.example
+.quintal-session-secret
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
