@@ -1,6 +1,7 @@
 name: Security and regression tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
