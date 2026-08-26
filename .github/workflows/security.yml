@@ -35,6 +35,7 @@ jobs:
           node --check testes/test-reconexao-posicao.js
           node --check testes/test-clientes-casa.js
           node --check testes/test-plantio-proprio.js
+          node --check testes/test-colheita-estoque.js
           node --check testes/test-protecao-entidades.js
           node --check testes/test-audio-mixer.js
           node --check testes/test-movimento-fluido.js
@@ -87,5 +88,6 @@ jobs:
           npm run test:spawn
           npm run test:client-ui
           TEST_PERSIST_PORT=8808 npm run test:persistencia
+          npm run test:colheita
           npm run test:render-config
           for port in 8800 8801 8802 8803 8804 8805 8806 8807; do cat "$RUNNER_TEMP/quintal-$port.log"; done

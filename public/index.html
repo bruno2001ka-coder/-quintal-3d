@@ -43,6 +43,13 @@ body.touch #zona{top:calc(8px + clamp(30px,8.5vmin,40px) + 66px)}
 #stock{top:96px;right:10px;text-align:right;max-width:200px;font-size:10.5px}
 #stock .ttl{color:#8fe063;letter-spacing:2px;font-size:9px;opacity:.8}
 #stock i{color:#e8d264;font-style:normal}
+#stock .stockLine{display:block;white-space:nowrap;line-height:1.45}
+#stock .stockLine b{font-size:9px;letter-spacing:.6px;margin-right:3px}
+#stock .stockLine.sec b{color:#d8a05a}
+#stock .stockLine.cura b{color:#b98ee6}
+#stock .stockLine.pronto b{color:#8fe063}
+.productionSummary{line-height:1.55}
+.productionSummary .stockLine{display:block}
 #zone{top:92px;left:10px;font-size:10px;letter-spacing:2px;opacity:.8}
 #zone b{color:#8fe063}
 #routeHint{top:119px;left:10px;font-size:10px;letter-spacing:.7px;color:#e8d264;opacity:.9;max-width:250px}
@@ -212,7 +219,7 @@ body.touch #prompt{font-size:clamp(11px,2.8vmin,16px);bottom:calc(var(--pad) + v
   <div class="panel" id="stats"><span class="cash">R$ <b id="cash">0</b></span><br>
     plantas <b id="alive">0</b> · lotes <b id="lotes">0</b> · pontos <b id="terr">0</b>/10<b id="cliCount" style="color:#e8d264"></b><br>nível <b id="lvl">1</b></div>
   <div class="panel" id="daybox">dia <b id="day">1</b><br><span class="h" id="hour">06:00</span><br><span id="wx" style="opacity:.6"></span></div>
-  <div class="panel" id="stock"><span class="ttl">ESTOQUE PRONTO</span><div id="stockList">vazio</div></div>
+  <div class="panel" id="stock"><span class="ttl">PRODUÇÃO DO LOTE</span><div id="stockList">sem produção</div></div>
   <div class="panel" id="zone"></div>
   <div class="panel" id="routeHint"></div>
   <div class="panel" id="vitals">VIDA<div id="hpbar"><i></i></div>COLETE<div id="armbar"><i></i></div>
@@ -1713,14 +1720,23 @@ function buildPlant(s){
    sp.position.set(Math.cos(a)*rr,rnd(0,c.alt),Math.sin(a)*rr);cola.add(sp)}
   cola.position.set(c.x,c.y,c.z);buds.add(cola)});
  buds.visible=false;g.add(buds);
- const drop=new THREE.Mesh(new THREE.SphereGeometry(.12,8,7),new THREE.MeshBasicMaterial({color:0x5fb8ff}));
- drop.scale.set(1,1.35,1);drop.position.y=H+.5;drop.visible=false;g.add(drop);
- const bug=new THREE.Mesh(new THREE.SphereGeometry(.11,7,6),new THREE.MeshBasicMaterial({color:0xff6a3d}));
- bug.position.y=H+.5;bug.visible=false;g.add(bug);
- g.userData={buds,drop,bug,leafM,budM:bm,fans};return g}
+  const drop=new THREE.Mesh(new THREE.SphereGeometry(.12,8,7),new THREE.MeshBasicMaterial({color:0x5fb8ff}));
+  drop.scale.set(1,1.35,1);drop.position.y=H+.5;drop.visible=false;g.add(drop);
+  const bug=new THREE.Mesh(new THREE.SphereGeometry(.11,7,6),new THREE.MeshBasicMaterial({color:0xff6a3d}));
+  bug.position.y=H+.5;bug.visible=false;g.add(bug);
+  g.userData={buds,drop,bug,leafM,budM:bm,fans};return g}
+// Escala e silhueta são compartilhadas pelo cliente local e pelo espelho online.
+// O servidor continua decidindo prog/estágio; isto só impede que a planta nasça
+// com tamanho adulto e deixa os leques aparecerem progressivamente.
+function escalaPlantaCultivada(prog){return .10+clamp(Number(prog)||0,0,100)/100*.82}
+function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
+ const ud=mesh&&mesh.userData||{},e=clamp(Math.floor(Number(estagio)||0),0,4),p=clamp(Number(prog)||0,0,100);
+ if(ud.fans){const n=e===0?2:e===1?5:e===2?8:ud.fans.length;ud.fans.forEach((fan,i)=>fan.visible=i<n)}
+ if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.4+Math.min(1,Math.max(0,(p-62)/38))*(.6+(Number(rendimento)||0)/100*.6))}
+}
 function plantSeed(plot,e){
  const g=buildPlant(e.s);
- g.position.set(plot.x,plot.baseY,plot.z);g.scale.setScalar(.12);scene.add(g);
+  g.position.set(plot.x,plot.baseY,plot.z);g.scale.setScalar(escalaPlantaCultivada(0));scene.add(g);
  plot.plant={s:e.s,prog:0,agua:1,saude:1,praga:0,estagio:0,mesh:g,sway:Math.random()*6,
   adubOrg:0,adubCres:0,adubFlor:false}}
 
@@ -2159,7 +2175,8 @@ function aplicarEstado(d){
   if(d.up){const anteriores=Object.assign({},G.up);G.up=Object.assign({vasos:false,led:false,rack:false,placa:false,auto:false,irrig:false},d.up);
    Object.keys(G.up).forEach(k=>{if(G.up[k]&&!anteriores[k]&&typeof aplicarVisualMelhoria==='function')aplicarVisualMelhoria(k)})}
  renderSeeds();updHUD();renderStock();
- if($('banca')&&$('banca').classList.contains('on'))renderBanca();
+  if($('banca')&&$('banca').classList.contains('on'))renderBanca();
+  if(Number.isInteger(meuLoteIndex))atualizarMarcadoresBancada(lotesOnline[meuLoteIndex]);
 }
 function bankAdd(s,n){ /* ETAPA B: quem adiciona semente é o servidor */ }
 function libAll(){const m=new Map();BASE.forEach(s=>m.set(s.id,s));
@@ -2176,17 +2193,40 @@ function renderSeeds(){const el=$('seeds');el.innerHTML='';
   d.onclick=()=>{G.sel=i;renderSeeds()};el.appendChild(d)})}
 const barsHTML=s=>'<div class="bars">'+TRAITS.map(t=>`<i><b style="width:${s.t[t.k]}%"></b></i>`).join('')+'</div>';
 const traitLine=s=>TRAITS.map(t=>`${t.n} ${s.t[t.k]}`).join(' · ');
+const ESTAGIO_UI={sec:['SECANDO','#d8a05a'],cura:['CURANDO','#b98ee6'],pronto:['PRONTO','#8fe063']};
+function linhasProducao(lotes,limite=6){
+ const itens=(Array.isArray(lotes)?lotes:[]).filter(l=>l&&ESTAGIO_UI[l.stage]);
+ if(!itens.length)return '';
+ return itens.slice(0,limite).map(l=>{
+  const e=ESTAGIO_UI[l.stage],nome=escaparHTML(String(l.s&&l.s.nome||'produção').split(/\s+/)[0]);
+  const qtd=Math.max(0,Math.floor(Number(l.qtd)||0));
+  return `<span class="stockLine ${l.stage}"><b style="color:${e[1]}">${e[0]}</b> ${nome} <i>${qtd}un</i></span>`;
+ }).join('');
+}
+function posBancadaOnline(lote){return lote&&lote.bancadaPos||{x:lote.x+6.8,z:lote.z+3.6}}
+function atualizarMarcadoresBancada(lote){
+ if(!lote||!lote.montado||!lote.producaoMarkers)return;
+ const itens=lote.index===meuLoteIndex?G.lotes.filter(l=>ESTAGIO_UI[l.stage]).slice(0,lote.producaoMarkers.length):[];
+ lote.producaoMarkers.forEach((sp,i)=>{
+  const l=itens[i];
+  if(!l){sp.visible=false;return}
+  const e=ESTAGIO_UI[l.stage],qtd=Math.max(0,Math.floor(Number(l.qtd)||0));
+  const old=sp.material.map;
+  sp.material.map=T(placaLote(`${e[0]} ${qtd} un`,e[1]));sp.material.needsUpdate=true;
+  if(old&&old.dispose)old.dispose();
+  sp.visible=true;
+ });
+}
 let bancaTab='sem',crossPick=[];
 function renderBanca(){
  const b=$('bancaBody');b.innerHTML='';
  // resumo sempre visível, independente da aba — é a parte "inventário" da tela
  const a0=armaAtual(),mu0=G.municao[a0.k];
- const pronto=G.lotes.filter(l=>l.stage==='pronto');
- const estoqueTxt=pronto.length?pronto.map(l=>`${l.s.nome.split(' ')[0]} ${l.qtd}un`).join(' · '):'vazio';
- b.innerHTML+=`<div class="want" style="margin-bottom:12px">
+  const producao=linhasProducao(G.lotes,6)||'<span class="sub">sem produção</span>';
+  b.innerHTML+=`<div class="want productionSummary" style="margin-bottom:12px">
    <b>R$ ${Math.floor(G.cash)}</b> em caixa<br>
    arma: <b>${a0.nome}</b>${mu0?` · ${mu0.pente}/${mu0.reserva}`:''} · colete ${G.armor}%<br>
-   estoque pronto: ${estoqueTxt}</div>`;
+   <b>produção na bancada do seu lote:</b><br>${producao}</div>`;
  // minhas sementes — escolher qual plantar, direto do inventário
  if(G.bank.length){
   b.innerHTML+='<h2 class="mt">MINHAS SEMENTES</h2><div class="sub">Toque pra escolher qual vai plantar.</div>';
@@ -2354,8 +2394,8 @@ function renderPonto(t){
   r.appendChild(btn);b.appendChild(r)})}
 
 function renderStock(){const el=$('stockList');
- const p=G.lotes.filter(l=>l.stage==='pronto');
- el.innerHTML=p.length?p.slice(0,5).map(l=>`${l.s.nome.split(' ')[0]} <i>${l.qtd}un</i> ${Math.round(l.qual*100)}%`).join('<br>'):'vazio'}
+ el.innerHTML=linhasProducao(G.lotes,5)||'sem produção';
+ if(Number.isInteger(meuLoteIndex))atualizarMarcadoresBancada(lotesOnline[meuLoteIndex])}
 function updHUD(){
  $('cash').textContent=Math.floor(G.cash);
  $('alive').textContent=plots.concat(fazPlots,casaNovaPlots).filter(p=>p.plant).length;
@@ -3200,9 +3240,11 @@ function objetivoAtual(){
   const lote=lotesOnline[meuLoteIndex];
   const cliente=[...mpClientes.values()].find(c=>c.loteIndex===meuLoteIndex&&c.fase==='atendendo'&&!c.done);
   if(cliente)return{nome:'cliente do seu lote',x:cliente.g.position.x,z:cliente.g.position.z};
+  const emProcesso=G.lotes.some(l=>l.stage==='sec'||l.stage==='cura');
+  if(emProcesso){const b=posBancadaOnline(lote);return{nome:'bancada da sua casa · produção',x:b.x,z:b.z}}
   const vazio=lote.plots.find(P=>!P.dados);
   if(vazio)return{nome:'canteiro livre do seu lote',x:vazio.x,z:vazio.z};
-  const b=lote.bancadaPos||{x:lote.x+6.8,z:lote.z+3.6};
+  const b=posBancadaOnline(lote);
   return{nome:'bancada da sua casa',x:b.x,z:b.z};
  }
  const vazio=plots.find(P=>!P.locked&&!P.plant);
@@ -3608,7 +3650,10 @@ function tick(){
  for(let s=1;s<=dist;s+=.4){
   const tx=camT.x+cxf*s,tz=camT.z+czf*s;let hit=false;
   for(const c of colliders) if(c.active!==false&&tx>c.minX-.2&&tx<c.maxX+.2&&tz>c.minZ-.2&&tz<c.maxZ+.2){hit=true;break}
-  if(hit){dist=Math.max(1.5,s-.5);break}}
+  // Em espaços apertados, o piso de 1,5m colocava a câmera dentro do muro.
+  // Mantemos distância suficiente para não colar no avatar, sem atravessar a
+  // superfície que foi atingida pelo raio de visão.
+  if(hit){dist=Math.max(.55,s-.35);break}}
  const shoulder=aiming?.6:0;
  const cx=camT.x+cxf*dist+Math.cos(camYaw)*shoulder;
  const cz=camT.z+czf*dist-Math.sin(camYaw)*shoulder;
@@ -3668,9 +3713,8 @@ function tick(){
   if(est!==pl.estagio){pl.estagio=est;
    if(est===3){toast(`${s.nome} pronta pra colher`);blip(880,.16,'triangle',.06)}}
   const m=pl.mesh,ud=m.userData;
-  m.scale.setScalar(.12+(pl.prog/100)*(p.indoor?.84:.98));
-  ud.buds.visible=est>=2;
-  if(est>=2)ud.buds.scale.setScalar(.4+Math.min(1,(pl.prog-62)/38)*(.6+s.t.rendimento/100*.6));
+  m.scale.setScalar(escalaPlantaCultivada(pl.prog));
+  aplicarFormaPlanta(m,est,pl.prog,s.t.rendimento);
   const hsl={h:0,s:0,l:0};new THREE.Color(s.cor).getHSL(hsl);
   ud.leafM.color.setHSL(hsl.h*(.55+pl.saude*.45),hsl.s*(.45+pl.saude*.55),hsl.l*(.6+pl.saude*.4));
   ud.drop.visible=pl.agua<.3&&!pl.praga;ud.drop.position.y=2+Math.sin(t*3)*.09;
@@ -3711,10 +3755,9 @@ function tick(){
     if(!Number.isFinite(P.visualProg))P.visualProg=Number(d.prog)||0;
     P.visualProg+=(Math.max(0,Math.min(100,Number(d.prog)||0))-P.visualProg)*Math.min(1,dt*6);
     const progVis=Math.max(0,Math.min(100,P.visualProg));
-    P.mesh.scale.setScalar(.25+(progVis/100)*.95);
+    P.mesh.scale.setScalar(escalaPlantaCultivada(progVis));
     const ud=P.mesh.userData||{};
-    if(ud.buds){ud.buds.visible=d.estagio>=2;
-     if(d.estagio>=2)ud.buds.scale.setScalar(.4+Math.min(1,Math.max(0,(progVis-62)/38))*(.6+(d.s&&d.s.t?d.s.t.rendimento:0)/100*.6))}
+    aplicarFormaPlanta(P.mesh,d.estagio,progVis,d.s&&d.s.t?d.s.t.rendimento:0);
     if(ud.leafM&&d.s&&d.s.cor){
      const hsl={h:0,s:0,l:0};new THREE.Color(d.s.cor).getHSL(hsl);
      const saude=Math.max(0,Math.min(1,Number(d.saude)||0));
@@ -4181,6 +4224,13 @@ function montarLote(lote){
   const arame=new THREE.Mesh(new THREE.BoxGeometry(2.8,.02,.02),post);
   arame.position.set(bx,2.05,bz-1.3);g.add(arame);
   lote.bancadaPos={x:LX+bx,z:LZ+bz};
+  // Marcadores são a representação da produção do dono desta casa. Não
+  // reutilizam os slots da estação global e ficam ocultos para outros lotes.
+  lote.producaoMarkers=[];
+  for(let mi=0;mi<3;mi++){
+   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('PRODUÇÃO','#8fe063')),transparent:true,depthTest:false}));
+   sp.scale.set(1.7,.32,1);sp.position.set(bx,1.35+mi*.38,bz+.58);sp.visible=false;g.add(sp);lote.producaoMarkers.push(sp);
+  }
   addColLocal(bx-1.3,bx+1.3,bz-.5,bz+.5);
  })();
 
@@ -4219,18 +4269,16 @@ function montarLote(lote){
  addCol(-W/2-.2,-W/2+.2,-D/2,D/2);                  // lateral esquerda
  addCol(W/2-.2,W/2+.2,-D/2,D/2);                    // lateral direita
  addCol(-W/2-.2,-(vao/2),D/2-.2,D/2+.2);            // frente esquerda
- addCol(vao/2,W/2+.2,D/2-.2,D/2+.2);                // frente direita
- // BUG CORRIGIDO: faltava a frente ESQUERDA. Eram 8,8m de muro visível
- // sem colisão nenhuma — jogador e bot atravessavam direto por ali.
- addCol(-W/2-.2,-vao/2,D/2-.2,D/2+.2);              // frente esquerda
- // colisor do vão do portão: ativo enquanto fechado
+  addCol(vao/2,W/2+.2,D/2-.2,D/2+.2);                // frente direita
+  // colisor do vão do portão: ativo enquanto fechado
  // colisor nasce coerente com o estado atual do portão
  const colPortao={minX:LX-vao/2,maxX:LX+vao/2,minZ:LZ+D/2-.2,maxZ:LZ+D/2+.2,
   active:!lote.portaoAberto};
  colliders.push(colPortao);lote.cols.push(colPortao);lote.colPortao=colPortao;
  addCol(cx-cw/2,cx+cw/2,cz-cd/2,cz+cd/2);           // casinha
- lote.grp=g;lote.montado=true;
- atualizarPlacaLote(lote);
+  lote.grp=g;lote.montado=true;
+  atualizarPlacaLote(lote);
+  atualizarMarcadoresBancada(lote);
  // redesenha as plantas que o servidor já tinha mandado
  lote.plots.forEach((P,j)=>{ if(P.dados){P.mesh=null;P.meshEstagio=-1;
   aplicarPlotOnline(lote.index,j,P.dados)} });
@@ -4254,7 +4302,7 @@ function desmontarLote(lote){
  });
  if(lote.cols){for(const c of lote.cols){const i=colliders.indexOf(c);
   if(i>=0)colliders.splice(i,1)} lote.cols=null}
- lote.grp=null;lote.placa=null;lote.montado=false;
+  lote.grp=null;lote.placa=null;lote.producaoMarkers=null;lote.montado=false;
 }
 // ═══ streaming: só monta o que está perto, como GTA faz ═══
 // Os ambientes extras continuam disponíveis no modo solo, mas não podem
@@ -4370,7 +4418,7 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
   g2.position.set(P.x,P.baseY,P.z);scene.add(g2);
   P.mesh=g2;P.meshEstagio=dados.estagio;P.meshSeedId=seedId;
  }
- if(P.mesh)P.mesh.scale.setScalar(.25+Math.min(1,Number(dados.prog||0)/100)*.95);
+  if(P.mesh){P.mesh.scale.setScalar(escalaPlantaCultivada(dados.prog));aplicarFormaPlanta(P.mesh,dados.estagio,dados.prog,dados.s&&dados.s.t?dados.s.t.rendimento:0)}
 }
 
 /* ═════════ MULTIPLAYER EM TEMPO REAL — WebSocket ═════════ */
@@ -4878,11 +4926,11 @@ function mpConnect(){
     if(msg.pontoNome){const t=TERR.find(x=>x.nome===msg.pontoNome);if(t&&Number.isFinite(Number(msg.demanda)))t.demanda=Number(msg.demanda)}
     blip(880,.12,'triangle',.07);toast(`vendeu ${msg.qtd} un · +R$ ${msg.valor}`);closeAll();renderStock();updHUD();
    } else if(msg.t==='colheita'){
-    // servidor confirmou a colheita: entra na bancada local normalmente
-    if(G.lotes.length<G.rackMax){
-     // ETAPA B: o estoque chega pelo 'estado'; aqui só o aviso
-     blip(720,.14,'sine',.08);toast(`colheu ${msg.qtd} un no seu lote`);
-    } else toast('bancada cheia — colheita perdida');
+    // O servidor confirmou: a quantidade vem do evento authoritative e o
+    // lote completo chega logo depois no evento estado.
+    const qtd=Math.max(0,Math.floor(Number(msg.qtd)||0));
+    if(qtd){blip(720,.14,'sine',.08);toast(`colheu ${qtd} un — levados para a bancada do seu lote para secar`)}
+    else toast('colheita confirmada — confira a bancada do seu lote');
    }
   }catch(e){}
  };
