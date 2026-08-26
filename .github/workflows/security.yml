@@ -39,6 +39,7 @@ jobs:
           node --check test-audio-mixer.js
           node --check test-movimento-fluido.js
           node --check test-mapa-conexoes.js
+          node --check test-spawn-preclick.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
       - name: Run isolated regression servers and tests
@@ -79,4 +80,5 @@ jobs:
           TEST_WS=ws://127.0.0.1:8807 npm run test:movimento
           npm run test:mapa
           npm run test:audio
+          npm run test:spawn
           for port in 8800 8801 8802 8803 8804 8805 8806 8807; do cat "$RUNNER_TEMP/quintal-$port.log"; done

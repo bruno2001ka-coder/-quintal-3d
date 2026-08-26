@@ -4582,6 +4582,15 @@ function mpLimparEntidades(){
  for(const id of [...mpClientes.keys()])mpRemoveCliente(id);
  for(const id of [...mpFuncs.keys()])mpRemoveFunc(id);
 }
+function mpAplicarSpawnAuthoritative(pos){
+ if(!pos)return false;
+ const x=Number(pos.x),y=Number(pos.y),z=Number(pos.z),ry=Number(pos.ry);
+ if(![x,y,z,ry].every(Number.isFinite))return false;
+ player.position.set(x,y,z);
+ player.rotation.y=ry;camYaw=ry+Math.PI;
+ G._nasceuNoLote=true;G._esperandoLote=false;
+ return true;
+}
 function mpConnect(){
  if(!MP_URL)return;
  try{ mpWs=new WebSocket(MP_URL) }catch(e){ return }
@@ -4756,10 +4765,7 @@ function mpConnect(){
      // Sem lote próprio ainda é possível caminhar pela cidade. O servidor
      // entrega um spawn público para que mpReady não fique falso para sempre.
      mpReady=true;mpReentrada=false;
-     if(G.running&&msg.posicao&&!G._nasceuNoLote){
-      const p=msg.posicao;player.position.set(Number(p.x)||0,Number(p.y)||0,Number(p.z)||0);
-      player.rotation.y=Number(p.ry)||0;camYaw=player.rotation.y+Math.PI;
-     }
+     if(!G._nasceuNoLote)mpAplicarSpawnAuthoritative(msg.posicao);
      toast('todos os lotes estão ocupados agora');
     } else {
      meuLoteIndex=msg.loteIndex;
@@ -4771,13 +4777,9 @@ function mpConnect(){
       // ela pode ser a última posição válida antes da queda; aplicar aqui
       // evita que o navegador continue enviando a posição antiga e receba
       // um retorno brusco em seguida.
-      if(G.running&&msg.posicao&&(
-        msg.retomada||mpReentrada||!G._nasceuNoLote||G._esperandoLote)){
-       const p=msg.posicao;
-       player.position.set(Number(p.x)||0,Number(p.y)||0,Number(p.z)||0);
-       player.rotation.y=Number(p.ry)||0;camYaw=player.rotation.y+Math.PI;
-       G._nasceuNoLote=true;G._esperandoLote=false;
-      }
+      if(msg.posicao&&(
+        msg.retomada||mpReentrada||!G._nasceuNoLote||G._esperandoLote))
+       mpAplicarSpawnAuthoritative(msg.posicao);
       atualizarPlacaLote(lote);
       if(msg.lote&&msg.lote.plots)
        msg.lote.plots.forEach((pl,i)=>aplicarPlotOnline(meuLoteIndex,i,pl));

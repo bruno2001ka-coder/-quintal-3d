@@ -17,7 +17,8 @@
     "test:entidades": "node test-protecao-entidades.js",
     "test:audio": "node test-audio-mixer.js",
     "test:movimento": "node test-movimento-fluido.js",
-    "test:mapa": "node test-mapa-conexoes.js"
+    "test:mapa": "node test-mapa-conexoes.js",
+    "test:spawn": "node test-spawn-preclick.js"
   },
   "engines": {
     "node": ">=18"
