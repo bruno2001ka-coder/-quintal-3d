@@ -2203,9 +2203,10 @@ function renderBanca(){
  if(bancaTab==='sem'){
   b.innerHTML+='<h2 class="mt">SEMENTES BASE</h2><div class="sub">Barras: ritmo, rendimento, resistência, aroma, brilho.</div>';
   BASE.forEach(s=>{const c=seedCost(s),r=document.createElement('div');r.className='row';
+   const possuida=G.bank.filter(e=>e.s&&e.s.nome===s.nome).reduce((n,e)=>n+Number(e.qtd||0),0);
    r.innerHTML=`<div class="sw" style="background:${hex(s.cor)}"></div>
-    <div class="info">${s.nome} — R$ ${c}${barsHTML(s)}<small>${traitLine(s)}</small></div>`;
-   const btn=document.createElement('button');btn.textContent='COMPRAR';btn.disabled=G.cash<c;
+    <div class="info">${s.nome} — R$ ${c}${barsHTML(s)}<small>${traitLine(s)}</small>${possuida?`<small style="color:#8fe063">no inventário: ${possuida}x</small>`:''}</div>`;
+   const btn=document.createElement('button');btn.textContent=possuida?`COMPRAR MAIS · ${possuida}x`:'COMPRAR';btn.disabled=G.cash<c;
    btn.onclick=()=>{
     // ETAPA B: o preço e o fenótipo são decididos pelo SERVIDOR
     if(pedirAoServidor({t:'comprar',oq:'semente',strain:s}))blip(680,.1,'triangle',.06);};
@@ -3832,7 +3833,10 @@ function tick(){
  TERR.forEach(x=>{
   const rivais=G.inimigos.filter(e=>e.terr===x).length;
   x.ring.material.opacity=.22+Math.sin(t*2+x.x)*.1;
-  if(x.dono==='rival'&&rivais===0)tomarPonto(x)});
+  // No online, os rivais vivem em mpBots e a captura só acontece por E.
+  // O caminho antigo baseado em G.inimigos locais gerava 20 pedidos/s e
+  // um blip de 780 Hz contínuo para cada território.
+  if(!mpConnected&&x.dono==='rival'&&rivais===0)tomarPonto(x)});
 
  if(gateLeaf){const targetY=G.gate.open?-1.95:0;
   gateLeaf.rotation.y+=(targetY-gateLeaf.rotation.y)*Math.min(1,dt*4)}

@@ -29,9 +29,10 @@
    7. DESLIGAMENTO LIMPO. Ao reiniciar, avisa os clientes com código
       1001 em vez de largar a conexão no vácuo.
 
-   LIMITE CONHECIDO: o estado vive em memória. No plano grátis do Render
-   o serviço dorme por inatividade e o mundo volta do zero. Persistência
-   de verdade precisa de banco de dados — é o próximo passo, não este.
+      PERSISTÊNCIA: carteira, lotes e última posição são gravados quando um
+   banco está configurado. No plano grátis do Render, SQLite local continua
+   efêmero; DATABASE_URL deve apontar para Postgres para evitar reset após
+   restart ou spin-down. Sem banco, o modo memória é explicitamente volátil.
    ═══════════════════════════════════════════════════════════════════════ */
 
 const { WebSocketServer } = require('ws');
@@ -478,6 +479,7 @@ function carregarLotes() {
   return Promise.resolve();
 }
 function salvarTudo() {
+  for (const j of jogadores.values()) copiarPosicaoParaCarteira(j);
   for (const chave of carteiras.keys()) salvarCarteira(chave);
   salvarLotes();
 }
@@ -705,6 +707,12 @@ function spawnOficial(j) {
   if (lote) return { x: lote.x, y: 0, z: lote.z + LOTE_D / 2 - 3.2 };
   return { x: 0, y: 0, z: 15 };
 }
+function posicaoCarteira(c) {
+  const p = c && c.up && c.up._posicao;
+  if (!p || ![p.x, p.y, p.z, p.ry].every(Number.isFinite)) return null;
+  if (dentroDeParede(p.x, p.z, RAIO_JOGADOR)) return null;
+  return { x: p.x, y: 0, z: p.z, ry: p.ry };
+}
 function consumirPosicaoRetomada(chave) {
   const p = chave && posicoesRetomada.get(chave);
   if (!p) return null;
@@ -713,6 +721,19 @@ function consumirPosicaoRetomada(chave) {
   if (![p.x, p.y, p.z, p.ry].every(Number.isFinite)) return null;
   if (dentroDeParede(p.x, p.z, RAIO_JOGADOR)) return null;
   return p;
+}
+function copiarPosicaoParaCarteira(j) {
+  if (!j || !j.autenticado || !j.chave || !j.posIniciada || j.morto) return false;
+  const c = carteiras.get(j.chave);
+  if (!c) return false;
+  const p = { x: num(j.x, -1000, 1000, 0), y: 0,
+    z: num(j.z, -1000, 1000, 0), ry: num(j.ry, -Math.PI * 4, Math.PI * 4, 0) };
+  const old = c.up && c.up._posicao;
+  if (old && Math.abs(old.x - p.x) < .05 && Math.abs(old.z - p.z) < .05 && Math.abs(old.ry - p.ry) < .01) return false;
+  c.up = c.up || {};
+  c.up._posicao = p;
+  marcarSuja(j);
+  return true;
 }
 function aplicarDanoJogador(j, dano, de) {
   if (!j || j.morto || !j.autenticado) return { aplicado: 0, morreu: false };
@@ -1717,30 +1738,10 @@ wss.on('connection', (ws, req) => {
         if (m.nome) j.nome = nomeSeguro(m.nome) || j.nome;
         j.avatarId = avatarCatalogado(m.avatarId);
         enviar(j, { t: 'sessao', token: emitirToken(j.chave), persistId: j.chave });
-        const retomada = consumirPosicaoRetomada(j.chave);
-        const idx = atribuirLote(j.chave, j.nome);
-        const loteInicial = idx !== null ? lotes[idx] : null;
-        const spawn = retomada || (loteInicial ? {
-          x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
-        } : spawnOficial(j));
-        // Queda curta retoma a posição authoritative anterior. Sem posição
-        // recente, nasce no ponto oficial do lote ou, se todos estiverem
-        // ocupados, numa posição pública da cidade — nunca no ponto enviado.
-        j.x = spawn.x; j.y = 0; j.z = spawn.z; j.ry = spawn.ry || 0;
-        j.vy = 0; j.onGround = true;
-        j.ultimoMov = agora() - 250;
-        j.posIniciada = true;
-        enviar(j, {
-          t: 'lote_atribuido',
-          loteIndex: idx,
-          retomada: !!retomada,
-          posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry },
-          lote: loteInicial ? resumoLote(loteInicial, true) : null
-        });
-        // Carrega o estado salvo ANTES de anunciar a aparência final.
-        // Isso evita que uma carteira antiga apareça por um instante com o
-        // avatar enviado apenas nesta conexão.
-        // No Postgres a leitura é assíncrona, então esperamos ela.
+        // A carteira é carregada antes do spawn. Sem isso, o Postgres só era
+        // lido depois de lote_atribuido e o cliente já recebia o spawn padrão.
+        // Em restart isso causava o retorno visual ao lote mesmo com a posição
+        // salva no banco.
         (async () => {
           const k = j.chave || j.id;
           if (dbTipo === 'postgres' && !carteiras.has(k)) {
@@ -1748,6 +1749,25 @@ wss.on('connection', (ws, req) => {
             if (salva) carteiras.set(k, salva);
           }
           const c = sincronizarEquipamento(j);
+          const retomada = consumirPosicaoRetomada(j.chave) || posicaoCarteira(c);
+          const idx = atribuirLote(j.chave, j.nome);
+          const loteInicial = idx !== null ? lotes[idx] : null;
+          const spawn = retomada || (loteInicial ? {
+            x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
+          } : spawnOficial(j));
+          // Queda curta ou restart retoma a última posição válida persistida.
+          // Sem ela, nasce no ponto oficial do lote ou na cidade pública.
+          j.x = spawn.x; j.y = 0; j.z = spawn.z; j.ry = spawn.ry || 0;
+          j.vy = 0; j.onGround = true;
+          j.ultimoMov = agora() - 250;
+          j.posIniciada = true;
+          enviar(j, {
+            t: 'lote_atribuido',
+            loteIndex: idx,
+            retomada: !!retomada,
+            posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry },
+            lote: loteInicial ? resumoLote(loteInicial, true) : null
+          });
           paraTodos({ t: 'nome', id, nome: j.nome, avatarId: j.avatarId }, id);
           for (const nomeTerr of Object.keys(c.territorios || {})) {
             const terr = TERRITORIOS.find(x => x.nome === nomeTerr);
@@ -2369,6 +2389,9 @@ wss.on('connection', (ws, req) => {
     // grava na saída: é o momento mais provável de perder progresso
     try {
       const k = j.chave || j.id;
+      if (j.autenticado && j.chave && j.posIniciada && !j.morto) {
+        copiarPosicaoParaCarteira(j);
+      }
       if (carteiras.has(k)) salvarCarteira(k);
       if (j.autenticado && j.chave && j.posIniciada && !j.morto) {
         posicoesRetomada.set(j.chave, {
@@ -2524,6 +2547,7 @@ setInterval(() => {
    cada alteração seria I/O demais; deixar só no fim seria perder tudo num
    crash. Este é o meio-termo. */
 setInterval(() => {
+  for (const j of jogadores.values()) copiarPosicaoParaCarteira(j);
   if (!sujas.size) return;
   for (const k of sujas) salvarCarteira(k);
   sujas.clear();

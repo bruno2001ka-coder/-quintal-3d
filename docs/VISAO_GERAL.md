@@ -82,7 +82,7 @@ O servidor valida:
 - colisão com paredes, lotes, portões e estruturas;
 - altura, gravidade, chão e salto no servidor;
 - estado morto e respawn;
-- posição retomada apenas dentro da janela de reconexão.
+- posição retomada pela janela curta de reconexão ou pela última posição validada na carteira persistente.
 
 Uma correção server-side possui `seq`, `x`, `y` e `z`. O cliente deve aceitar a correção somente quando ela corresponder a uma sequência válida e não deve congelar o controle por causa de uma correção pequena.
 
@@ -265,6 +265,8 @@ quintal-repo/
 │   ├── test-plantio-proprio.js    # plantio no lote do jogador
 │   ├── test-protecao-entidades.js # proteção da casa e entidades privadas
 │   ├── test-audio-mixer.js        # mixer, mudo e recuperação de áudio
+│   ├── test-regressao-client-ui.js # território online e rótulo de sementes
+│   ├── test-persistencia-restart.js # carteira/posição após restart com SQLite
 │   ├── test-http-static.js        # HTTP, public e health check
 │   ├── test-regressao-p0.js       # regressão dos exploits P0
 │   ├── test-regressao-p1.js       # sessão, token e contratos P1
@@ -346,6 +348,12 @@ O navegador deve conseguir acessar o WebSocket same-origin. Em páginas HTTPS o 
 
 Não faça commit de `AUTH_SECRET` real, bancos SQLite, tokens, backups ou arquivos de sessão.
 
+### Persistência obrigatória no Render
+
+O teste no navegador reproduziu a perda da compra quando o serviço estava em `banco: memoria`: após reiniciar o processo, o saldo voltou a R$350, a semente comprada desapareceu e o jogador voltou ao spawn do lote. Isso acontece porque o filesystem do Render Free é efêmero e não preserva SQLite local entre restart ou spin-down. O cliente não deve mascarar esse fato como se fosse um save durável.
+
+O `render.yaml` declara um banco Postgres chamado `quintal-3d-postgres` e injeta sua `connectionString` em `DATABASE_URL`. Depois de sincronizar o Blueprint no Render, confirme em `/metrics` que o campo `banco` é `postgres`; enquanto ele mostrar `memoria`, compras, plantas, lotes e posição continuam voláteis. O Postgres Free também tem limitações próprias, incluindo expiração após 30 dias e ausência de backups; para produção durável, use um plano de banco adequado e configure backups conforme a documentação oficial do [Render Free](https://render.com/docs/free), do [Blueprint](https://render.com/docs/blueprint-spec) e do [Postgres](https://render.com/docs/postgresql-refresh).
+
 ## 12. Como executar os testes
 
 O teste básico de segurança é:
@@ -368,12 +376,20 @@ npm run test:audio
 npm run test:movimento
 npm run test:mapa
 npm run test:spawn
+npm run test:client-ui
+npm run test:persistencia
 ```
 
 O teste P0 usa um servidor temporário e verifica catálogo, genética e altura:
 
 ```bash
 TEST_WS=ws://127.0.0.1:8832 npm run test:p0
+```
+
+O teste de persistência reinicia um servidor SQLite isolado e verifica compra, saldo, sementes e posição authoritative:
+
+```bash
+TEST_PERSIST_PORT=8833 npm run test:persistencia
 ```
 
 O teste P1 verifica token expirado, sessão duplicada, boot de carteira, limpeza de entidades, rota de saída e proteção online-only:
@@ -391,7 +407,7 @@ node --check testes/test-regressao-p1.js
 node check-client-syntax.js
 ```
 
-A integração contínua executa `npm ci`, checa sintaxe, valida HTTP/public, inicia servidores isolados em portas diferentes e roda segurança, AOI, carga, reconexão, clientes, plantio, entidades, movimento, mapa, áudio e spawn. Um teste verde confirma apenas os contratos cobertos; persistência real, navegador físico e desempenho de GPU mobile ainda precisam de validação própria.
+A integração contínua executa `npm ci`, checa sintaxe, valida HTTP/public, inicia servidores isolados em portas diferentes e roda segurança, AOI, carga, reconexão, persistência, clientes, plantio, entidades, movimento, mapa, áudio, UI client-side e spawn. Um teste verde confirma os contratos cobertos; a persistência real no Render depende de `DATABASE_URL` configurada e o navegador físico/desempenho de GPU mobile ainda precisam de validação própria.
 
 ## 13. Regra de evolução do código
 

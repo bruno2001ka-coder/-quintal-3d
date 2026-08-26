@@ -19,7 +19,10 @@
     "test:movimento": "node testes/test-movimento-fluido.js",
     "test:mapa": "node testes/test-mapa-conexoes.js",
     "test:spawn": "node testes/test-spawn-preclick.js",
-    "test:http": "node testes/test-http-static.js"
+    "test:http": "node testes/test-http-static.js",
+    "test:client-ui": "node testes/test-regressao-client-ui.js",
+    "test:persistencia": "node testes/test-persistencia-restart.js",
+    "test:render-config": "node testes/test-render-config.js"
   },
   "engines": {
     "node": ">=18"
