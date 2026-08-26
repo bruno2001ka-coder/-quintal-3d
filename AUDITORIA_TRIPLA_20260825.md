@@ -21,3 +21,10 @@ O foco usa `longe do território` como estado vazio geral, mesmo quando a ação
 ## Critério para as revisões seguintes
 
 Uma versão funcional deve permitir iniciar, receber o lote, andar sem congelar, abrir o portão, plantar em um dos 16 plots, observar crescimento vindo do servidor, usar a bancada do próprio lote, atender o cliente correto, sair pela rua, alcançar cidade e fazenda e voltar sem teleporte indevido. Cada etapa deve ter teste automatizado ou uma verificação observável no cliente.
+
+
+## Verificação visual da correção mobile
+
+A prévia estática da versão atual foi aberta em navegador. O HUD mostrou o botão `MAPA` junto de INVENTÁRIO, MUNDO, SALVAR e APAGAR. Ao abrir o mapa, o painel exibiu a visão `MAPA DO QUINTAL`, os rótulos FUNDOS, CIDADE e FAZENDA, o caminho principal, os dez lotes numerados, o `SEU LOTE`, o objetivo amarelo e a legenda de jogadores/polícia/rivais. O painel possui `FECHAR MAPA` e permanece modal, sem executar movimento enquanto aberto.
+
+A inspeção foi feita em viewport de desktop da prévia; o CSS específico de `body.touch` mantém o painel dentro da altura da tela, reduz o painel de desempenho e preserva o joystick e os botões inferiores. O teste em aparelho físico ainda depende de o usuário recarregar o HTML atualizado no celular.

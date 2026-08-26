@@ -101,3 +101,12 @@ Na segunda passagem, o multiplayer foi comparado com práticas de server authori
 Na terceira passagem, foi testado o fluxo jogável: handshake, atribuição de lote, spawn, movimento, reconexão, clientes, plantio, entidades, proteção, mapa e áudio. O teste `MOVIMENTO_FLUIDO_OK` confirmou 40 inputs sequenciados, avanço de 2,4 metros e retomada na posição esperada. A suíte completa também passou: `SECURITY_INTEGRATION_OK`, `MULTIPLAYER_AOI_OK`, `LOAD_24_OK` com 24 conexões, tick máximo de 4,6 ms e zero descartes, `RECONNECTION_POSITION_OK`, `CLIENTE_CASA_OK`, `PLANTIO_PROPRIO_OK`, `PROTECAO_ENTIDADES_OK`, `MOVIMENTO_FLUIDO_OK`, `MAPA_CONEXOES_OK` e `AUDIO_MIXER_OK`.
 
 Referências consultadas: [Client-Side Prediction and Server Reconciliation — Gabriel Gambetta](https://www.gabrielgambetta.com/client-side-prediction-server-reconciliation.html), [PointerLockControls — documentação oficial do Three.js](https://threejs.org/docs/#PointerLockControls), [WebSocket — MDN](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) e o vídeo [Server Authority & Client Prediction — Developers Hub](https://www.youtube.com/watch?v=9BZ3ln-qPeA). A URL do GitHub Pages foi verificada e retornou 404; o repositório contém o HTML e o servidor, mas não há Pages configurado nessa URL.
+
+
+## Correção específica para celular
+
+O print feito no aparelho mostrou que o radar era ocultado por `body.touch #radar{display:none}`, deixando o jogador sem mapa. Foi criado um botão `MAPA` no topo e um painel modal `MAPA DO QUINTAL` com canvas completo. Ele desenha fundos, cidade, fazenda, estrada, dez lotes, lote próprio, objetivo, jogadores, polícia e rivais, com legenda e botão `FECHAR MAPA`.
+
+O painel tem regras próprias para viewport touch: largura e altura limitadas à tela, mapa redimensionável, legenda legível e painel de desempenho reduzido e reposicionado. O mapa é modal, portanto não captura movimento enquanto está aberto; ao fechar, joystick, ação, mira, tiro, pulo e recarga continuam disponíveis.
+
+A verificação visual na prévia confirmou o botão `MAPA`, a abertura do painel e os rótulos principais. A regressão `MAPA_CONEXOES_OK` também passou incluindo a presença do botão, do painel, do CSS touch e da função de desenho do mapa. A validação em aparelho físico deve ser feita recarregando o HTML atualizado, pois a prévia usada pelo usuário estava em `content://`.

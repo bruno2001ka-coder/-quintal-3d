@@ -24,6 +24,7 @@ canvas{display:block;touch-action:none}
 #invBtn{background:rgba(143,224,99,.2);border:1px solid rgba(143,224,99,.6);color:#dff5cd}
 #saveBtn{background:rgba(232,210,100,.18);border:1px solid rgba(232,210,100,.55);color:#f0e6b8}
 #mundoBtn{background:rgba(90,168,224,.2);border:1px solid rgba(90,168,224,.6);color:#c8e4f5}
+#mapBtn{background:rgba(90,168,224,.26);border:1px solid rgba(90,168,224,.8);color:#d8efff}
 #wipeBtn{background:rgba(224,80,60,.16);border:1px solid rgba(224,80,60,.5);color:#f0b8ac}
 #adminTag{display:none;align-self:center;background:rgba(232,100,60,.22);
  border:1px solid rgba(232,100,60,.7);color:#f5c8b8;font:700 clamp(8px,2.1vmin,11px) ui-monospace;
@@ -92,6 +93,17 @@ body.aim #reticle{display:block}
 #hurt.on{opacity:1}
 #radar{position:absolute;bottom:78px;right:10px;width:118px;height:118px;border-radius:50%;background:rgba(8,12,8,.72);border:1px solid rgba(255,255,255,.16);overflow:hidden}
 #radar canvas{width:100%;height:100%}
+#mapPanel{width:min(94vw,720px);max-height:90vh;max-height:90dvh;padding:12px;background:rgba(7,11,8,.97);z-index:40}
+#mapPanel h2{font-size:13px;letter-spacing:3px;color:#8fe063;margin-bottom:3px}
+#mapPanel .mapSub{font-size:10px;opacity:.7;margin-bottom:8px}
+#worldMapC{display:block;width:100%;height:auto;max-height:68vh;max-height:68dvh;background:#1a211b;border:1px solid rgba(143,224,99,.35);border-radius:3px;image-rendering:auto}
+#mapLegend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:9px;opacity:.85}
+#mapLegend span{display:inline-flex;align-items:center;gap:4px}.mapDot{display:inline-block;width:8px;height:8px;border-radius:50%}
+body.touch #mapPanel{width:calc(100vw - 14px);max-height:calc(100dvh - 14px);padding:9px}
+body.touch #mapPanel h2{font-size:clamp(11px,3vmin,15px)}
+body.touch #worldMapC{max-height:62dvh}
+body.touch #mapLegend{font-size:clamp(9px,2.4vmin,13px);gap:6px}
+body.touch #perfBox{top:auto!important;right:var(--pad)!important;bottom:calc(var(--pad) + var(--btn) * 3.5)!important;transform:scale(.82);transform-origin:right bottom}
 .modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(95vw,470px);max-height:86vh;overflow-y:auto;background:rgba(10,14,10,.97);border:1px solid rgba(143,224,99,.32);border-radius:4px;padding:18px;display:none;pointer-events:auto;z-index:30}
 .modal.on{display:block}
 /* No celular o modal precisa ser a camada de interação principal. Antes o
@@ -207,13 +219,14 @@ body.touch #prompt{font-size:clamp(11px,2.8vmin,16px);bottom:calc(var(--pad) + v
     <div id="gun"><b id="gunName">Mãos</b> · <span id="ammo">—</span></div></div>
   <div id="wanted"></div>
   <div id="ver">v21</div>
-  <div id="topBar"><button id="invBtn">INVENTÁRIO</button><button id="mundoBtn">MUNDO</button><button id="saveBtn">SALVAR</button><button id="wipeBtn">APAGAR</button><div id="adminTag">ADMIN</div></div>
+  <div id="topBar"><button id="invBtn">INVENTÁRIO</button><button id="mapBtn">MAPA</button><button id="mundoBtn">MUNDO</button><button id="saveBtn">SALVAR</button><button id="wipeBtn">APAGAR</button><div id="adminTag">ADMIN</div></div>
   <div id="netTag">offline</div>
   <div id="dica"></div>
   <div id="prompt"></div><div id="clickHint">clique na tela do jogo pra travar o mouse e olhar em volta</div><div id="toast"></div><div id="reticle"><span class="dot"></span></div><div id="hurt"></div><div id="hitmark"></div>
   <div id="radar"><canvas id="radarC" width="236" height="236"></canvas></div>
   <div id="seeds"></div>
 </div>
+<div class="modal mapPanel" id="mapPanel"><h2>MAPA DO QUINTAL</h2><div class="mapSub">Toque em FECHAR para voltar ao jogo. O ponto verde é você; o amarelo é o próximo objetivo.</div><canvas id="worldMapC" width="720" height="520"></canvas><div id="mapLegend"><span><i class="mapDot" style="background:#8fe063"></i>você / seu lote</span><span><i class="mapDot" style="background:#e8d264"></i>objetivo</span><span><i class="mapDot" style="background:#5aa8e0"></i>jogador / polícia</span><span><i class="mapDot" style="background:#e0503c"></i>rival</span></div><button class="close" data-close>FECHAR MAPA</button></div>
 <div class="modal" id="banca">
   <div class="tabs"><button class="tab on" data-t="sem">SEMENTES</button><button class="tab" data-t="cruz">CRUZAR</button>
     <button class="tab" data-t="melh">ESTRUTURA</button><button class="tab" data-t="adu">ADUBO</button><button class="tab" data-t="neg">NEGÓCIOS</button><button class="tab" data-t="arm">ARSENAL</button></div>
@@ -2286,8 +2299,8 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
  t.classList.add('on');bancaTab=t.dataset.t;crossPick=[];renderBanca()});
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=closeAll);
-function closeAll(){['banca','venda','ponto','mundo'].forEach(id=>$(id).classList.remove('on'));atualizarVisibilidadePerf()}
-const modalOpen=()=>['banca','venda','ponto','mundo'].some(id=>$(id).classList.contains('on'));
+function closeAll(){['banca','venda','ponto','mundo','mapPanel'].forEach(id=>$(id).classList.remove('on'));atualizarVisibilidadePerf()}
+const modalOpen=()=>['banca','venda','ponto','mundo','mapPanel'].some(id=>$(id).classList.contains('on'));
 
 const matchLabel=v=>v>=78?'exatamente o perfil dele':v>=58?'atende bem':v>=38?'serve, paga menos':'não é o que ele quer';
 const rarMult=s=>(RARIDADES[s&&s.rar]||RARIDADES.comum).mult;
@@ -3037,6 +3050,7 @@ function openInventory(){
  renderBanca();$('banca').classList.add('on');
 }
 $('invBtn').addEventListener('click',openInventory);
+$('mapBtn').addEventListener('click',()=>{if(!G.running)return;$('mapPanel').classList.add('on');drawWorldMap();atualizarVisibilidadePerf()});
 $('saveBtn').addEventListener('click',()=>saveGame());
 $('saveBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();saveGame()});
 let confirmaApagar=false;
@@ -3255,6 +3269,47 @@ function atualizarRota(dt){
  const setas=['↑','↗','→','↘','↓','↙','←','↖'];
  el.innerHTML=`<b>Rota:</b> ${setas[(setor+8)%8]} ${alvo.nome} · ${Math.round(dist)}m`;
 }
+const mapCtx=$('worldMapC').getContext('2d');
+function drawWorldMap(){
+ const W=720,H=520,pad=28,minX=-70,maxX=84,minZ=-20,maxZ=280;
+ const sx=x=>pad+(x-minX)/(maxX-minX)*(W-pad*2);
+ const sz=z=>pad+(z-minZ)/(maxZ-minZ)*(H-pad*2);
+ const rw=(x,w)=>w/(maxX-minX)*(W-pad*2),rh=d=>d/(maxZ-minZ)*(H-pad*2);
+ mapCtx.clearRect(0,0,W,H);
+ mapCtx.fillStyle='#121b15';mapCtx.fillRect(0,0,W,H);
+ // fundo e caminhos principais
+ mapCtx.fillStyle='rgba(58,104,66,.28)';mapCtx.fillRect(sx(Q.x0),sz(Q.z0),rw(Q.x1-Q.x0),rh(Q.z1-Q.z0));
+ mapCtx.fillStyle='rgba(74,86,83,.48)';mapCtx.fillRect(sx(CITY.x0),sz(CITY.z0),rw(CITY.x1-CITY.x0),rh(CITY.z1-CITY.z0));
+ mapCtx.fillStyle='rgba(77,123,67,.34)';mapCtx.fillRect(sx(FAZ.x0),sz(FAZ.z0),rw(FAZ.x1-FAZ.x0),rh(FAZ.z1-FAZ.z0));
+ mapCtx.strokeStyle='#b9b59a';mapCtx.lineWidth=9;mapCtx.lineCap='round';mapCtx.beginPath();
+ mapCtx.moveTo(sx(GATEX),sz(C.z1+1));mapCtx.lineTo(sx(GATEX),sz(CITY.z0));
+ mapCtx.lineTo(sx(0),sz(CITY.z1));mapCtx.lineTo(sx(0),sz(FAZ.z0));mapCtx.stroke();
+ mapCtx.strokeStyle='rgba(210,205,170,.4)';mapCtx.lineWidth=2;mapCtx.setLineDash([7,7]);
+ mapCtx.beginPath();mapCtx.moveTo(sx(Q.x0),sz(Q.z1-1));mapCtx.lineTo(sx(C.x1),sz(C.z1-1));mapCtx.stroke();mapCtx.setLineDash([]);
+ // dez lotes multiplayer
+ for(let i=0;i<LOTE_SPOTS.length;i++){
+  const [x,z]=LOTE_SPOTS[i],own=Number.isInteger(meuLoteIndex)&&i===meuLoteIndex;
+  mapCtx.fillStyle=own?'rgba(143,224,99,.42)':'rgba(18,28,20,.72)';
+  mapCtx.strokeStyle=own?'#8fe063':'rgba(232,210,100,.65)';mapCtx.lineWidth=own?3:1;
+  mapCtx.fillRect(sx(x-10),sz(z-8),rw(20),rh(16));mapCtx.strokeRect(sx(x-10),sz(z-8),rw(20),rh(16));
+  mapCtx.fillStyle=own?'#dff5cd':'#d8cfae';mapCtx.font=own?'700 11px ui-monospace':'9px ui-monospace';mapCtx.textAlign='center';
+  mapCtx.fillText(own?'SEU LOTE':String(i+1),sx(x),sz(z)+4);
+ }
+ const alvo=G.running?objetivoAtual():null;
+ if(alvo){mapCtx.fillStyle='#e8d264';mapCtx.beginPath();mapCtx.arc(sx(alvo.x),sz(alvo.z),7,0,7);mapCtx.fill()}
+ // entidades multiplayer próximas e o jogador local
+ if(typeof mpPlayers!=='undefined')for(const p of mpPlayers.values()){
+  mapCtx.fillStyle='#5aa8e0';mapCtx.beginPath();mapCtx.arc(sx(p.tx||0),sz(p.tz||0),4,0,7);mapCtx.fill()}
+ if(typeof mpBots!=='undefined')for(const b of mpBots.values()){
+  mapCtx.fillStyle='#e0503c';mapCtx.beginPath();mapCtx.arc(sx(b.tx||b.g?.position.x||0),sz(b.tz||b.g?.position.z||0),4,0,7);mapCtx.fill()}
+ if(typeof mpClientes!=='undefined')for(const c of mpClientes.values()){
+  mapCtx.fillStyle='#e8d264';mapCtx.beginPath();mapCtx.arc(sx(c.g?.position.x||0),sz(c.g?.position.z||0),3,0,7);mapCtx.fill()}
+ mapCtx.fillStyle='#8fe063';mapCtx.beginPath();mapCtx.arc(sx(player.position.x),sz(player.position.z),6,0,7);mapCtx.fill();
+ mapCtx.strokeStyle='rgba(255,255,255,.24)';mapCtx.lineWidth=1;mapCtx.strokeRect(1,1,W-2,H-2);
+ mapCtx.fillStyle='#dff5cd';mapCtx.font='700 12px ui-monospace';mapCtx.textAlign='left';mapCtx.fillText('FUNDOS',sx(Q.x0),sz(Q.z0)-8);
+ mapCtx.fillText('CIDADE',sx(CITY.x0),sz(CITY.z0)-8);mapCtx.fillText('FAZENDA',sx(FAZ.x0),sz(FAZ.z0)-8);
+}
+let mapaT=0;
 
 /* ═════════ START ═════════ */
 function start(){
@@ -3924,6 +3979,7 @@ function tick(){
 
   radarT+=dt;if(radarT>.08){radarT=0;drawRadar()}
   atualizarRota(dt);
+  if($('mapPanel').classList.contains('on')){mapaT-=dt;if(mapaT<=0){mapaT=.5;drawWorldMap()}}
   if(G.running)tickFuncs(dt);
  if(G.running)streamLotes(dt);
  // primeira vez que sai da própria propriedade
