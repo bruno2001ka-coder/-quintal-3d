@@ -3489,7 +3489,7 @@ function tick(){
 
  if(G.running){
   G.clock+=dt*(1440/G.DAYLEN);
-  if(G.clock>=1440){G.clock-=1440;G.day++;}
+  if(G.clock>=1440){G.clock-=1440;G.day++;}}
  const hour=G.clock/60,dayT=Math.max(0,Math.sin((hour-6)/12*Math.PI)),isDay=hour>=6&&hour<18;
  const ang=(hour-6)/12*Math.PI;
  sun.position.set(player.position.x+Math.cos(ang)*24,Math.max(1.5,Math.sin(ang)*28),player.position.z+10);
