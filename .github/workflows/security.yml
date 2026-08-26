@@ -34,6 +34,8 @@ jobs:
           node --check test-plantio-proprio.js
           node --check test-protecao-entidades.js
           node --check test-audio-mixer.js
+          node --check test-movimento-fluido.js
+          node --check test-mapa-conexoes.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
       - name: Run isolated regression servers and tests
@@ -58,6 +60,9 @@ jobs:
           rm -f "$RUNNER_TEMP/quintal-8806.db" "$RUNNER_TEMP/quintal-8806.db-shm" "$RUNNER_TEMP/quintal-8806.db-wal"
           PORT=8806 DB_PATH="$RUNNER_TEMP/quintal-8806.db" CLIENTE_FIRST_S=1 CLIENTE_MIN_S=1 CLIENTE_MAX_S=1 node servidor-1.js > "$RUNNER_TEMP/quintal-8806.log" 2>&1 &
           pids+=("$!")
+          rm -f "$RUNNER_TEMP/quintal-8807.db" "$RUNNER_TEMP/quintal-8807.db-shm" "$RUNNER_TEMP/quintal-8807.db-wal"
+          PORT=8807 DB_PATH="$RUNNER_TEMP/quintal-8807.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8807.log" 2>&1 &
+          pids+=("$!")
           sleep 2
           TEST_WS=ws://127.0.0.1:8800 npm test
           TEST_WS=ws://127.0.0.1:8801 npm run test:aoi
@@ -66,5 +71,7 @@ jobs:
           TEST_WS=ws://127.0.0.1:8804 npm run test:clientes
           TEST_WS=ws://127.0.0.1:8805 npm run test:plantio
           TEST_WS=ws://127.0.0.1:8806 npm run test:entidades
+          TEST_WS=ws://127.0.0.1:8807 npm run test:movimento
+          npm run test:mapa
           npm run test:audio
-          for port in 8800 8801 8802 8803 8804 8805 8806; do cat "$RUNNER_TEMP/quintal-$port.log"; done
+          for port in 8800 8801 8802 8803 8804 8805 8806 8807; do cat "$RUNNER_TEMP/quintal-$port.log"; done

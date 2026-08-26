@@ -13,7 +13,9 @@
     "test:clientes": "node test-clientes-casa.js",
     "test:plantio": "node test-plantio-proprio.js",
     "test:entidades": "node test-protecao-entidades.js",
-    "test:audio": "node test-audio-mixer.js"
+    "test:audio": "node test-audio-mixer.js",
+    "test:movimento": "node test-movimento-fluido.js",
+    "test:mapa": "node test-mapa-conexoes.js"
   },
   "engines": {
     "node": ">=18"

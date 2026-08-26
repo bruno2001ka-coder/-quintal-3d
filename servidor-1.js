@@ -1532,6 +1532,7 @@ wss.on('connection', (ws, req) => {
     ultimoTiro: 0, ultimoCrime: 0,
     lotesVisiveis: new Set(),
     posIniciada: false, autenticado: false,
+    ultimoInputSeq: 0,
     ultimoMov: agora(),
     vivo: true, ultimoPong: agora(),
     tokens: RATE_BURST, ultimaRecarga: agora(),
@@ -1682,6 +1683,8 @@ wss.on('connection', (ws, req) => {
         const nx = num(m.x, -2000, 2000, j.x);
         const ny = num(m.y, 0, 3.5, j.y);
         const nz = num(m.z, -2000, 2000, j.z);
+        const inputSeq = Number.isSafeInteger(Number(m.seq)) ? Math.max(0, Math.min(1e9, Number(m.seq))) : 0;
+        if (inputSeq) j.ultimoInputSeq = Math.max(j.ultimoInputSeq || 0, inputSeq);
         /* BUG GRAVE CORRIGIDO — o jogador nascia em (0,0) aqui, mas o
            cliente o coloca na propriedade dele (ex: -34,31). A primeira
            mensagem de posição parecia um teleporte de 30m e era recusada.
@@ -1702,7 +1705,7 @@ wss.on('connection', (ws, req) => {
           const limite = VEL_MAX * dtMov + 2;   // folga pra lag
           if (dist > limite) {
             metricas.rejeitadas++;
-            enviar(j, { t: 'correcao', x: j.x, y: j.y, z: j.z });
+            enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z });
           } else {
             // COLISÃO NO SERVIDOR: antes só a velocidade era checada, então
             // um cliente modificado atravessava qualquer parede. Agora o
@@ -1710,7 +1713,7 @@ wss.on('connection', (ws, req) => {
             const r = moverComColisao(j.x, j.z, nx, nz, RAIO_JOGADOR);
             if (Math.hypot(r.x - nx, r.z - nz) > .25) {
               metricas.rejeitadas++;
-              enviar(j, { t: 'correcao', x: r.x, y: ny, z: r.z });
+              enviar(j, { t: 'correcao', seq: inputSeq, x: r.x, y: ny, z: r.z });
             }
             j.x = r.x; j.y = ny; j.z = r.z;
           }

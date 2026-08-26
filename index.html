@@ -44,6 +44,8 @@ body.touch #zona{top:calc(8px + clamp(30px,8.5vmin,40px) + 66px)}
 #stock i{color:#e8d264;font-style:normal}
 #zone{top:92px;left:10px;font-size:10px;letter-spacing:2px;opacity:.8}
 #zone b{color:#8fe063}
+#routeHint{top:119px;left:10px;font-size:10px;letter-spacing:.7px;color:#e8d264;opacity:.9;max-width:250px}
+#routeHint b{color:#8fe063}
 #vitals{bottom:78px;left:10px;width:190px}
 #hpbar,#armbar{height:7px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;margin-top:4px}
 #hpbar>i{display:block;height:100%;background:#e0503c;width:100%;transition:width .15s}
@@ -184,6 +186,7 @@ h2.mt{font-size:11px;letter-spacing:3px;color:#8fe063;margin-bottom:3px}
 #rel.vazio{animation:pisca .7s infinite}
 @keyframes pisca{0%,100%{background:rgba(232,210,100,.22)}50%{background:rgba(232,120,60,.55)}}
 body.touch #touch{display:block}
+body.touch #routeHint{top:calc(8px + clamp(30px,8.5vmin,40px) + 82px);left:var(--pad);max-width:62vw;font-size:clamp(9px,2.4vmin,14px)}
 body.touch #vitals{bottom:calc(var(--pad) + var(--btn) * 1.4);left:var(--pad);width:clamp(130px,34vmin,210px);font-size:clamp(9px,2.4vmin,14px)}
 body.touch #radar{display:none}
 body.touch #seeds{display:none}
@@ -199,6 +202,7 @@ body.touch #prompt{font-size:clamp(11px,2.8vmin,16px);bottom:calc(var(--pad) + v
   <div class="panel" id="daybox">dia <b id="day">1</b><br><span class="h" id="hour">06:00</span><br><span id="wx" style="opacity:.6"></span></div>
   <div class="panel" id="stock"><span class="ttl">ESTOQUE PRONTO</span><div id="stockList">vazio</div></div>
   <div class="panel" id="zone"></div>
+  <div class="panel" id="routeHint"></div>
   <div class="panel" id="vitals">VIDA<div id="hpbar"><i></i></div>COLETE<div id="armbar"><i></i></div>
     <div id="gun"><b id="gunName">Mãos</b> · <span id="ammo">—</span></div></div>
   <div id="wanted"></div>
@@ -1031,10 +1035,24 @@ const RUAS_Z=[15,47,79,111,143],RUAS_X=[-50,-18,22,54];
   const m=new THREE.Mesh(new THREE.PlaneGeometry(1.8,.16),fx);
   m.rotation.x=-Math.PI/2;m.position.set(x,.03,z);rg.add(m)}});
  reg('ruas',rg);scene.add(rg);
- // acesso do quintal até a primeira rua
- const acc=new THREE.Mesh(new THREE.PlaneGeometry(3.4,5),calcadaMat);
- acc.rotation.x=-Math.PI/2;acc.position.set(GATEX,.011,C.z1+2.4);scene.add(acc);
-})();
+  // acesso do quintal até a primeira rua
+  const acc=new THREE.Mesh(new THREE.PlaneGeometry(3.4,5),calcadaMat);
+  acc.rotation.x=-Math.PI/2;acc.position.set(GATEX,.011,C.z1+2.4);scene.add(acc);
+  // marcos de navegação: o jogador sempre sabe qual caminho conecta cada área
+  const sinalTex=(txt,cor)=>{const c=cv(512,112),g=c.getContext('2d');
+   g.fillStyle='rgba(10,14,10,.88)';g.fillRect(6,6,500,100);
+   g.strokeStyle=cor||'#e8d264';g.lineWidth=4;g.strokeRect(6,6,500,100);
+   g.fillStyle=cor||'#e8d264';g.font='700 28px ui-monospace';g.textAlign='center';
+   g.fillText(txt,256,69);return T(c)};
+  const sinal=(x,z,txt,cor)=>{const g=new THREE.Group();
+   const poste=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,2.4,7),
+    new THREE.MeshStandardMaterial({color:0x6b5236,roughness:.9}));poste.position.y=1.2;g.add(poste);
+   const p=new THREE.Sprite(new THREE.SpriteMaterial({map:sinalTex(txt,cor),transparent:true,depthTest:false}));
+   p.scale.set(3.2,.7,1);p.position.set(0,2.15,0);g.add(p);g.position.set(x,0,z);scene.add(g)};
+  sinal(GATEX,C.z1+3.4,'↑ CIDADE · LOTES','#8fe063');
+  sinal(0,CITY.z1+3.2,'↑ ESTRADA · FAZENDA','#e8d264');
+  sinal(0,FAZ.z0+4.2,'← FAZENDA · CANTEIROS','#8fe063');
+ })();
 // prédios
 (function(){
  const cores=[0xd8cdb4,0xc9b9a2,0xb9a894,0xd2c2ae,0xa89a88,0xcfc0a8,0xbfae9a];
@@ -3059,7 +3077,10 @@ function doAction(){
   G.gate.open=!G.gate.open;gateCol.active=!G.gate.open;
   blip(G.gate.open?500:320,.13,'square',.06);toast(G.gate.open?'portão aberto':'portão fechado');return}
  if(focus.t==='banca'){renderBanca();$('banca').classList.add('on');return}
- if(focus.t==='vendaOnline'&&focus.cli.loteIndex!==meuLoteIndex){toast('este cliente pertence a outro lote');return}
+ if(focus.t==='vendaOnline'){
+  if(!Number.isInteger(focus.cli.loteIndex)){toast('cliente sem lote — aguardando sincronização');return}
+  if(focus.cli.loteIndex!==meuLoteIndex){toast('este cliente pertence a outro lote');return}
+ }
  if(focus.t==='venda'||focus.t==='vendaOnline'){renderVenda(focus.cli);$('venda').classList.add('on');return}
  if(focus.t==='ponto'){renderPonto(focus.terr);$('ponto').classList.add('on');return}
  if(focus.t==='invadir'){
@@ -3188,9 +3209,14 @@ function drawRadar(){
   const dx=(t.x-player.position.x)*esc, dz=(t.z-player.position.z)*esc;
   rc.fillStyle=t.dono==='seu'?'rgba(143,224,99,.22)':(t.dono==='jogador'?'rgba(90,168,224,.22)':'rgba(224,80,60,.22)');
   rc.beginPath();rc.arc(dx,dz,t.raio*esc,0,7);rc.fill()});
- // casa
- const hx=(GATEX-player.position.x)*esc,hz=(0-player.position.z)*esc;
- rc.fillStyle='rgba(232,210,100,.5)';rc.fillRect(hx-4,hz-4,8,8);
+ // propriedade atual: no online o marcador antigo dos fundos enganava o jogador
+ const casaAlvo=mpConnected&&Number.isInteger(meuLoteIndex)&&lotesOnline[meuLoteIndex]
+  ?lotesOnline[meuLoteIndex]:{x:GATEX,z:0};
+ const hx=(casaAlvo.x-player.position.x)*esc,hz=(casaAlvo.z-player.position.z)*esc;
+ rc.fillStyle='rgba(232,210,100,.7)';rc.fillRect(hx-4,hz-4,8,8);
+ // fazenda: referência fixa do caminho norte, mesmo fora do alcance do radar
+ const fx=(0-player.position.x)*esc,fz=(FAZ.z0-player.position.z)*esc;
+ if(Math.hypot(fx,fz)<118){rc.fillStyle='rgba(190,150,74,.85)';rc.fillRect(fx-3,fz-3,6,6)}
  // inimigos / polícia
  G.inimigos.forEach(e=>{const dx=(e.g.position.x-player.position.x)*esc,dz=(e.g.position.z-player.position.z)*esc;
   if(Math.hypot(dx,dz)>110)return;rc.fillStyle='#e0503c';rc.beginPath();rc.arc(dx,dz,3.4,0,7);rc.fill()});
@@ -3199,6 +3225,36 @@ function drawRadar(){
  rc.restore();
  rc.fillStyle='#8fe063';rc.beginPath();
  rc.moveTo(cx,cy-7);rc.lineTo(cx-5,cy+6);rc.lineTo(cx+5,cy+6);rc.closePath();rc.fill()}
+let rotaT=0;
+function objetivoAtual(){
+ if(mpConnected&&Number.isInteger(meuLoteIndex)&&lotesOnline[meuLoteIndex]){
+  const lote=lotesOnline[meuLoteIndex];
+  const cliente=[...mpClientes.values()].find(c=>c.loteIndex===meuLoteIndex&&c.fase==='atendendo'&&!c.done);
+  if(cliente)return{nome:'cliente do seu lote',x:cliente.g.position.x,z:cliente.g.position.z};
+  const vazio=lote.plots.find(P=>!P.dados);
+  if(vazio)return{nome:'canteiro livre do seu lote',x:vazio.x,z:vazio.z};
+  const b=lote.bancadaPos||{x:lote.x+6.8,z:lote.z+3.6};
+  return{nome:'bancada da sua casa',x:b.x,z:b.z};
+ }
+ const vazio=plots.find(P=>!P.locked&&!P.plant);
+ if(vazio)return{nome:'canteiro livre',x:vazio.x,z:vazio.z};
+ const faz=IMOVEIS.find(im=>im.k==='fazenda');
+ return faz&&faz.comprado?{nome:'fazenda',x:0,z:FAZ.z0+6}:{nome:'cidade',x:0,z:CITY.z0+6};
+}
+function atualizarRota(dt){
+ rotaT-=dt;if(rotaT>0)return;rotaT=.25;
+ const el=$('routeHint');if(!el)return;
+ if(!G.running){el.textContent='';return}
+ const alvo=objetivoAtual();if(!alvo){el.textContent='';return}
+ const dx=alvo.x-player.position.x,dz=alvo.z-player.position.z;
+ const dist=Math.hypot(dx,dz);
+ if(dist<1.8){el.innerHTML='<b>Objetivo:</b> você está no ponto certo';return}
+ let rel=Math.atan2(dx,dz)-camYaw;
+ while(rel>Math.PI)rel-=6.283;while(rel<-Math.PI)rel+=6.283;
+ const setor=Math.round(rel/(Math.PI/4));
+ const setas=['↑','↗','→','↘','↓','↙','←','↖'];
+ el.innerHTML=`<b>Rota:</b> ${setas[(setor+8)%8]} ${alvo.nome} · ${Math.round(dist)}m`;
+}
 
 /* ═════════ START ═════════ */
 function start(){
@@ -3497,7 +3553,12 @@ function tick(){
  const mag=Math.hypot(ix,iz);
  const run=(keys.ShiftLeft||keys.ShiftRight||mag>.85)&&!aiming;
  const spd=aiming?2.7:(run?5.6:3.1);
- if(mag>.05&&G.running&&!modalOpen()&&!mpReconnecting){
+ // A reconexão não pode congelar o controle: depois que o jogador já
+ // nasceu no lote, ele continua andando localmente enquanto o servidor
+ // retorna. Só bloqueamos a janela inicial, antes da primeira posição
+ // authoritative, para não andar no quintal antigo.
+ const aguardandoPrimeiroLote=mpConnected&&!mpReady&&!G._nasceuNoLote;
+ if(mag>.05&&G.running&&!modalOpen()&&!aguardandoPrimeiroLote){
   const nx=ix/mag,nz=iz/mag;
   // direção derivada direto do ângulo da câmera (mesma fórmula usada pro
   // posicionamento da câmera), sem depender do quaternion do frame anterior —
@@ -3836,9 +3897,12 @@ function tick(){
    :`<kbd>E</kbd> comprar ${focus.im.nome} · R$ ${focus.im.custo}`;
   else if(focus.t==='gate')txt=G.gate.open?'<kbd>E</kbd> fechar o portão':'<kbd>E</kbd> abrir o portão pros clientes';
   else if(focus.t==='banca')txt='<kbd>E</kbd> bancada — sementes, cruzar, estrutura, arsenal';
-  else if(focus.t==='venda'||focus.t==='vendaOnline')txt=focus.t==='vendaOnline'&&focus.cli.loteIndex!==meuLoteIndex
-   ?`cliente do lote ${focus.cli.loteIndex+1} · venda só pelo dono`
-   :`<kbd>E</kbd> atender ${focus.cli.nome}`;
+  else if(focus.t==='venda'||focus.t==='vendaOnline'){
+   const loteCli=Number.isInteger(focus.cli.loteIndex)?focus.cli.loteIndex:null;
+   txt=focus.t==='vendaOnline'&&loteCli!==meuLoteIndex
+    ?(loteCli===null?'cliente sincronizando o lote…':`cliente do lote ${loteCli+1} · venda só pelo dono`)
+    :`<kbd>E</kbd> atender ${focus.cli.nome}`;
+  }
   else if(focus.t==='ponto')txt=`<kbd>E</kbd> abastecer ${focus.terr.nome} · demanda ${Math.round(focus.terr.demanda*100)}%`;
   else if(focus.t==='balcao')txt='balcão — esperando cliente';
    else if(focus.t==='estacao'){
@@ -3858,8 +3922,9 @@ function tick(){
   pr.innerHTML=txt;pr.classList.add('on')}
  else pr.classList.remove('on');
 
- radarT+=dt;if(radarT>.08){radarT=0;drawRadar()}
- if(G.running)tickFuncs(dt);
+  radarT+=dt;if(radarT>.08){radarT=0;drawRadar()}
+  atualizarRota(dt);
+  if(G.running)tickFuncs(dt);
  if(G.running)streamLotes(dt);
  // primeira vez que sai da própria propriedade
  if(G.running&&meuLoteIndex!==null&&lotesOnline[meuLoteIndex]){
@@ -4340,6 +4405,7 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
 // funcionando normal — multiplayer nunca pode travar o modo solo.
 const MP_URL='wss://quintal-3d.onrender.com';
 let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0;
+let mpInputSeq=0,mpLastCorrectionSeq=0;
 let mpToken='',mpAvatarId='carmo';
 try{mpAvatarId=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
 try{mpToken=localStorage.getItem('quintal3d-session-token')||''}catch(e){}
@@ -4428,9 +4494,11 @@ function mpAddCliente(C){
   new THREE.MeshStandardMaterial({color:0xc9a86a,roughness:.9}));
  bag.position.set(-.3,.95,.08);h.g.add(bag);
  h.g.position.set(C.x||0,0,C.z||0);h.g.rotation.y=C.ry||0;
- const label=mpLabel(C.nome||'Cliente');h.g.add(label);
+ const rotuloLote=Number.isInteger(C.loteIndex)?` · Lote ${C.loteIndex+1}`:'';
+ const label=mpLabel((C.nome||'Cliente')+rotuloLote);h.g.add(label);
  scene.add(h.g);
- mpClientes.set(C.id,{id:C.id,g:h.g,L:h.L,nome:C.nome,want:C.want,fala:C.fala,qtd:C.qtd,
+ mpClientes.set(C.id,{id:C.id,g:h.g,L:h.L,label,nome:C.nome,want:C.want,fala:C.fala,qtd:C.qtd,
+  loteIndex:Number.isInteger(C.loteIndex)?C.loteIndex:null,
   mult:C.mult, fase:C.fase,tx:C.x||0,tz:C.z||0,tr:C.ry||0,buf:[],walk:0,
   done:false,leaving:false,ultimoVisto:performance.now()});
 }
@@ -4662,6 +4730,12 @@ function mpConnect(){
      cVistos.add(C.id);
      if(!mpClientes.has(C.id))mpAddCliente(C);
      const c=mpClientes.get(C.id);if(!c)continue;
+     const loteAnterior=c.loteIndex;
+     c.loteIndex=Number.isInteger(C.loteIndex)?C.loteIndex:null;
+     if(c.label&&loteAnterior!==c.loteIndex){
+      const rotulo=c.loteIndex===null?'':` · Lote ${c.loteIndex+1}`;
+      c.label.material.map=T(mpLabelTex((c.nome||'Cliente')+rotulo));c.label.material.needsUpdate=true;
+     }
      c.fase=C.fase;c.qtd=C.qtd;c.mult=C.mult;c.want=C.want;c.fala=C.fala;
      c.buf.push({t:agora,x:C.x,z:C.z,ry:C.ry});
      if(c.buf.length>20)c.buf.shift();c.ultimoVisto=agora;
@@ -4686,13 +4760,17 @@ function mpConnect(){
     // navegador não responde ping de protocolo; respondemos no aplicativo
     try{ mpWs.send(JSON.stringify({t:'pong',ts:msg.ts})) }catch(e){}
    } else if(msg.t==='correcao'){
-    // Servidor rejeitou meu movimento. Ele é a autoridade, mas puxar de
-    // uma vez dá aquele tranco de "voltei no tempo". Só corrijo na marra
-    // se a diferença for grande; senão vou empurrando devagar.
+    // Correção authoritative identificada por sequência. Uma correção velha
+    // não pode desfazer um input novo; diferenças pequenas são jitter de rede
+    // e não devem puxar o personagem para trás a cada pacote.
+    const seq=Number(msg.seq)||0;
+    if(seq&&seq<mpLastCorrectionSeq)return;
+    if(seq)mpLastCorrectionSeq=seq;
     const dd=Math.hypot(player.position.x-msg.x,player.position.z-msg.z);
+    if(dd<.42)return;
     if(dd>6)player.position.set(msg.x,msg.y,msg.z);
-    else{ player.position.x+=(msg.x-player.position.x)*.25;
-          player.position.z+=(msg.z-player.position.z)*.25; }
+    else{ player.position.x+=(msg.x-player.position.x)*.18;
+          player.position.z+=(msg.z-player.position.z)*.18; }
    } else if(msg.t==='nome'){
     const p=mpPlayers.get(msg.id);
     if(p){p.nome=msg.nome;if(msg.avatarId&&msg.avatarId!==p.avatarId){p.avatarId=AVATAR_CATALOGO[msg.avatarId]?msg.avatarId:'carmo';aplicarCoresAvatar(p.g,coresAvatar(p.avatarId))}}
@@ -4813,7 +4891,7 @@ function mpConnect(){
  mpSendT+=dt;
  if(mpConnected&&mpReady&&G.running&&mpSendT>.1){
   mpSendT=0;
-  try{ mpWs.send(JSON.stringify({t:'input',
+  try{ mpWs.send(JSON.stringify({t:'input',seq:++mpInputSeq,
    x:player.position.x,y:player.position.y,z:player.position.z,ry:player.rotation.y,
    arma:G.arma||0})) }catch(e){}
  }
