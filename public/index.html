@@ -160,6 +160,10 @@ h2.mt{font-size:11px;letter-spacing:3px;color:#8fe063;margin-bottom:3px}
 .sub{font-size:10px;opacity:.5;margin-bottom:10px;line-height:1.6}
 .pick{border:1px solid rgba(255,255,255,.14);border-radius:2px;padding:7px 9px;margin-bottom:5px;font-size:11px;cursor:pointer}
 .pick.on{border-color:#8fe063;background:rgba(60,110,40,.4)}
+.seedArt,.geneticArt{display:block;object-fit:cover;background:#171d16;border:1px solid rgba(143,224,99,.2);border-radius:4px;flex:none}
+.seedArt{width:42px;height:42px}.geneticArt{width:70px;height:70px}.seedPickText{display:block;line-height:1.45}.pick:has(.seedArt){display:flex;align-items:center;gap:8px}.pick:has(.seedArt)>span:not(.seedPickText){flex:1}
+body.touch .geneticArt{width:58px;height:58px} body.touch .seedArt{width:38px;height:38px}
+@media(max-width:520px){.geneticArt{width:58px;height:58px}.row .info{font-size:10px}.row .info small{font-size:8.5px}}
 .want{background:rgba(232,210,100,.08);border:1px solid rgba(232,210,100,.3);padding:9px;border-radius:3px;font-size:11px;line-height:1.65;margin-bottom:10px}
 .want b{color:#e8d264}
 /* ─── tela de entrada ───
@@ -401,6 +405,13 @@ const BASE=[
  mkA('Auto 69',           0xa8c452,{ritmo:94,rendimento:69,resistencia:70,aroma:58,brilho:54}),
  mkA('Critical Auto',     0x74b04c,{ritmo:90,rendimento:74,resistencia:66,aroma:52,brilho:44}),
  mkA('Northern Auto',     0x63a05a,{ritmo:86,rendimento:60,resistencia:86,aroma:50,brilho:50})];
+const GENETICA_ART=Object.freeze({
+ 'Northern Lights':'/assets/geneticas/northern-lights.jpg','White Widow':'/assets/geneticas/white-widow.jpg','Skunk #1':'/assets/geneticas/skunk-1.jpg','Hindu Kush':'/assets/geneticas/hindu-kush.jpg','Amnesia Haze':'/assets/geneticas/amnesia-haze.jpg','Sour Diesel':'/assets/geneticas/sour-diesel.jpg','Blue Dream':'/assets/geneticas/blue-dream.jpg','OG Kush':'/assets/geneticas/og-kush.jpg','Purple Haze':'/assets/geneticas/purple-haze.jpg','Jack Herer':'/assets/geneticas/jack-herer.jpg','Critical':'/assets/geneticas/critical.jpg','Gorilla Glue':'/assets/geneticas/gorilla-glue.jpg','LSD 25 Auto':'/assets/geneticas/lsd-25-auto.jpg','Auto 69':'/assets/geneticas/auto-69.jpg','Critical Auto':'/assets/geneticas/critical-auto.jpg','Northern Auto':'/assets/geneticas/northern-auto.jpg'
+});
+function artGenetica(s,cls='geneticArt'){
+ const nome=String(s&&s.nome||'');const src=GENETICA_ART[nome];
+ return src?`<img class="${cls}" src="${src}" alt="${escaparHTML(nome)}" loading="lazy" decoding="async">`:`<span class="${cls}" style="background:${hex(s&&s.cor||0x385235)}"></span>`;
+}
 const seedCost=s=>Math.round((8+TRAITS.reduce((a,t)=>a+s.t[t.k],0)*.16+s.gen*9)*(RARIDADES[s.rar]||RARIDADES.comum).mult);
 const traitAvg=s=>TRAITS.reduce((a,t)=>a+s.t[t.k],0)/TRAITS.length;
 const PRE=['Super','Royal','Purple','White','Blue','Green','Critical','Sweet','Early','Black'];
@@ -2265,7 +2276,7 @@ function renderSeeds(){const el=$('seeds');el.innerHTML='';
  if(!G.bank.length){el.innerHTML='<div class="seed" style="opacity:.5">sem sementes</div>';return}
  G.bank.forEach((e,i)=>{const d=document.createElement('div');
   d.className='seed'+(G.sel===i?' sel':'');
-  d.innerHTML=`<span><i class="dot" style="background:${hex(e.s.cor)};display:inline-block"></i>${e.s.nome.split(' ')[0]}</span><br><span class="q">${e.qtd}</span>`;
+  d.innerHTML=`${artGenetica(e.s,'seedArt')}<span><i class="dot" style="background:${hex(e.s.cor)};display:inline-block"></i>${escaparHTML(e.s.nome.split(' ')[0])}<br><span class="q">${e.qtd}</span></span>`;
   d.onclick=()=>{G.sel=i;renderSeeds()};el.appendChild(d)})}
 const barsHTML=s=>'<div class="bars">'+TRAITS.map(t=>`<i><b style="width:${s.t[t.k]}%"></b></i>`).join('')+'</div>';
 const traitLine=s=>TRAITS.map(t=>`${t.n} ${s.t[t.k]}`).join(' · ');
@@ -2323,7 +2334,7 @@ function renderBanca(){
    const _r=RARIDADES[e.s.rar]||RARIDADES.comum;
    const _tag=e.s.rar&&e.s.rar!=='comum'
     ?` <small style="color:${hex(_r.cor)};font-weight:700">${_r.nome}</small>`:'';
-   d.innerHTML=`<span style="color:${hex(_r.bud)}">●</span> ${e.s.nome}${_tag} <b style="color:#8fe063">${e.qtd}x</b>`;
+   d.innerHTML=`${artGenetica(e.s,'seedArt')}<span class="seedPickText"><span style="color:${hex(_r.bud)}">●</span> ${escaparHTML(e.s.nome)}${_tag} <b style="color:#8fe063">${e.qtd}x</b></span>`;
    d.onclick=()=>{G.sel=i;renderSeeds();renderBanca();toast('vai plantar '+e.s.nome)};
    b.appendChild(d)})}
  else b.innerHTML+='<div class="sub">Você não tem sementes. Compra abaixo.</div>';
@@ -2331,8 +2342,7 @@ function renderBanca(){
   b.innerHTML+='<h2 class="mt">SEMENTES BASE</h2><div class="sub">Barras: ritmo, rendimento, resistência, aroma, brilho.</div>';
   BASE.forEach(s=>{const c=seedCost(s),r=document.createElement('div');r.className='row';
    const possuida=G.bank.filter(e=>e.s&&e.s.nome===s.nome).reduce((n,e)=>n+Number(e.qtd||0),0);
-   r.innerHTML=`<div class="sw" style="background:${hex(s.cor)}"></div>
-    <div class="info">${s.nome} — R$ ${c}${barsHTML(s)}<small>${traitLine(s)}</small>${possuida?`<small style="color:#8fe063">no inventário: ${possuida}x</small>`:''}</div>`;
+   r.innerHTML=`${artGenetica(s,'geneticArt')}<div class="info">${escaparHTML(s.nome)} — R$ ${c}${barsHTML(s)}<small>${traitLine(s)}</small>${possuida?`<small style="color:#8fe063">no inventário: ${possuida}x</small>`:''}</div>`;
    const btn=document.createElement('button');btn.textContent=possuida?`COMPRAR MAIS · ${possuida}x`:'COMPRAR';btn.disabled=G.cash<c;
    btn.onclick=()=>{
     // ETAPA B: o preço e o fenótipo são decididos pelo SERVIDOR
@@ -2342,7 +2352,7 @@ function renderBanca(){
   b.innerHTML+='<h2 class="mt">CRUZAMENTO</h2><div class="sub">Duas genéticas, uma cria. Média dos atributos, com chance de salto dominante. R$ 120 por 2 sementes.</div>';
   libAll().forEach(s=>{const d=document.createElement('div');
    d.className='pick'+(crossPick.includes(s.id)?' on':'');
-   d.innerHTML=`<span style="color:${hex(s.cor)}">●</span> ${s.nome} <small style="opacity:.5">· G${s.gen} · média ${Math.round(traitAvg(s))}</small>${barsHTML(s)}`;
+   d.innerHTML=`${artGenetica(s,'seedArt')}<span class="seedPickText"><span style="color:${hex(s.cor)}">●</span> ${escaparHTML(s.nome)} <small style="opacity:.5">· G${s.gen} · média ${Math.round(traitAvg(s))}</small>${barsHTML(s)}</span>`;
    d.onclick=()=>{const i=crossPick.indexOf(s.id);
     if(i>=0)crossPick.splice(i,1);else{if(crossPick.length>=2)crossPick.shift();crossPick.push(s.id)}
     renderBanca()};b.appendChild(d)});

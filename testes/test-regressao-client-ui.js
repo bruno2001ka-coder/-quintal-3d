@@ -97,4 +97,18 @@ assert.match(html, /addColLocal\(ex-ew\/2,ex-vaoEstufa\/2,ez\+ed\/2-\.1,ez\+ed\/
 assert.match(html, /addColLocal\(ex\+vaoEstufa\/2,ex\+ew\/2,ez\+ed\/2-\.1,ez\+ed\/2\+\.1\)/,
   'o colisor direito da frente deve começar depois da porta');
 
+const geneticAssetSlugs=[
+ 'northern-lights','white-widow','skunk-1','hindu-kush','amnesia-haze','sour-diesel','blue-dream','og-kush',
+ 'purple-haze','jack-herer','critical','gorilla-glue','lsd-25-auto','auto-69','critical-auto','northern-auto'
+];
+assert.match(html,/const GENETICA_ART=Object\.freeze\(/,
+ 'o catálogo deve mapear as artes das genéticas sem duplicar a fonte de nomes');
+assert.match(html,/function artGenetica\(s,cls='geneticArt'\)/,
+ 'o HTML deve ter um renderer único para as artes das genéticas');
+for(const slug of geneticAssetSlugs){
+ const asset=path.join(__dirname,'..','public','assets','geneticas',`${slug}.jpg`);
+ assert.ok(fs.existsSync(asset),`asset ausente: ${slug}.jpg`);
+ assert.match(html,new RegExp(`/assets/geneticas/${slug}\\.jpg`),`asset não referenciado no HTML: ${slug}.jpg`);
+}
+
 console.log('CLIENT_UI_REGRESSION_OK');
