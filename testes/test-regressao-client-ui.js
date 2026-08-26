@@ -80,5 +80,15 @@ assert.match(html, /localStorage\.setItem\('quintal3d-account-token',mpToken\)/,
   'o token da conta deve sobreviver a recarregamento e troca de aba');
 assert.match(html, /msg\.t==='login_required'/,
   'o cliente deve bloquear o jogo até a conta ser reconhecida');
+assert.match(html, /lote\.curaPotes=\[\]/,
+  'cada lote deve reservar seus próprios potes físicos de cura');
+assert.match(html, /const emCura=itens\.filter\(l=>l\.stage==='cura'\|\|l\.stage==='pronto'\)/,
+  'os potes da bancada devem representar cura e produto pronto');
+assert.match(html, /new THREE\.CylinderGeometry\(\.16,\.18,\.32,12\)/,
+  'a bancada individual deve criar a geometria 3D do pote');
+assert.match(html, /slot\.g\.visible=true/,
+  'a atualização do estoque deve tornar visível o pote da cura');
+assert.match(html, /lote\.curaPotes=null/,
+  'os potes devem ser liberados quando a casa é desmontada');
 
 console.log('CLIENT_UI_REGRESSION_OK');

@@ -2281,9 +2281,9 @@ function linhasProducao(lotes,limite=6){
 }
 function posBancadaOnline(lote){return lote&&lote.bancadaPos||{x:lote.x+6.8,z:lote.z+3.6}}
 function atualizarMarcadoresBancada(lote){
- if(!lote||!lote.montado||!lote.producaoMarkers)return;
- const itens=lote.index===meuLoteIndex?G.lotes.filter(l=>ESTAGIO_UI[l.stage]).slice(0,lote.producaoMarkers.length):[];
- lote.producaoMarkers.forEach((sp,i)=>{
+ if(!lote||!lote.montado)return;
+ const itens=lote.index===meuLoteIndex?G.lotes.filter(l=>l&&ESTAGIO_UI[l.stage]):[];
+ if(lote.producaoMarkers)lote.producaoMarkers.forEach((sp,i)=>{
   const l=itens[i];
   if(!l){sp.visible=false;return}
   const e=ESTAGIO_UI[l.stage],qtd=Math.max(0,Math.floor(Number(l.qtd)||0));
@@ -2291,6 +2291,17 @@ function atualizarMarcadoresBancada(lote){
   sp.material.map=T(placaLote(`${e[0]} ${qtd} un`,e[1]));sp.material.needsUpdate=true;
   if(old&&old.dispose)old.dispose();
   sp.visible=true;
+ });
+ const potes=lote.curaPotes||[];
+ const emCura=itens.filter(l=>l.stage==='cura'||l.stage==='pronto').slice(0,potes.length);
+ potes.forEach((slot,i)=>{
+  const l=emCura[i];
+  if(!l){slot.g.visible=false;return}
+  const pronto=l.stage==='pronto';
+  slot.fill.material.color.setHex(l.s&&l.s.cor||0x936ec1);
+  slot.fill.material.color.multiplyScalar(pronto?1.12:.88);
+  slot.cap.material.color.setHex(pronto?0xe8d264:0xb98ee6);
+  slot.g.visible=true;
  });
 }
 let bancaTab='sem',crossPick=[];
@@ -4330,6 +4341,23 @@ function montarLote(lote){
    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('PRODUÇÃO','#8fe063')),transparent:true,depthTest:false}));
    sp.scale.set(1.7,.32,1);sp.position.set(bx,1.35+mi*.38,bz+.58);sp.visible=false;g.add(sp);lote.producaoMarkers.push(sp);
   }
+  // A bancada individual também precisa mostrar fisicamente os potes da cura.
+  // O estado/quantidade continua vindo de G.lotes, o cliente só espelha.
+  lote.curaPotes=[];
+  for(let ji=0;ji<6;ji++){
+   const pote=new THREE.Group(),gx=bx-.8+(ji%3)*.8,gz=bz-.2+Math.floor(ji/3)*.4;
+   const vidro=new THREE.Mesh(new THREE.CylinderGeometry(.16,.18,.32,12),
+    new THREE.MeshStandardMaterial({color:0xd2e4e7,roughness:.15,transparent:true,opacity:.52}));
+   vidro.position.set(gx,1.12,gz);vidro.castShadow=true;
+   const recheio=new THREE.Mesh(new THREE.CylinderGeometry(.115,.13,.19,12),
+    new THREE.MeshStandardMaterial({color:0x936ec1,roughness:.82}));
+   recheio.position.set(gx,1.05,gz);recheio.castShadow=true;
+   const tampa=new THREE.Mesh(new THREE.CylinderGeometry(.17,.17,.035,12),
+    new THREE.MeshStandardMaterial({color:0xb98ee6,roughness:.42,metalness:.2}));
+   tampa.position.set(gx,1.29,gz);tampa.castShadow=true;
+   pote.add(vidro);pote.add(recheio);pote.add(tampa);pote.visible=false;g.add(pote);
+   lote.curaPotes.push({g:pote,fill:recheio,cap:tampa});
+  }
   addColLocal(bx-1.3,bx+1.3,bz-.5,bz+.5);
  })();
 
@@ -4401,7 +4429,7 @@ function desmontarLote(lote){
  });
  if(lote.cols){for(const c of lote.cols){const i=colliders.indexOf(c);
   if(i>=0)colliders.splice(i,1)} lote.cols=null}
-  lote.grp=null;lote.placa=null;lote.producaoMarkers=null;lote.montado=false;
+  lote.grp=null;lote.placa=null;lote.producaoMarkers=null;lote.curaPotes=null;lote.montado=false;
 }
 // ═══ streaming: só monta o que está perto, como GTA faz ═══
 // Os ambientes extras continuam disponíveis no modo solo, mas não podem
