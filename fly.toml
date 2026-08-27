@@ -1,55 +1,61 @@
-app = "quintal-3d-bruno"
-primary_region = "gru"
-kill_signal = "SIGTERM"
-kill_timeout = "30s"
+# fly.toml app configuration file generated for quintal-3d on 2026-08-27T20:43:05Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'quintal-3d'
+primary_region = 'gru'
+kill_signal = 'SIGTERM'
+kill_timeout = '30s'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  NODE_ENV = "production"
-  PORT = "8080"
-  DB_PATH = "/data/quintal.db"
+  DB_PATH = '/data/quintal.db'
+  NODE_ENV = 'production'
+  PORT = '8080'
+
+[[mounts]]
+  source = 'quintal_data'
+  destination = '/data'
+  initial_size = '1GB'
+  snapshot_retention = 7
+  scheduled_snapshots = true
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "off"
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
-  processes = ["app"]
+  processes = ['app']
 
   [http_service.concurrency]
-    type = "connections"
-    soft_limit = 40
+    type = 'connections'
     hard_limit = 64
+    soft_limit = 40
 
   [http_service.http_options]
     idle_timeout = 600
 
   [[http_service.checks]]
-    grace_period = "20s"
-    interval = "15s"
-    method = "GET"
-    timeout = "5s"
-    path = "/healthz"
-    protocol = "http"
-
-[mounts]
-  source = "quintal_data"
-  destination = "/data"
-  initial_size = "1GB"
-  snapshot_retention = 7
-  scheduled_snapshots = true
-
-[[vm]]
-  size = "shared-cpu-2x"
-  memory = "1gb"
-  cpus = 2
-  cpu_kind = "shared"
-  processes = ["app"]
+    interval = '15s'
+    timeout = '5s'
+    grace_period = '20s'
+    method = 'GET'
+    path = '/healthz'
+    protocol = 'http'
 
 [[restart]]
-  policy = "on-failure"
+  policy = 'on-failure'
   retries = 10
-  processes = ["app"]
+  processes = ['app']
+
+[[vm]]
+  size = 'shared-cpu-2x'
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 2
+  memory_mb = 1024
+  processes = ['app']
