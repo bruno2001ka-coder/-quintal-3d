@@ -122,6 +122,10 @@ assert.match(html, /const FARM_MAX_PLAYERS=6,FARM_PLOTS_PER_PLAYER=12/,
   'o cliente deve espelhar o limite de seis jogadores e doze canteiros');
 assert.match(html, /const farmSlotsOnline=FARM_SLOT_SPOTS\.map/,
   'os setores da fazenda devem ser estruturas online únicas');
+assert.match(html, /portaoId:null,portaoAberto:false/,
+  'cada setor deve iniciar com estado de porteira vindo do servidor');
+assert.match(html, /function farmAtualizarPortao\(slot\)\{const aberto=!!slot\.portaoAberto/,
+  'o colisor do setor deve seguir o estado authoritative da porteira');
 assert.match(html, /const farmTablesOnline=FARM_TABLE_SPOTS\.map/,
   'as seis mesas devem ser representadas pelo estado do servidor');
 assert.match(html, /const farmTableVisuals=\[\]/,
@@ -142,6 +146,12 @@ assert.match(html, /const FARM_GATE_W=10/,
   'a abertura visual da porteira externa deve ter largura explícita');
 assert.match(html, /const FARM_APPROACH_W=16/,
   'a estrada da fazenda deve ter uma faixa de recuperação navegável');
+assert.match(html, /if\(farmGateCol\)farmGateCol\.active=false/,
+  'o portão externo da fazenda deve ser público para qualquer jogador');
+assert.match(html, /focus\.t==='farmPortao'/,
+  'o foco deve detectar as porteiras privadas dos setores');
+assert.match(html, /pedirAoServidor\(\{t:'portao',id:slot\.portaoId\}\)/,
+  'a abertura do setor deve ser solicitada ao servidor');
 assert.match(html, /x0:-FARM_APPROACH_W,x1:FARM_APPROACH_W,z0:CITY\.z1-1,z1:FAZ\.z0\+1/,
   'o corredor de retorno deve permanecer conectado à porteira');
 const farmGateDecl=html.indexOf('const FARM_GATE_W=10;');
@@ -154,6 +164,8 @@ assert.match(html, /FARM_GATE_W\/2,FAZ\.z0-\.3/,
   'o colisor da porteira externa deve acompanhar sua abertura visual');
 assert.match(html, /col\(FAZ\.x0, -FARM_GATE_W\/2, FAZ\.z0-\.3/,
   'o lado esquerdo da porteira externa deve continuar bloqueando fora do vão');
+assert.match(html, /Number\.isInteger\(msg\.farmSlotIndex\)/,
+  'o cliente deve aplicar eventos de abertura dos setores sem confundir com portões urbanos');
 assert.match(html, /col\(FARM_GATE_W\/2, FAZ\.x1, FAZ\.z0-\.3/,
   'o lado direito da porteira externa deve continuar bloqueando fora do vão');
 assert.match(html, /setModoMultiplayerVisual\(true\)/,

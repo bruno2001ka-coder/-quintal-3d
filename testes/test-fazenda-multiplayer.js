@@ -35,7 +35,11 @@ function seedDb() {
       armor REAL DEFAULT 0, municao TEXT DEFAULT '{}', funcs TEXT DEFAULT '[]', imoveis TEXT DEFAULT '[]',
       nivel INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, territorios TEXT DEFAULT '{}', atualizado INTEGER);
     CREATE TABLE lotes (
-      idx INTEGER PRIMARY KEY, dono_chave TEXT, dono_nome TEXT, plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);`);
+      idx INTEGER PRIMARY KEY, dono_chave TEXT, dono_nome TEXT, plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);
+    CREATE TABLE farm_slots (
+      slot_index INTEGER PRIMARY KEY, owner_key TEXT UNIQUE, owner_name TEXT,
+      plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0,
+      unlocked_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0);`);
   for (let i = 0; i < 7; i++) {
     const usuario = `farm_${process.pid}_${i}`.slice(0, 24);
     const chave = `farm_key_${process.pid}_${i}`;
@@ -48,14 +52,20 @@ function seedDb() {
       { id: 7002, s: SEED, qtd: 4, estagio: 'cura', qual: .8, desde: agora },
       { id: 7003, s: SEED, qtd: 2, estagio: 'embalagem', qual: .9, desde: agora }
     ] : [];
+    const funcionarios = i === 0 ? [{ cargo:'caseiro' }] : [];
     db.prepare('INSERT INTO contas (usuario,chave,nome,senha_salt,senha_hash,criado,atualizado) VALUES (?,?,?,?,?,?,?)')
       .run(usuario, chave, nome, salt, hash, agora, agora);
     db.prepare(`INSERT INTO usuarios
       (chave,nome,cash,bank,estoque,up,armas,fert,rack_max,armor,municao,funcs,imoveis,nivel,xp,territorios,atualizado)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(chave, nome, 50000, JSON.stringify([{ s: SEED, qtd: 2 }]), JSON.stringify(estoque),         JSON.stringify({ _posicao:{ x:0, y:0, z:170, ry:0 } }),
-        JSON.stringify({ pistola: true }), '{}', 12, 0, JSON.stringify({}), '[]', JSON.stringify(['fazenda']), 10, 0, '{}', agora);
+        JSON.stringify({ pistola: true }), '{}', 12, 0, JSON.stringify({}), JSON.stringify(funcionarios), JSON.stringify(['fazenda']), 10, 0, '{}', agora);
   }
+  const farmPlots = Array(12).fill(null);
+  farmPlots[1] = { id:'farm_0_1', plant:{ s:SEED, prog:12, agua:0.1, saude:0.8, praga:1, estagio:0, adubOrg:0, adubCres:0, adubFlor:false } };
+  db.prepare(`INSERT INTO farm_slots
+    (slot_index,owner_key,owner_name,plots,portao_aberto,unlocked_at,updated_at)
+    VALUES (?,?,?,?,?,?,?)`).run(0, `farm_key_${process.pid}_0`, 'Fazendeiro 1', JSON.stringify(farmPlots), 0, Date.now(), Date.now());
   db.close();
   return { mainKey: `farm_key_${process.pid}_0`, outsiderKey: `farm_key_${process.pid}_6` };
 }
@@ -123,16 +133,42 @@ async function waitFarmState(client, predicate, label) { return client.waitFor(m
     });
     assert.deepEqual([...new Set(slots)].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5], 'seis contas devem ocupar setores distintos');
 
-    // A sétima conta continua podendo autenticar na cidade, mas não recebe setor nem pode passar pelo portão.
+    // A sétima conta não recebe setor, mas pode caminhar na fazenda pública.
     const outsider = await connect(); clients.push(outsider); const out = await ready(outsider, keys.outsiderKey, 6);
     assert.equal(out.estado.farm.unlocked, false, 'a sétima conta não deve receber setor da fazenda');
-    const rejectsBefore = outsider.messages.filter(m => m.t === 'recusado').length;
-    await moveTo(outsider, out.lote.posicao, { x: 0, z: 170 });
-    outsider.send({ t: 'input', seq: 99, x: 0, y: 0, z: 174, ry: 0, arma: 0 });
-    await outsider.waitFor(m => m.t === 'recusado' && /fazenda bloqueada|setor pertence/i.test(m.motivo), 7000, 'bloqueio do portão para sétimo jogador');
-    assert.ok(outsider.messages.filter(m => m.t === 'recusado').length > rejectsBefore);
+    let outsiderPos = await moveTo(outsider, out.lote.posicao, { x: 0, z: 170 });
+    outsiderPos = await moveTo(outsider, outsiderPos, { x: 0, z: 174 });
+    outsiderPos = await moveTo(outsider, outsiderPos, { x: 15, z: 174 });
+    outsiderPos = await moveTo(outsider, outsiderPos, { x: 15, z: 260 });
+    outsiderPos = await moveTo(outsider, outsiderPos, { x: 15, z: 240 });
+    assert.ok(outsiderPos.z > 235, `jogador sem setor deve circular no pátio/galpão público: ${JSON.stringify(outsiderPos)}`);
+    // Setores fechados continuam privados: a porteira impede entrar, mas não
+    // impede andar no corredor público imediatamente à frente dela.
+    outsiderPos = await moveTo(outsider, outsiderPos, { x: 15, z: 174 });
+    outsiderPos = await moveTo(outsider, outsiderPos, { x: -30, z: 174 });
+    outsiderPos = await moveTo(outsider, outsiderPos, { x: -30, z: 178 });
+    assert.ok(outsiderPos.z < 180, `setor fechado não pode ser atravessado: ${JSON.stringify(outsiderPos)}`);
+    assert.equal(out.estado.farm.slots[0].portaoAberto, false);
 
     const main = clients[0];
+    // O dono abre a porteira do próprio setor; depois outro jogador pode
+    // atravessar esse vão, como nos portões das casas.
+    let mainPos = main.messages.find(m => m.t === 'lote_atribuido').posicao;
+    mainPos = await moveTo(main, mainPos, { x:0, z:174 });
+    mainPos = await moveTo(main, mainPos, { x:-30, z:174 });
+    mainPos = await moveTo(main, mainPos, { x:-30, z:178 });
+    const mainFarmMeta = main.messages.filter(m => m.t === 'estado' && m.farm && m.farm.slot).at(-1).farm.slot;
+    main.send({ t:'portao', id:mainFarmMeta.portaoId });
+    await main.waitFor(m => m.t === 'portao_estado' && m.farmSlotIndex === 0 && m.aberto === true, 7000, 'abertura da porteira do setor próprio');
+    await waitFarmState(main, m => m.farm.slot.portaoAberto === true, 'estado com porteira própria aberta');
+    outsiderPos = await moveTo(outsider, outsiderPos, { x:-30, z:182 });
+    assert.ok(outsiderPos.z > 180, `o visitante deve entrar quando a porteira está aberta: ${JSON.stringify(outsiderPos)}`);
+    main.send({ t:'portao', id:mainFarmMeta.portaoId });
+    await main.waitFor(m => m.t === 'portao_estado' && m.farmSlotIndex === 0 && m.aberto === false, 7000, 'fechamento da porteira do setor próprio');
+    outsiderPos = await moveTo(outsider, outsiderPos, { x:-30, z:174 });
+    assert.ok(outsiderPos.z < 180, `o visitante já dentro deve conseguir sair após o fechamento: ${JSON.stringify(outsiderPos)}`);
+    main.send({ t:'portao', id:mainFarmMeta.portaoId });
+    await main.waitFor(m => m.t === 'portao_estado' && m.farmSlotIndex === 0 && m.aberto === true, 7000, 'reabertura da porteira do setor próprio');
     // Caminho legítimo: portão externo, corredor entre setores e porta central do galpão.
     let pos = main.messages.find(m => m.t === 'lote_atribuido').posicao;
     pos = await moveTo(main, pos, { x: 0, z: 174 });
@@ -174,6 +210,15 @@ async function waitFarmState(client, predicate, label) { return client.waitFor(m
     main.send({ t: 'farm_plantar', plotId: foreignPlot.plots?.[0]?.id || 'farm_1_0', seedId: SEED.id });
     await main.waitFor(m => m.t === 'recusado' && /não pertence|bloqueada/i.test(m.motivo), 7000, 'bloqueio de canteiro alheio');
 
+    // O caseiro restaurado deve atuar no primeiro canteiro da fazenda e
+    // transmitir a rega authoritative ao dono.
+    await main.waitFor(m => m.t === 'farm_plots_update' && m.slotIndex === 0 &&
+      (m.updates || []).some(u => u.localIndex === 1 && u.plot && u.plot.plant && u.plot.plant.agua > .9),
+      12000, 'tarefa authoritative do caseiro na fazenda');
+    const caseiroSnap = await waitFarmState(main, m => m.farm.slot.plots[1].plant && m.farm.slot.plots[1].plant.agua > .9,
+      'snapshot após a rega authoritative do caseiro');
+    assert.ok(caseiroSnap.farm.slot.plots[1].plant.agua > .9, 'o caseiro deve regar o canteiro da fazenda');
+
     // Saída completa: canteiro próprio -> porta do setor -> portão externo -> estrada.
     pos = await moveTo(main, pos, { x: -30, z: 178 });
     pos = await moveTo(main, pos, { x: 0, z: 178 });
@@ -193,6 +238,20 @@ async function waitFarmState(client, predicate, label) { return client.waitFor(m
       p = await moveTo(c, p, { x: 0, z: 174 });
       if (top) {
         p = await moveTo(c, p, { x: farm.x, z: 174 });
+        p = await moveTo(c, p, { x: farm.x, z: farm.z - 15.5 });
+      } else {
+        p = await moveTo(c, p, { x: gapX, z: 174 });
+        p = await moveTo(c, p, { x: gapX, z: 212 });
+        p = await moveTo(c, p, { x: farm.x, z: 212 });
+        p = await moveTo(c, p, { x: farm.x, z: farm.z - 14.8 });
+      }
+      if (!farm.portaoAberto) {
+        c.send({ t:'portao', id:farm.portaoId });
+        await c.waitFor(m => m.t === 'portao_estado' && m.farmSlotIndex === farm.slotIndex && m.aberto === true,
+          7000, `abertura da porteira do setor ${farm.slotIndex}`);
+      }
+      if (top) {
+        p = await moveTo(c, p, { x: farm.x, z: 174 });
         p = await moveTo(c, p, { x: farm.x, z: farm.z - 13 });
       } else {
         p = await moveTo(c, p, { x: gapX, z: 174 });
@@ -207,7 +266,7 @@ async function waitFarmState(client, predicate, label) { return client.waitFor(m
       assert.ok(p.z < 172, `setor ${farm.slotIndex} deve permitir saída pela porteira; posição=${JSON.stringify(p)}`);
     }
 
-    console.log('FARM_MULTIPLAYER_OK', JSON.stringify({ setores: 6, canteirosPorJogador: 12, totalCanteiros: 72, mesas: 6, galpaoInterno: true, portaoBloqueiaSetimo: true, processamento: ['secagem', 'cura', 'embalagem'], posseAuthoritative: true }));
+    console.log('FARM_MULTIPLAYER_OK', JSON.stringify({ setores: 6, canteirosPorJogador: 12, totalCanteiros: 72, mesas: 6, galpaoInterno: true, fazendaPublica: true, setoresPrivados: true, porteirasAuthoritative: true, caseiroAuthoritative: true, processamento: ['secagem', 'cura', 'embalagem'], posseAuthoritative: true }));
   } catch (error) {
     console.error('FARM_MULTIPLAYER_FAILED:', error.stack || error.message); process.exitCode = 1;
   } finally { clients.forEach(closeClient); await stopServer(server); removeDb(); }

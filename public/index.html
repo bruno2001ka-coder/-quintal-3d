@@ -3199,6 +3199,11 @@ function findFocus(){
   if(Math.hypot(p.x-lote.portaoPos.x,p.z-lote.portaoPos.z)<2.2)
    return{t:'portaoCasa',lote};
  }
+  // A área geral é pública; a única barreira privada de cada setor é a
+  // porteira frontal, cujo estado vem do servidor.
+  for(const slot of farmSlotsOnline){
+   if(Math.hypot(p.x-slot.x,p.z-(slot.z-14))<2.2)return{t:'farmPortao',slot};
+  }
   // Fazenda: os 12 canteiros de cada setor são entidades visuais próprias.
   for(const slot of farmSlotsOnline){
    for(const P of slot.plots){if(Math.hypot(p.x-P.x,p.z-P.z)<1.45)return{t:'farmPlotOnline',P,slot}}
@@ -3400,7 +3405,14 @@ function doAction(){
   pedirAoServidor({t:'portao',id:lote.portaoId});
   return;
  }
- if(focus.t==='farmPlotOnline'){acaoFarmPlot(focus);return}
+  if(focus.t==='farmPortao'){
+   const slot=focus.slot;
+   if(slot.slotIndex!==meuFarmSlotIndex){toast(slot.donoNome?`setor fechado — fazenda de ${slot.donoNome}`:'setor privado fechado');return}
+   if(!slot.portaoId){toast('porteira ainda sincronizando');return}
+   pedirAoServidor({t:'portao',id:slot.portaoId});
+   return;
+  }
+  if(focus.t==='farmPlotOnline'){acaoFarmPlot(focus);return}
  if(focus.t==='farmTable'){bancaTab='proc';renderBanca();$('banca').classList.add('on');return}
  if(focus.t==='plotOnline'){acaoPlotOnline(focus);return}
  if(focus.t==='imovel'){comprarImovel(focus.im);return}
@@ -3484,11 +3496,14 @@ function zonaOk(x,z){
  for(let i=0;i<ZONAS.length;i++){const Z=ZONAS[i];
   if(x>=Z.x0&&x<=Z.x1&&z>=Z.z0&&z<=Z.z1)return true}
  return false}
-function bateu(x,z){
+function bateu(x,z,ignorar){
  for(let i=0;i<colliders.length;i++){const c=colliders[i];
-  if(c.active===false)continue;
+  if(c===ignorar||c.active===false)continue;
   if(x+R>c.minX&&x-R<c.maxX&&z+R>c.minZ&&z-R<c.maxZ)return true}
  return false}
+function farmSetorVisualEm(x,z){
+ return farmSlotsOnline.find(s=>x>=s.x-12&&x<=s.x+12&&z>=s.z-14&&z<=s.z+14)||null;
+}
 // move eixo por eixo, cada um testado contra a posição corrente (não a antiga).
 // se o eixo não cabe, ele fica parado em vez de ser empurrado — acaba o
 // "anda e volta pra trás" que acontecia na diagonal contra parede.
@@ -3497,11 +3512,15 @@ function resolve(pos,nx,nz){
  const dx=nx-pos.x, dz=nz-pos.z;
  const passos=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dz))/0.18));
  const sx=dx/passos, sz=dz/passos;
- for(let p=0;p<passos;p++){
+  for(let p=0;p<passos;p++){
   const tx=x+sx;
-  if(sx&&!bateu(tx,z)&&zonaOk(tx,z))x=tx;
+  const setorAtualX=farmSetorVisualEm(x,z),setorNovoX=farmSetorVisualEm(tx,z);
+  const sairX=setorAtualX&&!setorNovoX?setorAtualX.gateCol:null;
+  if(sx&&!bateu(tx,z,sairX)&&zonaOk(tx,z))x=tx;
   const tz=z+sz;
-  if(sz&&!bateu(x,tz)&&zonaOk(x,tz))z=tz;
+  const setorAtualZ=farmSetorVisualEm(x,z),setorNovoZ=farmSetorVisualEm(x,tz);
+  const sairZ=setorAtualZ&&!setorNovoZ?setorAtualZ.gateCol:null;
+  if(sz&&!bateu(x,tz,sairZ)&&zonaOk(x,tz))z=tz;
  }
  return[x,z]}
 function npcMove(e,tx,tz,dt){
@@ -4221,6 +4240,11 @@ function tick(){
     ? `<kbd>E</kbd> ${focus.lote.portaoAberto?'fechar':'abrir'} o portão${G.admin&&meuLoteIndex!==focus.lote.index?' (admin)':''}`
     : (focus.lote.donoNome?`trancado — casa de ${focus.lote.donoNome}`:'portão trancado');
   }
+  else if(focus.t==='farmPortao'){
+   const sou=focus.slot.slotIndex===meuFarmSlotIndex;
+   if(sou)dica('farmPortao','Este é o portão do seu setor. O servidor controla a abertura e o acesso aos seus canteiros.');
+   txt=sou?`<kbd>E</kbd> ${focus.slot.portaoAberto?'fechar':'abrir'} o portão do setor`:(focus.slot.donoNome?`setor fechado — fazenda de ${focus.slot.donoNome}`:'setor privado fechado');
+  }
   else if(focus.t==='plotOnline'){
    const meu=meuLoteIndex===focus.lote.index;
    const d=focus.P.dados;
@@ -4326,7 +4350,7 @@ const FARM_BARN={x:0,z:252,w:26,d:12,doorW:3.2};
 const FARM_SLOT_SPOTS=[[-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]];
 const FARM_PLOT_OFFSETS=[[-7,-10],[-2.3,-10],[2.4,-10],[-7,-4],[-2.3,-4],[2.4,-4],[-7,2],[-2.3,2],[2.4,2],[-7,8],[-2.3,8],[2.4,8]];
 const FARM_TABLE_SPOTS=[[-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]];
-const farmSlotsOnline=FARM_SLOT_SPOTS.map(([x,z],slotIndex)=>({slotIndex,x,z,donoNome:null,donoId:null,plots:FARM_PLOT_OFFSETS.map(([dx,dz],localIndex)=>({id:`farm_${slotIndex}_${localIndex}`,x:x+dx,z:z+dz,localIndex,dados:null,mesh:null,meshEstagio:-1,meshSeedId:null,group:null,ring:null}))}));
+const farmSlotsOnline=FARM_SLOT_SPOTS.map(([x,z],slotIndex)=>({slotIndex,x,z,portaoId:null,portaoAberto:false,donoNome:null,donoId:null,plots:FARM_PLOT_OFFSETS.map(([dx,dz],localIndex)=>({id:`farm_${slotIndex}_${localIndex}`,x:x+dx,z:z+dz,localIndex,dados:null,mesh:null,meshEstagio:-1,meshSeedId:null,group:null,ring:null}))}));
 const farmTablesOnline=FARM_TABLE_SPOTS.map(([dx,dz],stationId)=>({stationId,x:FARM_BARN.x+dx,z:FARM_BARN.z+dz,status:'idle',operation:null,ownerKey:null,quantity:0,completesAt:0,queueLength:0}));
 let meuFarmSlotIndex=null,farmUnlocked=false;
 const farmSectorCols=[];
@@ -4363,13 +4387,13 @@ function montarFarmSetor(slot){
  });
  slot.group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});scene.add(slot.group);slot.montado=true;farmAtualizarPortao(slot);farmAtualizarNome(slot);
 }
-function farmAtualizarPortao(slot){const aberto=farmUnlocked&&meuFarmSlotIndex===slot.slotIndex;if(slot.gateCol)slot.gateCol.active=!aberto;if(slot.gateLeaf){slot.gateLeaf.visible=true;slot.gateLeaf.rotation.y=aberto?-1.25:0}}
+function farmAtualizarPortao(slot){const aberto=!!slot.portaoAberto;if(slot.gateCol)slot.gateCol.active=!aberto;if(slot.gateLeaf){slot.gateLeaf.visible=true;slot.gateLeaf.rotation.y=aberto?-1.25:0}}
 function farmAtualizarNome(slot){if(slot.sign){const meu=meuFarmSlotIndex===slot.slotIndex;slot.sign.material.map=T(placaLote(meu?'SEU SETOR':(slot.donoNome||'SETOR '+(slot.slotIndex+1)),meu?'#8fe063':(slot.donoNome?'#5aa8e0':'#9aa0a6')));slot.sign.material.needsUpdate=true}}
 function farmAplicarPlot(slotIndex,localIndex,plot){
  const slot=farmSlotsOnline[slotIndex];if(!slot||!slot.plots[localIndex])return;const P=slot.plots[localIndex];P.id=plot&&plot.id||P.id;P.dados=plot&&plot.plant||null;if(slot.montado)farmPlotVisual(slot,P);
 }
 function aplicarFarmSlotsMeta(slots){
- (slots||[]).forEach(s=>{const slot=farmSlotsOnline[s.slotIndex];if(!slot)return;slot.donoNome=s.donoNome||null;slot.donoId=s.donoId||null;montarFarmSetor(slot);farmAtualizarNome(slot);});
+ (slots||[]).forEach(s=>{const slot=farmSlotsOnline[s.slotIndex];if(!slot)return;slot.portaoId=s.portaoId||slot.portaoId;slot.portaoAberto=!!s.portaoAberto;slot.donoNome=s.donoNome||null;slot.donoId=s.donoId||null;montarFarmSetor(slot);farmAtualizarPortao(slot);farmAtualizarNome(slot);});
 }
 function atualizarFarmMesaVisual(t){
  const ref=farmTableVisuals[t.stationId];if(!ref)return;
@@ -4384,7 +4408,7 @@ function aplicarFarmState(f){
  if(!f)return;farmUnlocked=!!f.unlocked;meuFarmSlotIndex=f.slot&&Number.isInteger(f.slot.slotIndex)?f.slot.slotIndex:null;
  aplicarFarmSlotsMeta(f.slots||[]);
  if(f.slot){const slot=farmSlotsOnline[f.slot.slotIndex];if(slot){slot.donoNome=f.slot.donoNome||slot.donoNome;slot.donoId=f.slot.donoId||slot.donoId;(f.slot.plots||[]).forEach((p,i)=>farmAplicarPlot(slot.slotIndex,i,p));farmAtualizarNome(slot)}}
- aplicarFarmTabelas(f.tables||[]);if(farmGateCol)farmGateCol.active=!farmUnlocked;if(fazPortao){fazPortao.visible=true;fazPortao.rotation.y=farmUnlocked?-1.25:0}farmSlotsOnline.forEach(farmAtualizarPortao);
+ aplicarFarmTabelas(f.tables||[]);if(farmGateCol)farmGateCol.active=false;if(fazPortao){fazPortao.visible=true;fazPortao.rotation.y=-1.25}farmSlotsOnline.forEach(farmAtualizarPortao);
 }
 
 function placaLote(texto,cor){
@@ -5238,7 +5262,7 @@ function mpConnect(){
     mpRemovePlayer(msg.id);
    } else if(msg.t==='snap'){
     aplicarFarmTabelas(msg.farmTables||[]);
-    (msg.farms||[]).forEach(S=>{const slot=farmSlotsOnline[S.slotIndex];if(!slot)return;slot.donoNome=S.donoNome||null;slot.donoId=S.donoId||null;montarFarmSetor(slot);(S.plots||[]).forEach((P,i)=>farmAplicarPlot(S.slotIndex,i,P));farmAtualizarNome(slot)});
+    (msg.farms||[]).forEach(S=>{const slot=farmSlotsOnline[S.slotIndex];if(!slot)return;slot.portaoId=S.portaoId||slot.portaoId;slot.portaoAberto=!!S.portaoAberto;slot.donoNome=S.donoNome||null;slot.donoId=S.donoId||null;montarFarmSetor(slot);(S.plots||[]).forEach((P,i)=>farmAplicarPlot(S.slotIndex,i,P));farmAtualizarPortao(slot);farmAtualizarNome(slot)});
     // O servidor manda o estado completo de um lote apenas quando ele entra
     // no AOI. Guardamos o dado mesmo se a casa ainda estiver desmontada; o
     // streaming o materializa quando o jogador se aproximar.
@@ -5358,7 +5382,7 @@ function mpConnect(){
       if(msg.lote&&msg.lote.plots)
        msg.lote.plots.forEach((pl,i)=>aplicarPlotOnline(meuLoteIndex,i,pl));
       if(msg.farm){aplicarFarmState({unlocked:true,slot:msg.farm,slots:[msg.farm],tables:msg.farmTables||[]})}
-      else {farmUnlocked=false;meuFarmSlotIndex=null;farmSlotsOnline.forEach(farmAtualizarPortao);if(fazPortao)fazPortao.rotation.y=0}
+      else {farmUnlocked=false;meuFarmSlotIndex=null;if(farmGateCol)farmGateCol.active=false;farmSlotsOnline.forEach(farmAtualizarPortao);if(fazPortao)fazPortao.rotation.y=-1.25}
       mpReady=true;mpReentrada=false;
       if(estadoDoServidor)mostrarJogoDisponivel();
       toast(`seu lote é o nº ${meuLoteIndex+1} — vai lá plantar`);
@@ -5420,10 +5444,17 @@ function mpConnect(){
    } else if(msg.t==='territorio_estado'){
     const t=TERR.find(x=>x.nome===msg.nome);if(t){t.dono='jogador';t.donoNome=msg.dono;t.ring.material.color.setHex(msg.donoChave===meuId?0x8fe063:0x5aa8e0);t.disc.material.color.setHex(msg.donoChave===meuId?0x8fe063:0x5aa8e0)}
    } else if(msg.t==='portao_estado'){
-    const lote=lotesOnline[msg.loteIndex];
-    if(lote){aplicarPortao(lote,msg.aberto);
-     blip(msg.aberto?300:200,.14,'square',.05);
-     if(meuLoteIndex===msg.loteIndex)toast(msg.aberto?'portão aberto':'portão fechado');}
+    if(Number.isInteger(msg.farmSlotIndex)){
+     const slot=farmSlotsOnline[msg.farmSlotIndex];
+     if(slot){slot.portaoAberto=!!msg.aberto;farmAtualizarPortao(slot);
+      blip(msg.aberto?300:200,.14,'square',.05);
+      if(meuFarmSlotIndex===msg.farmSlotIndex)toast(msg.aberto?'portão do setor aberto':'portão do setor fechado');}
+    } else {
+     const lote=lotesOnline[msg.loteIndex];
+     if(lote){aplicarPortao(lote,msg.aberto);
+      blip(msg.aberto?300:200,.14,'square',.05);
+      if(meuLoteIndex===msg.loteIndex)toast(msg.aberto?'portão aberto':'portão fechado');}
+    }
    } else if(msg.t==='func_contratado'){
     const F=msg.func;
     blip(600,.16,'sine',.07);

@@ -170,6 +170,7 @@ const loteDe = new Map();   // chave persistente -> índice do lote
 // reconectar recupera os mesmos 12 canteiros e nunca recebe o setor de outro.
 const farmSlots = FARM_SLOT_SPOTS.map(([x, z], slotIndex) => ({
   slotIndex, ownerKey: null, ownerName: null, unlockedAt: 0, updatedAt: 0,
+  portaoId: null, portaoAberto: false,
   x, z,
   plots: Array.from({ length: FARM_PLOTS_PER_PLAYER }, (_, localIndex) => ({
     id: `farm_${slotIndex}_${localIndex}`, ownerKey: null, slotIndex, localIndex,
@@ -347,11 +348,13 @@ function iniciarBanco() {
           plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);
           CREATE TABLE IF NOT EXISTS farm_slots (
             slot_index INTEGER PRIMARY KEY, owner_key TEXT UNIQUE, owner_name TEXT,
-            plots TEXT DEFAULT '[]', unlocked_at BIGINT DEFAULT 0, updated_at BIGINT DEFAULT 0);
+            plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0,
+            unlocked_at BIGINT DEFAULT 0, updated_at BIGINT DEFAULT 0);
           CREATE TABLE IF NOT EXISTS farm_jobs (
             job_id TEXT PRIMARY KEY, owner_key TEXT NOT NULL, station_id INTEGER NOT NULL,
             operation TEXT NOT NULL, stock_id BIGINT NOT NULL, quantity INTEGER NOT NULL,
             started_at BIGINT NOT NULL, completes_at BIGINT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', source_json TEXT DEFAULT '{}')`))
+        .then(() => pg.query('ALTER TABLE farm_slots ADD COLUMN IF NOT EXISTS portao_aberto INTEGER DEFAULT 0'))
         .then(() => pg.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS armor REAL DEFAULT 0'))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS municao TEXT DEFAULT '{}'"))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS funcs TEXT DEFAULT '[]'"))
@@ -389,11 +392,13 @@ function iniciarBanco() {
       plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS farm_slots (
       slot_index INTEGER PRIMARY KEY, owner_key TEXT UNIQUE, owner_name TEXT,
-      plots TEXT DEFAULT '[]', unlocked_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0);
+      plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0,
+      unlocked_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS farm_jobs (
       job_id TEXT PRIMARY KEY, owner_key TEXT NOT NULL, station_id INTEGER NOT NULL,
       operation TEXT NOT NULL, stock_id INTEGER NOT NULL, quantity INTEGER NOT NULL,
       started_at INTEGER NOT NULL, completes_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', source_json TEXT DEFAULT '{}')`);
+    try { db.exec('ALTER TABLE farm_slots ADD COLUMN portao_aberto INTEGER DEFAULT 0'); } catch (_) {}
     try { db.exec('ALTER TABLE usuarios ADD COLUMN armor REAL DEFAULT 0'); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN municao TEXT DEFAULT '{}'"); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN funcs TEXT DEFAULT '[]'"); } catch (_) {}
@@ -566,6 +571,7 @@ function farmPlotPublic(p, includePlant = true) {
 }
 function farmSlotPublic(slot, includePlots = false) {
   return { slotIndex: slot.slotIndex, x: slot.x, z: slot.z,
+    portaoId: slot.portaoId, portaoAberto: !!slot.portaoAberto,
     donoNome: slot.ownerName || null, donoId: slot.ownerKey || null,
     plots: includePlots ? slot.plots.map(p => farmPlotPublic(p, true)) : [] };
 }
@@ -603,7 +609,9 @@ function aplicarFarmSlotRows(rows) {
   for (const r of rows || []) {
     const slot = farmSlots[Number(r.slot_index)]; if (!slot) continue;
     slot.ownerKey = r.owner_key || null; slot.ownerName = nomeSeguro(r.owner_name) || null;
+    slot.portaoAberto = !!r.portao_aberto;
     slot.unlockedAt = Number(r.unlocked_at) || 0; slot.updatedAt = Number(r.updated_at) || 0;
+    const ep = entidades.get(slot.portaoId); if (ep) ep.dono = slot.ownerKey;
     if (slot.ownerKey) farmSlotDe.set(slot.ownerKey, slot.slotIndex);
     let ps = []; try { ps = JSON.parse(r.plots || '[]'); } catch (_) { ps = []; }
     for (let i = 0; i < FARM_PLOTS_PER_PLAYER; i++) {
@@ -636,18 +644,20 @@ function carregarFarmState() {
 function salvarFarmState() {
   const rows = farmSlots.map(s => [s.slotIndex, s.ownerKey, s.ownerName || '', JSON.stringify(s.plots.map(p => ({
     id:p.id, plant:farmPlantPublic(p.plant)
-  }))), s.unlockedAt || 0, s.updatedAt || agora()]);
+  }))), s.portaoAberto ? 1 : 0, s.unlockedAt || 0, s.updatedAt || agora()]);
   if (dbTipo === 'sqlite' && db) {
     try {
-      const st = db.prepare(`INSERT INTO farm_slots (slot_index,owner_key,owner_name,plots,unlocked_at,updated_at)
-        VALUES (?,?,?,?,?,?) ON CONFLICT(slot_index) DO UPDATE SET owner_key=excluded.owner_key,
-        owner_name=excluded.owner_name, plots=excluded.plots, unlocked_at=excluded.unlocked_at, updated_at=excluded.updated_at`);
+      const st = db.prepare(`INSERT INTO farm_slots (slot_index,owner_key,owner_name,plots,portao_aberto,unlocked_at,updated_at)
+        VALUES (?,?,?,?,?,?,?) ON CONFLICT(slot_index) DO UPDATE SET owner_key=excluded.owner_key,
+        owner_name=excluded.owner_name, plots=excluded.plots, portao_aberto=excluded.portao_aberto,
+        unlocked_at=excluded.unlocked_at, updated_at=excluded.updated_at`);
       db.transaction(() => rows.forEach(r => st.run(...r)))();
     } catch (e) { console.error('erro ao salvar fazenda:', e.message); }
   } else if (dbTipo === 'postgres' && pg) {
-    for (const r of rows) pg.query(`INSERT INTO farm_slots (slot_index,owner_key,owner_name,plots,unlocked_at,updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(slot_index) DO UPDATE SET owner_key=EXCLUDED.owner_key,
-      owner_name=EXCLUDED.owner_name, plots=EXCLUDED.plots, unlocked_at=EXCLUDED.unlocked_at, updated_at=EXCLUDED.updated_at`, r)
+    for (const r of rows) pg.query(`INSERT INTO farm_slots (slot_index,owner_key,owner_name,plots,portao_aberto,unlocked_at,updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(slot_index) DO UPDATE SET owner_key=EXCLUDED.owner_key,
+      owner_name=EXCLUDED.owner_name, plots=EXCLUDED.plots, portao_aberto=EXCLUDED.portao_aberto,
+      unlocked_at=EXCLUDED.unlocked_at, updated_at=EXCLUDED.updated_at`, r)
       .catch(e => console.error('erro ao salvar fazenda (pg):', e.message));
   }
   salvarFarmJobs();
@@ -702,6 +712,7 @@ function atribuirFarmSlot(j, c) {
   const slot = farmSlots.find(s => !s.ownerKey);
   if (!slot) return null;
   slot.ownerKey = j.chave; slot.ownerName = j.nome; slot.unlockedAt = agora(); slot.updatedAt = slot.unlockedAt;
+  const ep = entidades.get(slot.portaoId); if (ep) ep.dono = j.chave;
   slot.plots.forEach(p => { p.ownerKey = j.chave; });
   farmSlotDe.set(j.chave, slot.slotIndex);
   salvarFarmState();
@@ -885,6 +896,7 @@ lotes.forEach(l => {
   l.id = registrar('lt', null, l).id;
   l.portaoId = registrar('pt', null, l).id;
 });
+farmSlots.forEach(s => { s.portaoId = registrar('pt', null, s).id; });
 
 /* Validação central de propriedade. Toda ação sobre entidade passa por
    aqui. Retorna a entidade, ou null com o motivo já enviado ao jogador. */
@@ -1265,6 +1277,11 @@ function reconstruirColisores() {
       colisores.push({ x0: l.x + r[0], x1: l.x + r[1], z0: l.z + r[2], z1: l.z + r[3] });
     }
   }
+  // A área geral da fazenda é pública. A passagem pelos vãos dos setores é
+  // validada no movimento para bloquear somente a entrada quando fechado;
+  // quem já está dentro sempre consegue sair, evitando becos sem saída.
+  // Não duplicamos o portão como colisor global: a regra é direcional e
+  // depende da posição anterior do jogador.
 }
 function dentroDeParede(x, z, raio) {
   const r = raio || 0;
@@ -1479,7 +1496,16 @@ function funcsDoJogador(chave) {
 }
 function resumoFunc(f) {
   return { id:f.id, cargo:f.cargo, nome:f.nome, loteIndex:f.loteIndex ?? null,
+    farmSlotIndex:f.farmSlotIndex ?? null,
     x:+f.x.toFixed(2), z:+f.z.toFixed(2), ry:+f.ry.toFixed(3), estado:f.estado || 'parado' };
+}
+function localFuncionario(f) {
+  if (f.cargo === 'caseiro') {
+    const slot = farmSlots.find(s => s.ownerKey === f.dono);
+    return slot ? { tipo:'fazenda', slot, plots:slot.plots } : null;
+  }
+  const lote = lotes.find(l => l.donoChave === f.dono);
+  return lote ? { tipo:'lote', lote, plots:lote.plots } : null;
 }
 function restaurarFuncionarios(j, c) {
   const meus = funcsDoJogador(j.chave);
@@ -1494,36 +1520,51 @@ function restaurarFuncionarios(j, c) {
     const cargo = typeof registro === 'string' ? str(registro, 16) : str(registro && registro.cargo, 16);
     const def = cargo && CAT_FUNC[cargo];
     if (!def || cargos.has(cargo)) continue;
+    const trabalho = cargo === 'caseiro' ? localFuncionario({ cargo, dono:j.chave }) : null;
     let f = existentes.get(cargo);
     if (!f) {
       const sx = Number(registro && registro.x), sz = Number(registro && registro.z), sry = Number(registro && registro.ry);
-      f = { cargo, nome:def.nome, dono:j.chave, loteIndex:loteDe.get(j.chave) ?? null,
-        x:Number.isFinite(sx) ? sx : j.x+1.5, z:Number.isFinite(sz) ? sz : j.z+1.5,
+      const base = trabalho && trabalho.tipo === 'fazenda'
+        ? { x:trabalho.slot.x, z:trabalho.slot.z }
+        : { x:j.x+1.5, z:j.z+1.5 };
+      f = { cargo, nome:def.nome, dono:j.chave,
+        loteIndex:cargo === 'caseiro' ? null : (loteDe.get(j.chave) ?? null),
+        farmSlotIndex:trabalho && trabalho.tipo === 'fazenda' ? trabalho.slot.slotIndex : null,
+        x:Number.isFinite(sx) ? sx : base.x, z:Number.isFinite(sz) ? sz : base.z,
         ry:Number.isFinite(sry) ? sry : 0, alvo:null, estado:str(registro && registro.estado, 16) || 'parado',
         proximaTarefa:agora()+5000 };
       const ent = registrar('fn', j.chave, f);
       f.id = ent.id; funcionarios.push(f); meus.push(ent.id);
+    } else {
+      f.loteIndex = cargo === 'caseiro' ? null : (loteDe.get(j.chave) ?? null);
+      f.farmSlotIndex = trabalho && trabalho.tipo === 'fazenda' ? trabalho.slot.slotIndex : null;
+      if (trabalho && trabalho.tipo === 'fazenda' &&
+          (farmSetorEm(f.x, f.z)?.slotIndex !== trabalho.slot.slotIndex)) {
+        // Caseiros antigos foram criados ao lado do jogador na cidade. Na
+        // primeira reconexão após esta versão, entram no setor correto.
+        f.x = trabalho.slot.x; f.z = trabalho.slot.z; f.alvo = null; f.estado = 'parado';
+      }
     }
     cargos.add(cargo);
-    novosRegistros.push({ id:f.id, cargo, x:f.x, z:f.z, ry:f.ry, estado:f.estado });
+    novosRegistros.push({ id:f.id, cargo, loteIndex:f.loteIndex, farmSlotIndex:f.farmSlotIndex,
+      x:f.x, z:f.z, ry:f.ry, estado:f.estado });
   }
   // Uma carteira antiga pode conter vários registros do mesmo cargo ou IDs
   // de um processo anterior. Persistimos uma entrada canônica por cargo.
   c.funcs = novosRegistros;
 }
 function passoFuncionario(f, dt) {
-  const lote = lotes.find(l => l.donoChave === f.dono);
-  if (!lote) { f.estado = 'sem_lote'; return; }
+  const trabalho = localFuncionario(f);
+  if (!trabalho) { f.estado = 'sem_lote'; return; }
   const c = carteiras.get(f.dono);
-  const podeFazenda = f.cargo === 'caseiro' && c && c.imoveis && c.imoveis.includes('fazenda');
   let alvo = null;
-  for (let i = 0; i < lote.plots.length; i++) {
-    const pl = lote.plots[i]; if (!pl || pl.estagio >= 4 && f.cargo !== 'colhedor') continue;
-    const tipo = TIPO_PLOT[i];
-    if (f.cargo === 'colhedor' && pl.estagio === 4) { alvo = { pl, i, pos:posPlot(lote, i) }; break; }
-    if ((f.cargo === 'zelador' || podeFazenda) && (pl.agua < .55 || pl.praga)) {
-      alvo = { pl, i, pos:posPlot(lote, i) }; break;
-    }
+  for (let i = 0; i < trabalho.plots.length; i++) {
+    const plot = trabalho.plots[i], pl = plot && (trabalho.tipo === 'fazenda' ? plot.plant : plot);
+    if (!pl || pl.estagio >= 4 && f.cargo !== 'colhedor') continue;
+    const pos = trabalho.tipo === 'fazenda' ? { x:plot.x, z:plot.z } : posPlot(trabalho.lote, i);
+    if (f.cargo === 'colhedor' && pl.estagio === 4) { alvo = { pl, plot, i, pos }; break; }
+    if (f.cargo === 'zelador' && (pl.agua < .55 || pl.praga)) { alvo = { pl, plot, i, pos }; break; }
+    if (f.cargo === 'caseiro' && (pl.agua < .55 || pl.praga)) { alvo = { pl, plot, i, pos }; break; }
   }
   if (!alvo) { f.alvo = null; f.estado = 'parado'; return; }
   f.alvo = alvo.i;
@@ -1539,12 +1580,9 @@ function passoFuncionario(f, dt) {
     if (c.estoque.length < c.rackMax) {
       const q = Math.max(2, Math.round((1.3 + alvo.pl.s.t.rendimento / 100 * 2.6) * alvo.pl.saude * 7 * (alvo.pl.s.auto ? .72 : 1) * (RAR_MULT[alvo.pl.s.rar] || 1)));
       c.estoque.push({ id: proxLoteId++, s: alvo.pl.s, qtd:q, estagio:'sec', qual:.55 + alvo.pl.saude * .45, desde:agora() });
-      lote.plots[alvo.i] = null; remover(alvo.pl.id);
+      trabalho.lote.plots[alvo.i] = null; remover(alvo.pl.id);
       metricas.loteUpdates++;
-      paraInteresse({ t:'lote_update', loteIndex:lote.index, plotIndex:alvo.i, plot:null }, lote.x, lote.z, lote.donoChave);
-      // A colheita automática já altera a carteira authoritative acima. Sem
-      // este envio, o cliente só descobriria a produção ao reconectar, porque
-      // marcarSuja apenas agenda persistência e não atualiza a UI.
+      paraInteresse({ t:'lote_update', loteIndex:trabalho.lote.index, plotIndex:alvo.i, plot:null }, trabalho.lote.x, trabalho.lote.z, trabalho.lote.donoChave);
       for (const jogador of jogadores.values()) {
         if (jogador.chave !== f.dono || !jogador.autenticado) continue;
         enviar(jogador, { t:'colheita', plotIndex:alvo.i, qtd:q, strain:alvo.pl.s, por:'funcionario' });
@@ -1552,10 +1590,20 @@ function passoFuncionario(f, dt) {
       }
       marcarSuja({ chave:f.dono });
     }
-  } else {
+  } else if (f.cargo === 'zelador' || f.cargo === 'caseiro') {
     alvo.pl.agua = 1; alvo.pl.praga = 0;
+    if (trabalho.tipo === 'fazenda') {
+      trabalho.slot.updatedAt = agora();
+      farmEnviarPlotUpdates(trabalho.slot, [{ localIndex:alvo.plot.localIndex, plot:farmPlotPublic(alvo.plot) }]);
+      farmEnviarSlots();
+      salvarFarmState();
+    } else {
       metricas.loteUpdates++;
-      paraInteresse({ t:'lote_update', loteIndex:lote.index, plotIndex:alvo.i, plot:alvo.pl }, lote.x, lote.z, lote.donoChave);
+      paraInteresse({ t:'lote_update', loteIndex:trabalho.lote.index, plotIndex:alvo.i, plot:alvo.pl }, trabalho.lote.x, trabalho.lote.z, trabalho.lote.donoChave);
+    }
+    for (const jogador of jogadores.values()) {
+      if (jogador.chave === f.dono && jogador.autenticado) enviarEstado(jogador);
+    }
   }
   f.proximaTarefa = agora() + 2500;
 }
@@ -2354,17 +2402,14 @@ wss.on('connection', (ws, req) => {
           // um cliente modificado atravessava qualquer parede. Agora o
           // servidor recusa a travessia e devolve a posição válida.
           const r = moverComColisao(j.x, j.z, nx, nz, RAIO_JOGADOR);
-          // A abertura do perímetro só pode ser atravessada por uma conta
-          // com fazenda comprada no nível 10 e setor persistente atribuído.
-                  if (r.z >= FARM_AREA.z0 - .4 && r.x > -FARM_GATE_W / 2 && r.x < FARM_GATE_W / 2 && !farmSlotDoJogador(j)) {
-            r.x = j.x; r.z = j.z;
-            enviar(j, { t:'recusado', motivo:'fazenda bloqueada — nível 10 e fazenda comprada' });
-            metricas.rejeitadas++;
-          }
+          // A fazenda inteira, fora dos setores privados, é uma área pública.
+          // O portão externo não é um bloqueio de compra: a compra libera os
+          // canteiros e a operação econômica, não a caminhada pelo espaço.
           const setor = farmSetorEm(r.x, r.z);
-          if (setor && (!farmSlotDoJogador(j) || farmSlotDoJogador(j).slotIndex !== setor.slotIndex)) {
+          const setorAnterior = farmSetorEm(j.x, j.z);
+          if (setor && setor !== setorAnterior && !setor.portaoAberto) {
             r.x = j.x; r.z = j.z;
-            enviar(j, { t:'recusado', motivo:'este setor pertence a outro jogador' });
+            enviar(j, { t:'recusado', motivo:'este setor está fechado' });
             metricas.rejeitadas++;
           }
           if (Math.hypot(r.x - nx, r.z - nz) > .25) {
@@ -2764,10 +2809,15 @@ wss.on('connection', (ws, req) => {
           enviar(j, { t:'recusado', motivo:'sem dinheiro' }); return; }
         c.cash -= def.custo;
 
-        // nasce ao lado do dono, sem atravessar parede
-        let fx = j.x + 1.5, fz = j.z + 1.5;
-        if (dentroDeParede(fx, fz, RAIO_BOT)) { fx = j.x; fz = j.z; }
+        // O caseiro nasce dentro do setor da fazenda; os demais funcionários
+        // continuam nascendo junto ao lote urbano do proprietário.
+        const farmTrabalho = cargo === 'caseiro' ? farmSlots.find(s => s.ownerKey === chave) : null;
+        let fx = farmTrabalho ? farmTrabalho.x : j.x + 1.5;
+        let fz = farmTrabalho ? farmTrabalho.z : j.z + 1.5;
+        if (!farmTrabalho && dentroDeParede(fx, fz, RAIO_BOT)) { fx = j.x; fz = j.z; }
         const novo = { cargo, nome:def.nome, dono:chave,
+          loteIndex:farmTrabalho ? null : (loteDe.get(chave) ?? null),
+          farmSlotIndex:farmTrabalho ? farmTrabalho.slotIndex : null,
           x:fx, z:fz, ry:0, alvo:null, estado:'parado' };
         const ent = registrar('fn', chave, novo);
         novo.id = ent.id;
@@ -2783,18 +2833,33 @@ wss.on('connection', (ws, req) => {
 
       case 'portao': {
         if (!exigirJogadorVivo(j)) return;
-        /* ETAPA C — o portão era 100% do cliente: abrir não aparecia pra
-           mais ninguém. Agora é entidade com dono e estado no servidor. */
+        /* A entidade pode ser um portão urbano ou o portão privado de um
+           setor da fazenda. Em ambos os casos só o proprietário altera o
+           estado; a colisão authoritative é reconstruída imediatamente. */
         const ent = entidadeDoJogador(j, m.id, 'pt');
         if (!ent) return;
-        const lote = ent.ref;
-        if (!exigirDistancia(j, lote.x, lote.z + LOTE_D / 2, 4.5, 'longe do portão')) return;
-        lote.portaoAberto = !lote.portaoAberto;
-        reconstruirColisores();   // portão aberto deixa de bloquear
-        paraTodos({ t: 'portao_estado', id: ent.id, loteIndex: lote.index,
-          aberto: lote.portaoAberto });
-        enviar(j, { t: 'portao_estado', id: ent.id, loteIndex: lote.index,
-          aberto: lote.portaoAberto });
+        const alvo = ent.ref;
+        const eLote = lotes.includes(alvo);
+        const eFarm = farmSlots.includes(alvo);
+        const px = eFarm ? alvo.x : alvo.x;
+        const pz = eFarm ? alvo.z - 14 : alvo.z + LOTE_D / 2;
+        if (!exigirDistancia(j, px, pz, 4.5, 'longe do portão')) return;
+        alvo.portaoAberto = !alvo.portaoAberto;
+        reconstruirColisores();
+        if (eFarm) {
+          alvo.updatedAt = agora();
+          salvarFarmState();
+          enviarEstado(j);
+          const evento = { t:'portao_estado', id:ent.id, farmSlotIndex:alvo.slotIndex,
+            aberto:alvo.portaoAberto };
+          paraTodos(evento);
+          farmEnviarSlots();
+        } else if (eLote) {
+          const evento = { t:'portao_estado', id:ent.id, loteIndex:alvo.index,
+            aberto:alvo.portaoAberto };
+          paraTodos(evento);
+          enviar(j, evento);
+        }
         break;
       }
 
