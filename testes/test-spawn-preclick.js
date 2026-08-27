@@ -20,7 +20,7 @@ assert.match(handler, /if\(msg\.posicao&&\(\s*msg\.retomada\|\|mpReentrada\|\|!G
   'spawn do lote próprio não é aplicado na fase de handshake/reconexão');
 assert(!/G\.running&&msg\.posicao/.test(handler),
   'spawn authoritative voltou a estar bloqueado por G.running');
-assert.match(html, /if\(!G\._nasceuNoLote\)\{toast\('aguarde sua posição authoritative'\)/,
-  'start deixou de exigir a posição authoritative confirmada');
+assert.match(html, /if\(!offlineAtivo\(\)&&!G\._nasceuNoLote\)\{toast\('aguarde sua posição authoritative'\)/,
+  'start deixou de exigir a posição authoritative confirmada no online');
 
 console.log('PASS: spawn authoritative é aplicado no handshake antes do clique e start mantém o guard de segurança');

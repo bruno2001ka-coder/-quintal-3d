@@ -211,6 +211,9 @@ body.touch .geneticArt{width:58px;height:58px} body.touch .seedArt{width:38px;he
 #authPanel .authHint{margin-top:6px;color:rgba(255,255,255,.5);font-size:9px;line-height:1.45;text-align:center}
 #continuarBtn{background:transparent;color:#8fe063;border:1px solid rgba(143,224,99,.45);
  box-shadow:none;margin-top:12px;padding:12px 34px;font-size:clamp(10px,2.5vw,12px)}
+#offlineBtn{background:transparent;color:#e8d264;border:1px solid rgba(232,210,100,.52);
+ box-shadow:none;margin-top:10px;padding:11px 30px;font-size:clamp(10px,2.5vw,12px)}
+#offlineBtn:hover{box-shadow:0 8px 24px rgba(232,210,100,.18)}
 #loadStatus{position:relative;z-index:1;margin-top:22px;font-size:11px;letter-spacing:1.5px;
  opacity:0;transition:opacity .25s;min-height:16px}
 #loadStatus.on{opacity:.62}
@@ -351,6 +354,7 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
     <div class="authHint">Sua conta identifica o jogador e recupera sua progressão em outro navegador.</div>
   </div>
   <button id="startBtn" style="display:none">ENTRAR NO MUNDO</button>
+  <button id="offlineBtn" style="display:none">TESTAR OFFLINE</button>
   <button id="continuarBtn" style="display:none">CONTINUAR</button>
   <div id="loadStatus"></div>
   <div id="rodapeMenu"><span id="netMenu">conectando ao servidor…</span></div>
@@ -2395,6 +2399,10 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');
 // G.cash, G.bank e G.lotes não são mais decididos aqui. O servidor manda
 // 'estado' e nós desenhamos. Divergiu? O servidor vence, por construção.
 let estadoDoServidor=false;   // true depois do primeiro 'estado' recebido
+ // Sandbox local explícito: não representa uma conta nem uma sessão multiplayer.
+ // Quando o servidor estiver disponível, o fluxo online continua authoritative.
+let modoOfflineDev=false;
+const offlineAtivo=()=>modoOfflineDev&&!mpConnected;
 function pedirAoServidor(msg){
  if(!mpConnected){toast('sem conexão com o servidor');return false}
  if(!mpReady||!estadoDoServidor){toast('aguarde o servidor carregar seu estado');return false}
@@ -2439,7 +2447,12 @@ function aplicarEstado(d){
   if(Number.isInteger(meuLoteIndex))atualizarMarcadoresBancada(lotesOnline[meuLoteIndex]);
   if(mpConnected&&mpReady)mostrarJogoDisponivel();
 }
-function bankAdd(s,n){ /* ETAPA B: quem adiciona semente é o servidor */ }
+function bankAdd(s,n){
+ if(!offlineAtivo())return;
+ const atual=G.bank.find(e=>e.s&&e.s.id===s.id);
+ if(atual)atual.qtd+=Math.max(0,Number(n)||0);
+ else G.bank.push({s,qtd:Math.max(0,Number(n)||0)});
+}
 function libAll(){const m=new Map();BASE.forEach(s=>m.set(s.id,s));
  G.bank.forEach(e=>m.set(e.s.id,e.s));G.lotes.forEach(l=>m.set(l.s.id,l.s));return[...m.values()]}
 const emCasa=()=>player.position.z<C.z1-.5;
@@ -2523,6 +2536,10 @@ function renderBanca(){
    const btn=document.createElement('button');btn.textContent=!liberada?`NÍVEL ${s.nivelMin}`:(possuida?`COMPRAR MAIS · ${possuida}x`:'COMPRAR');btn.disabled=!liberada||G.cash<c;
    btn.onclick=()=>{
     if(!liberada){toast(`${s.nome} libera no nível ${s.nivelMin}`);return}
+    if(offlineAtivo()){
+     if(G.cash<c){toast('saldo de teste insuficiente');return}
+     G.cash-=c;bankAdd(s,1);blip(680,.1,'triangle',.06);toast(`${s.nome} adicionada ao sandbox`);renderBanca();renderSeeds();updHUD();return;
+    }
     // O preço, o nível e o fenótipo são decididos pelo SERVIDOR.
     if(pedirAoServidor({t:'comprar',oq:'semente',strain:s}))blip(680,.1,'triangle',.06);};
    r.appendChild(btn);b.appendChild(r)})}
@@ -2554,7 +2571,12 @@ function renderBanca(){
     <div class="info">${u.nome}<small>${u.d}</small></div>`;
    const btn=document.createElement('button');btn.textContent=has?'ATIVA':'R$ '+u.custo;
    btn.disabled=has||G.cash<u.custo;
-   btn.onclick=()=>{if(!pedirAoServidor({t:'comprar',oq:'upg',k:u.k}))return;
+   btn.onclick=()=>{
+    if(offlineAtivo()){
+     if(G.cash<u.custo){toast('saldo de teste insuficiente');return}
+     G.cash-=u.custo;G.up[u.k]=true;aplicarVisualMelhoria(u.k);blip(760,.16,'sine',.07);toast(u.nome+' ativada no sandbox');renderBanca();updHUD();return;
+    }
+    if(!pedirAoServidor({t:'comprar',oq:'upg',k:u.k}))return;
     blip(760,.16,'sine',.07);toast(u.nome+' solicitada');renderBanca();updHUD()};
    r.appendChild(btn);b.appendChild(r)})}
  else if(bancaTab==='neg'){
@@ -2621,7 +2643,12 @@ function renderBanca(){
     <div class="info">${ad.nome} — <b style="color:#8fe063">${G.fert[ad.k]}</b> na mão<small>${ad.d}</small></div>`;
    const cp=document.createElement('button');cp.textContent='R$ '+ad.custo;
    cp.disabled=G.cash<ad.custo;
-   cp.onclick=()=>{if(!pedirAoServidor({t:'comprar',oq:'adubo',k:ad.k}))return;
+   cp.onclick=()=>{
+    if(offlineAtivo()){
+     if(G.cash<ad.custo){toast('saldo de teste insuficiente');return}
+     G.cash-=ad.custo;G.fert[ad.k]=(G.fert[ad.k]||0)+1;blip(520,.12,'triangle',.06);toast(ad.nome+' adicionada ao sandbox');renderBanca();updHUD();return;
+    }
+    if(!pedirAoServidor({t:'comprar',oq:'adubo',k:ad.k}))return;
     blip(520,.12,'triangle',.06);renderBanca();updHUD()};
    const us=document.createElement('button');us.textContent='USAR';
    us.style.marginLeft='4px';us.disabled=G.fert[ad.k]<=0;
@@ -2637,7 +2664,15 @@ function renderBanca(){
    btn.textContent=tem?'MUNIÇÃO R$ '+Math.round(a.custo*.12):'R$ '+a.custo;
    const preco=tem?Math.round(a.custo*.12):a.custo;
    btn.disabled=G.cash<preco;
-   btn.onclick=()=>{if(!pedirAoServidor({t:'comprar',oq:'arma',k:a.k}))return;
+   btn.onclick=()=>{
+    if(offlineAtivo()){
+     if(G.cash<preco){toast('saldo de teste insuficiente');return}
+     G.cash-=preco;
+     if(tem){G.municao[a.k].reserva+=Math.max(1,Math.round(a.mag*.8));}
+     else {G.municao[a.k]={pente:a.mag,reserva:a.mag*2};}
+     toast(tem?'munição adicionada ao sandbox':a.nome+' adicionada ao sandbox');blip(300,.13,'square',.06);renderBanca();updHUD();return;
+    }
+    if(!pedirAoServidor({t:'comprar',oq:'arma',k:a.k}))return;
     toast(tem?'munição solicitada':a.nome+' solicitada');
     blip(300,.13,'square',.06);renderBanca();updHUD()};
     r.appendChild(btn);
@@ -2646,7 +2681,12 @@ function renderBanca(){
   const r2=document.createElement('div');r2.className='row';
   r2.innerHTML='<div class="sw" style="background:#5aa8e0"></div><div class="info">Colete<small>+100 de proteção</small></div>';
   const b2=document.createElement('button');b2.textContent='R$ 520';b2.disabled=G.cash<520||G.armor>=100;
-  b2.onclick=()=>{if(!pedirAoServidor({t:'comprar',oq:'colete'}))return;toast('colete solicitado');renderBanca();updHUD()};
+  b2.onclick=()=>{
+   if(offlineAtivo()){
+    if(G.cash<520||G.armor>=100)return;
+    G.cash-=520;G.armor=100;toast('colete ativado no sandbox');renderBanca();updHUD();return;
+   }
+   if(!pedirAoServidor({t:'comprar',oq:'colete'}))return;toast('colete solicitado');renderBanca();updHUD()};
   r2.appendChild(b2);b.appendChild(r2)}}
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
@@ -2690,7 +2730,12 @@ function renderVenda(cli){
    const btn=document.createElement('button');btn.textContent=`VENDER ${q} · R$ ${v}`;
    btn.onclick=()=>{
     if(btn.disabled)return;
-    btn.disabled=true;btn.textContent='CONFIRMANDO…';
+    btn.disabled=true;btn.textContent=offlineAtivo()?'VENDENDO…':'CONFIRMANDO…';
+    if(offlineAtivo()){
+     l.qtd-=q;G.cash+=v;cli.done=true;cli.leaving=true;
+     if(l.qtd<=0){const li=G.lotes.indexOf(l);if(li>=0)G.lotes.splice(li,1)}
+     toast(`vendeu ${q} un · +R$ ${v}`);closeAll();renderStock();updHUD();return;
+    }
     if(!pedirAoServidor({t:'vender',id:l.id,qtd:q,onde:'balcao',clienteId:cli.id})){
      btn.disabled=false;btn.textContent=`VENDER ${q} · R$ ${v}`;
     }
@@ -2982,7 +3027,7 @@ const FOV_HIP=60, FOV_AIM=44;
 function armaAtual(){return ARMAS[G.arma]}
 function hitmark(){const h=$('hitmark');h.classList.remove('on');void h.offsetWidth;h.classList.add('on')}
 function atirar(){
- if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor)){toast('sem conexão com o servidor');return}
  const a=armaAtual();
  if(a.k==='punho'){toast('sem arma — compra na bancada');return}
  const mu=G.municao[a.k];
@@ -3059,6 +3104,10 @@ function ganharXP(n){
  if(novo>G.nivel){G.nivel=novo;toast(`SUBIU PRO NÍVEL ${novo}`);
   blip(700,.2,'triangle',.09);setTimeout(()=>blip(1050,.24,'triangle',.08),160)}}
 function tomarPonto(t){
+ if(offlineAtivo()){
+  t.dono='seu';t.donoNome=null;t.ring.material.color.setHex(0x8fe063);t.disc.material.color.setHex(0x8fe063);
+  toast(`${t.nome} é seu no sandbox`);blip(520,.18,'triangle',.08);updHUD();return
+ }
  if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
  claimTerritoryOnline(t);
  t.ring.material.color.setHex(0x8fe063);t.disc.material.color.setHex(0x8fe063);
@@ -3086,7 +3135,7 @@ function morrer(){
  toast(`você apagou — perdeu R$ ${perda}`);
  blip(90,.5,'sawtooth',.08);updHUD()}
 function recarregar(){
- if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor)){toast('sem conexão com o servidor');return}
  const a=armaAtual();if(a.k==='punho')return;
  if(mpConnected){pedirAoServidor({t:'recarregar'});return}
  const mu=G.municao[a.k];if(!mu||mu.reserva<=0){toast('sem reserva');return}
@@ -3094,17 +3143,18 @@ function recarregar(){
  const n=Math.min(falta,mu.reserva);mu.pente+=n;mu.reserva-=n;
  blip(380,.1,'square',.05);toast('recarregado');updHUD()}
 function enviarArmaEquipada(){
+ if(offlineAtivo()||!mpWs||mpWs.readyState!==1)return;
  try{mpWs.send(JSON.stringify({t:'input',seq:++mpInputSeq,x:player.position.x,y:player.position.y,z:player.position.z,ry:player.rotation.y,arma:G.arma,salto:false}))}catch(e){toast('conexão perdida com o servidor')}
 }
 function equiparArma(indice){
- if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return false}
+ if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor)){toast('sem conexão com o servidor');return false}
  const i=Math.max(0,Math.min(ARMAS.length-1,Number(indice)||0)),a=ARMAS[i];
  if(i!==0&&!G.municao[a.k]){toast('você ainda não possui essa arma');return false}
  if(G.arma===i){toast(`${a.nome} já está equipada`);return true}
  G.arma=i;updHUD();enviarArmaEquipada();toast(`equipada: ${a.nome}`);blip(420,.1,'triangle',.05);return true
 }
 function trocarArma(){
- if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor)){toast('sem conexão com o servidor');return}
  const anterior=G.arma;let proxima=anterior;
  for(let passo=1;passo<=ARMAS.length;passo++){
   const i=(anterior+passo)%ARMAS.length,a=ARMAS[i];
@@ -3229,9 +3279,9 @@ function abrirPainelFarmMesa(mesa){
  farmLastAutoTable=mesa.stationId;bancaTab='proc';renderBanca();$('banca')?.classList.add('on');
 }
 function findFocus(){
- // O jogo é online-only: sem lote, estado de carteira ou conexão não há
- // foco válido. Assim o fallback nunca altera economia ou plantas locais.
- if(!mpConnected||!mpReady||!estadoDoServidor)return null;
+ // Sem sessão online pronta, só o sandbox explícito pode ter foco local.
+ // O modo online nunca altera economia ou plantas pelo fallback do cliente.
+ if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor))return null;
  const p=player.position;
  if(Math.hypot(p.x-GATEX,p.z-C.z1)<2.4)return{t:'gate'};
  // portão da casa: detecta antes dos canteiros
@@ -3286,18 +3336,28 @@ function findFocus(){
  let best=null,bd=1.7;
  // No online, todos os canteiros válidos vêm de lotesOnline (16 por lote).
  // Os canteiros legados ficam invisíveis e não podem capturar a interação.
- if(mpConnected)return null;
+  if(!offlineAtivo())return null;
  for(const pl of plots){if(pl.locked)continue;
   const d=Math.hypot(p.x-pl.x,p.z-pl.z);if(d<bd){bd=d;best=pl}}
  return best?{t:'plot',plot:best}:null}
 function plantaMaisPerto(){
- if(mpConnected)return null;
+ if(!offlineAtivo())return null;
  let best=null,bd=4.5;
  for(const p of plots){if(!p.plant)continue;
   const d=Math.hypot(player.position.x-p.x,player.position.z-p.z);
   if(d<bd){bd=d;best=p}}
  return best}
 function aplicarAdubo(ad){
+ if(offlineAtivo()){
+  const alvo=plantaMaisPerto(),pl=alvo&&alvo.plant;
+  if(!pl){toast('chegue perto de uma planta');return}
+  if((G.fert[ad.k]||0)<=0){toast('você não tem esse adubo');return}
+  G.fert[ad.k]--;
+  if(ad.k==='organico'){pl.adubOrg=120;pl.praga=0;pl.saude=Math.min(1,pl.saude+.2)}
+  else if(ad.k==='crescimento')pl.adubCres=120;
+  else if(ad.k==='floracao')pl.adubFlor=true;
+  blip(520,.12,'triangle',.06);toast(ad.nome+' usado no sandbox');renderBanca();updHUD();return;
+ }
  if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
  const lote=Number.isInteger(meuLoteIndex)?lotesOnline[meuLoteIndex]:null;
  if(!lote){toast('seu lote ainda está carregando');return}
@@ -3315,13 +3375,24 @@ const FUNCS=[
  {k:'caseiro',nome:'Seu Bené',papel:'Caseiro da fazenda',custo:4800,diaria:130,
   d:'cuida sozinho dos canteiros da fazenda'}];
 function contratar(f){
+ if(offlineAtivo()){
+  if(G.func[f.k]){toast(f.nome+' já está no sandbox');return}
+  if(G.cash<f.custo){toast('saldo de teste insuficiente');return}
+  const bases={zelador:{x:-8,z:-2},colhedor:{x:-10,z:-6},caseiro:{x:-5,z:4}},base=bases[f.k]||{x:GATEX,z:C.z1-4};
+  const h=humanoid(0x8a9268,0x39424c,0xc98d63);h.g.position.set(base.x,0,base.z);
+  scene.add(h.g);G.cash-=f.custo;G.func[f.k]={def:f,g:h.g,L:h.L,base:new THREE.Vector3(base.x,0,base.z),cd:1,alvo:null,walk:0};
+  blip(620,.15,'triangle',.06);toast(f.nome+' contratado no sandbox');renderBanca();updHUD();return;
+ }
  // O servidor decide existência, preço, cargo, ID e entidade. O cliente
  // apenas pede a contratação; não existe uma segunda implementação local.
  if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
  pedirAoServidor({t:'contratar_func',cargo:f.k});
 }
 function tickFuncs(dt){
-  if(mpConnected)return;
+  // Funcionários com simulação local existem somente no sandbox explícito.
+  // Após uma queda online, os funcionários authoritative não têm malha local
+  // nem devem continuar andando ou escrevendo em plantas por conta própria.
+  if(!offlineAtivo())return;
   for(const k in G.func){
   const F=G.func[k];if(!F)continue;
   const ehFaz=F.def.k==='caseiro';
@@ -3352,7 +3423,7 @@ function tickFuncs(dt){
    // direto na planta. Antes ele fazia pl.agua=1 e o servidor sobrescrevia
    // no tick seguinte: o trabalho dele era apagado silenciosamente. Agora
    // ele passa pelo MESMO fluxo de validação que a ação do jogador.
-   if(F.alvo.online){
+   if(F.alvo.online&&!offlineAtivo()){
     if(!mpConnected||meuLoteIndex===null){
      F.alvo=null;   // sem servidor, não faz nada: melhor parado que mentindo
     } else {
@@ -3433,7 +3504,7 @@ $('wipeBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropaga
 $('invBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();abrirInventarioMenu()},{passive:false});
 function doAction(){
  if(!G.running)return;
- if(!mpConnected||!mpReady||!estadoDoServidor){
+ if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor)){
   toast('sem conexão com o servidor — ação bloqueada');
   return;
  }
@@ -3488,18 +3559,27 @@ function doAction(){
   toast(`você tomou ${t.nome} de ${t.donoNome}`);
   t.dono='seu';t.donoNome=null;ganharXP(120);
   t.ring.material.color.setHex(0x8fe063);t.disc.material.color.setHex(0x8fe063);
-  blip(520,.18,'triangle',.08);claimTerritoryOnline(t);updHUD();return}
+  blip(520,.18,'triangle',.08);updHUD();return}
  if(focus.t==='balcao'){toast('sem cliente agora');return}
  if(focus.t==='estacao'){
-  // ETAPA B — o cronômetro local só libera o BOTÃO. Quem muda o estágio
-  // oficial é o servidor, que confere o tempo real decorrido. O cliente
-  // não transforma mais um lote em produto vendável sozinho.
   const s=G.lotes.find(l=>l.stage==='sec'&&l.t<=0);
-  if(s){pedirAoServidor({t:'lote_estagio',id:s.id});blip(420,.14,'sine',.06);return}
+  if(s){
+   if(offlineAtivo()){s.stage='cura';s.t=10;toast('secagem concluída no sandbox — agora está curando');renderBanca();renderStock();}
+   else pedirAoServidor({t:'lote_estagio',id:s.id});
+   blip(420,.14,'sine',.06);return}
   const c=G.lotes.find(l=>l.stage==='cura'&&l.t<=0);
-  if(c){pedirAoServidor({t:'lote_estagio',id:c.id});blip(660,.15,'triangle',.07);return}
-  const e=G.lotes.find(l=>l.stage!=='pronto');
-  toast(e?`ainda falta (${e.stage==='sec'?'secando':'curando'} ${Math.ceil(e.t)}s)`:'nada na bancada');return}
+  if(c){
+   if(offlineAtivo()){c.stage='embalagem';c.t=8;toast('cura concluída no sandbox — agora está embalando');renderBanca();renderStock();}
+   else pedirAoServidor({t:'lote_estagio',id:c.id});
+   blip(660,.15,'triangle',.07);return}
+  const e=G.lotes.find(l=>l.stage==='embalagem'&&l.t<=0);
+  if(e){
+   if(offlineAtivo()){e.stage='pronto';e.t=0;toast('embalagem concluída no sandbox — produto pronto');renderBanca();renderStock();}
+   else pedirAoServidor({t:'lote_estagio',id:e.id});
+   blip(820,.15,'triangle',.07);return}
+  const pend=G.lotes.find(l=>l.stage!=='pronto');
+  const nomes={sec:'secando',cura:'curando',embalagem:'embalando'};
+  toast(pend?`ainda falta (${nomes[pend.stage]||pend.stage} ${Math.ceil(pend.t)}s)`:'nada na bancada');return}
  const p=focus.plot,pl=p.plant;
  if(mpConnected&&!p.online){
   toast('este canteiro ainda não está disponível no online');
@@ -3524,9 +3604,11 @@ function doAction(){
   if(G.lotes.length>=G.rackMax){toast('bancada cheia');return}
   const autoPen=pl.s.auto?.72:1;   // auto rende menos, é o preço da pressa
   const q=Math.max(2,Math.round((1.3+pl.s.t.rendimento/100*2.6)*pl.saude*7*autoPen*(pl.adubFlor?1.35:1)));
-  pedirAoServidor({t:'colher_local',saude:pl.saude,strain:pl.s});
+  if(offlineAtivo()){
+   G.lotes.push({id:'offline-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),s:pl.s,qtd:q,stage:'sec',t:10,qual:Math.max(.1,Math.min(1,pl.saude))});
+  } else pedirAoServidor({t:'colher_local',saude:pl.saude,strain:pl.s});
   scene.remove(pl.mesh);p.plant=null;
-  blip(720,.14,'sine',.08);toast(`colheu ${q} un`);updHUD();return}
+  blip(720,.14,'sine',.08);toast(`colheu ${q} un`);renderStock();renderBanca();updHUD();return}
  if(pl.agua>.88){toast('já tá regada');return}
  pl.agua=1;G.watering=.5;splash(p.x,p.baseY,p.z);blip(240,.2,'sine',.05)}
 
@@ -3705,24 +3787,57 @@ function drawWorldMap(){
 let mapaT=0;
 
 /* ═════════ START ═════════ */
+function iniciarSandboxOffline(){
+ clearTimeout(mpRetryTimer);mpRetryTimer=null;
+ modoOfflineDev=true;mpReconnecting=false;mpHadConnection=false;mpConnected=false;mpReady=false;estadoDoServidor=false;
+ if(mpWs&&mpWs.readyState<2){try{mpWs.close(1000,'sandbox offline')}catch(e){}}
+ mpWs=null;mpId=null;meuId=null;meuNome='sandbox';contaUsuario='';meuLoteIndex=null;meuFarmSlotIndex=null;farmUnlocked=false;
+ [G.clientes,G.inimigos,G.policia].forEach(lista=>lista.forEach(e=>scene.remove(e.g)));
+ Object.values(G.func||{}).forEach(f=>{if(f&&f.g)scene.remove(f.g)});
+ G.clientes=[];G.inimigos=[];G.policia=[];G.func={};
+ Object.assign(G,{cash:10000,sel:0,day:1,clock:6*60,rain:0,rainTimer:rnd(40,90),cliTimer:8,heat:0,crimeT:0,
+  hp:100,armor:0,arma:0,municao:{},wanted:0,bank:[{s:BASE[0],qtd:3}],lotes:[],rackMax:6,
+  up:{vasos:false,led:false,rack:false,placa:false,auto:false,irrig:false},
+  gate:{open:false},fert:{organico:0,crescimento:0,floracao:0},func:{},nivel:12,xp:4950,
+  respawnT:0,running:false,_nasceuNoLote:true,_esperandoLote:false});
+ IMOVEIS.forEach(im=>{im.comprado=false;im.ring.material.color.setHex(0xe8d264)});
+ plots.concat(fazPlots,casaNovaPlots).forEach(p=>{if(p.plant){scene.remove(p.plant.mesh);p.plant=null}});
+ setModoMultiplayerVisual(false);
+ player.position.set(GATEX,0,C.z1-4);player.rotation.y=Math.PI;camYaw=0;
+ if(gateCol)gateCol.active=true;if(gateLeaf)gateLeaf.rotation.y=0;
+ const panel=$('authPanel');if(panel)panel.hidden=true;
+ const off=$('offlineBtn');if(off)off.style.display='none';
+ const startBtn=$('startBtn');if(startBtn){startBtn.style.display='';startBtn.textContent='ENTRAR NO MUNDO'}
+ const nt=$('netTag');if(nt){nt.textContent='sandbox';nt.classList.remove('on')}
+ const nm=$('netMenu');if(nm){nm.textContent='modo offline · sem salvamento online';nm.classList.remove('ok')}
+ authStatus('sandbox local: nada será salvo na conta online');
+ toast('modo offline de desenvolvimento ativado');
+}
 function start(){
- if(!mpConnected||!mpReady||!estadoDoServidor){
+ if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor)){
   statusServidor(false);mostrarCarregando();$('loadStatus').textContent='sem conexão ou estado ainda carregando — tente novamente';toast('sem conexão com o servidor');return;
  }
  if(G.running)return;
- // Online-only: o servidor já entregou carteira, lote e posição. Não
+ // No online, o servidor já entregou carteira, lote e posição. Não
  // redefinir cash, sementes, imóveis, plantas ou progressão com defaults locais.
+ // No sandbox, os defaults de teste foram definidos explicitamente na entrada.
  Object.assign(G,{running:true,day:1,clock:6*60,rain:0,rainTimer:rnd(40,90),cliTimer:8,heat:0,crimeT:0});
   document.body.classList.add('gameStarted');
  G.clientes.forEach(c=>scene.remove(c.g));G.clientes=[];
- G.inimigos.forEach(e=>scene.remove(e.g));G.inimigos=[];
- G.policia.forEach(e=>scene.remove(e.g));G.policia=[];
- plots.concat(fazPlots,casaNovaPlots).forEach(p=>{
+ if(!offlineAtivo()){
+  G.inimigos.forEach(e=>scene.remove(e.g));G.inimigos=[];
+  G.policia.forEach(e=>scene.remove(e.g));G.policia=[];
+ } else {
+  TERR.forEach(t=>{if(t.dono==='rival')povoarTerritorio(t)});
+ }
+ // A entrada do sandbox já começa de propósito com plantas vazias. Se o
+ // jogador apenas relançar a cena local, não destrua o que ele acabou de testar.
+ if(!offlineAtivo())plots.concat(fazPlots,casaNovaPlots).forEach(p=>{
   if(p.plant){scene.remove(p.plant.mesh);p.plant=null}
-  if(p.group)p.group.visible=false;
  });
- setModoMultiplayerVisual(true);
- if(!G._nasceuNoLote){toast('aguarde sua posição authoritative');G.running=false;return}
+ if(!offlineAtivo())plots.concat(fazPlots,casaNovaPlots).forEach(p=>{if(p.group)p.group.visible=false});
+  setModoMultiplayerVisual(offlineAtivo()?false:true);
+ if(!offlineAtivo()&&!G._nasceuNoLote){toast('aguarde sua posição authoritative');G.running=false;return}
  $('overlay').classList.add('hide');
  renderSeeds();renderStock();updHUD();
  setTimeout(()=>dica('mover',isTouch
@@ -3738,6 +3853,9 @@ $('startBtn').onclick=()=>{
  // dá um quadro pro navegador pintar o "carregando" antes de montar o mundo
  setTimeout(start,40);
 };
+$('offlineBtn')?.addEventListener('click',()=>{
+ iniciarSandboxOffline();mostrarCarregando();setTimeout(start,40);
+});
 
 /* ═════════ MEMÓRIA (save / load) ═════════ */
 const SAVEKEY='quintal3d-save-v1';
@@ -3966,9 +4084,10 @@ function tick(){
  const mag=Math.hypot(ix,iz);
  const run=(keys.ShiftLeft||keys.ShiftRight||mag>.85)&&!aiming;
  const spd=aiming?2.7:(run?5.6:3.1);
- // Online-only: sem conexão, lote ou carteira authoritative, não há
- // simulação local. O cliente fica visualmente parado até reconectar.
- const aguardandoPrimeiroLote=!mpConnected||!mpReady||!estadoDoServidor;
+ // No online, sem conexão, lote ou carteira authoritative não há
+ // simulação local: o cliente fica parado até reconectar. Só o sandbox
+ // explícito libera a simulação visual local.
+ const aguardandoPrimeiroLote=!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor);
  if(mag>.05&&G.running&&!modalOpen()&&!aguardandoPrimeiroLote){
   const nx=ix/mag,nz=iz/mag;
   // direção derivada direto do ângulo da câmera (mesma fórmula usada pro
@@ -4963,7 +5082,7 @@ const MP_URL=(()=>{
  if(local||location.hostname.endsWith('.onrender.com'))return (location.protocol==='https:'?'wss://':'ws://')+location.host;
  return remoto;
 })();
-let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0;
+let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0, mpRetryTimer=null;
 let mpInputSeq=0,mpLastCorrectionSeq=0,mpJumpQueued=false;
 let mpToken='',mpAvatarId='carmo',contaUsuario='';
 try{mpAvatarId=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
@@ -4975,7 +5094,13 @@ function mostrarAuth(text){
 }
 function mostrarJogoDisponivel(){
  const p=$('authPanel'),b=$('startBtn');if(p)p.hidden=true;if(b)b.style.display='';
+ const off=$('offlineBtn');if(off)off.style.display='none';
  const pass=$('authPass');if(pass)pass.value='';
+}
+function mostrarSandboxOffline(){
+ if(modoOfflineDev||mpConnected)return;
+ const off=$('offlineBtn');if(off)off.style.display='';
+ authStatus('servidor indisponível — você pode testar o sandbox offline',true);
 }
 function enviarAuth(tipo){
  if(!mpConnected||!mpWs||mpWs.readyState!==1){authStatus('sem conexão com o servidor',true);return}
@@ -5237,9 +5362,10 @@ function mpAplicarSpawnAuthoritative(pos){
  return true;
 }
 function mpConnect(){
- if(!MP_URL)return;
+ if(modoOfflineDev||!MP_URL)return;
  try{ mpWs=new WebSocket(MP_URL) }catch(e){ return }
  mpWs.onopen=()=>{
+  if(modoOfflineDev){try{mpWs.close(1000,'sandbox offline')}catch(e){};return}
   mpReentrada=mpReconnecting; mpConnected=true; mpReady=false; estadoDoServidor=false; mpJumpQueued=false; mpReconnecting=false; mpHadConnection=true; mpTentativas=0;
   setModoMultiplayerVisual(true);
   mpLimparEntidades();
@@ -5261,20 +5387,24 @@ function mpConnect(){
    avatarId:mpAvatarId})) }catch(e){}
  };
  mpWs.onclose=()=>{
-  mpConnected=false; mpReady=false; estadoDoServidor=false; mpJumpQueued=false; mpReconnecting=mpHadConnection;
+  const teveConexao=mpHadConnection;
+  mpConnected=false; mpReady=false; estadoDoServidor=false; mpJumpQueued=false; mpReconnecting=teveConexao;
+  if(modoOfflineDev){mpReconnecting=false;return;}
   // Depois que o multiplayer já conectou, não reativamos a simulação local
   // durante a queda: isso faria o jogador andar num mundo paralelo e voltar
   // ao ponto antigo quando a sessão fosse retomada.
   setModoMultiplayerVisual(true);
   const nt=$('netTag'); if(nt){nt.textContent=mpReconnecting?'reconectando':'offline';nt.classList.toggle('on',mpReconnecting)}
   statusServidor(false);if(mpReconnecting){const el=$('netMenu');if(el)el.textContent='reconectando…';}
+  if(!teveConexao)mostrarSandboxOffline();
   mpLimparEntidades();
   // reconexão com espera crescente + jitter aleatório. Sem o jitter,
   // se o servidor reinicia todo mundo volta no mesmo instante e derruba
   // ele de novo — é o problema conhecido de "avalanche de reconexão".
   mpTentativas=Math.min(mpTentativas+1,6);
   const base=Math.min(1000*Math.pow(1.8,mpTentativas),20000);
-  setTimeout(mpConnect, base+Math.random()*1500);
+  clearTimeout(mpRetryTimer);
+  mpRetryTimer=setTimeout(()=>{mpRetryTimer=null;mpConnect()}, base+Math.random()*1500);
  };
  mpWs.onerror=()=>{};
  mpWs.onmessage=(ev)=>{

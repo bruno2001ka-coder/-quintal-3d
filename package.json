@@ -30,6 +30,7 @@
     "test:persistencia": "node testes/test-persistencia-restart.js",
     "test:persistencia-fazenda": "node testes/test-persistencia-fazenda.js",
     "test:catalogo-sementes": "node testes/test-catalogo-sementes.js",
+    "test:offline": "node testes/test-offline-sandbox.js",
     "test:render-config": "node testes/test-render-config.js"
   },
   "engines": {

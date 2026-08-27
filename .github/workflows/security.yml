@@ -50,6 +50,7 @@ jobs:
           node --check testes/test-persistencia-restart.js
           node --check testes/test-persistencia-fazenda.js
           node --check testes/test-catalogo-sementes.js
+          node --check testes/test-offline-sandbox.js
           node --check testes/test-render-config.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
@@ -109,6 +110,7 @@ jobs:
           TEST_PERSIST_PORT=8808 npm run test:persistencia
           npm run test:persistencia-fazenda
           npm run test:catalogo-sementes
+          npm run test:offline
           npm run test:colheita
           npm run test:render-config
           for port in 8800 8801 8802 8803 8804 8805 8806 8807 8809 8810; do cat "$RUNNER_TEMP/quintal-$port.log"; done
