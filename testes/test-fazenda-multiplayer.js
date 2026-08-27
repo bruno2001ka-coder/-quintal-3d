@@ -83,9 +83,10 @@ function connect() {
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}`), messages = [], waiters = [];
     const client = { ws, messages,
       send(v) { ws.send(JSON.stringify(v)); },
-      waitFor(predicate, timeout = 7000, label = 'mensagem') {
-        const found = messages.find(predicate); if (found) return Promise.resolve(found);
-        return new Promise((res, rej) => { const timer = setTimeout(() => { const i = waiters.findIndex(w => w.res === res); if (i >= 0) waiters.splice(i, 1); rej(new Error(`timeout esperando ${label}`)); }, timeout); waiters.push({ predicate, res: v => { clearTimeout(timer); res(v); }, rej }); });
+      waitFor(predicate, timeout = 7000, label = 'mensagem', after = 0) {
+        const found = messages.slice(after).find(predicate); if (found) return Promise.resolve(found);
+        const current = m => messages.indexOf(m) >= after && predicate(m);
+        return new Promise((res, rej) => { const timer = setTimeout(() => { const i = waiters.findIndex(w => w.res === res); if (i >= 0) waiters.splice(i, 1); rej(new Error(`timeout esperando ${label}`)); }, timeout); waiters.push({ predicate:current, res: v => { clearTimeout(timer); res(v); }, rej }); });
       }
     };
     ws.on('message', raw => { let m; try { m = JSON.parse(raw); } catch (_) { return; } messages.push(m); for (let i = waiters.length - 1; i >= 0; i--) if (waiters[i].predicate(m)) { const w = waiters.splice(i, 1)[0]; w.res(m); } });
@@ -205,26 +206,31 @@ async function chegarPorteiraDoSlot(client, from, slotIndex) {
     main.send({ t:'portao', id:mainFarmMeta.portaoId });
     await main.waitFor(m => m.t === 'portao_estado' && m.farmSlotIndex === 0 && m.aberto === true, 7000, 'reabertura da porteira do setor próprio');
     // Caminho legítimo: portão externo, corredor entre setores e porta central do galpão.
-    let pos = main.messages.find(m => m.t === 'lote_atribuido').posicao;
+    let pos = mainPos;
     pos = await moveTo(main, pos, { x: 0, z: 174 });
     pos = await moveTo(main, pos, { x: -15, z: 174 });
     pos = await moveTo(main, pos, { x: -15, z: 260 });
     pos = await moveTo(main, pos, { x: 0, z: 260 });
     pos = await moveTo(main, pos, { x: 0, z: 255 });
     pos = await moveTo(main, pos, { x: -8, z: 250 });
-    const beforeTables = main.messages.find(m => m.t === 'estado' && m.farm)?.farm.tables;
-    assert.equal(beforeTables.length, 6, 'o galpão deve ter seis mesas authoritative');
+    const beforeTables = main.messages.filter(m => m.t === 'estado' && m.farm && m.farm.slot).at(-1)?.farm.tables;
+    assert.equal(beforeTables.length, 1, 'cada proprietário deve receber somente a mesa do próprio lote');
+    assert.equal(beforeTables[0].farmSlotIndex, 0, 'a mesa recebida deve pertencer ao setor 0');
+    main.send({ t:'farm_job', stationId:1, operation:'secagem', stockId:7001 });
+    await main.waitFor(m => m.t === 'recusado' && /aproxime-se de uma mesa/i.test(m.motivo), 7000, 'bloqueio da mesa de outro lote');
 
     // Todas as três etapas usam somente estoque real; a mesa ocupa uma posição e produz o próximo estágio.
     for (const [operation, stockId, stage] of [['secagem', 7001, 'cura'], ['cura', 7002, 'embalagem'], ['embalagem', 7003, 'pronto']]) {
+      const beforeJob = main.messages.length;
       main.send({ t: 'farm_job', stationId: 0, operation, stockId });
-      const started = await main.waitFor(m => (m.t === 'farm_job_started' && m.stationId === 0 && m.operation === operation) || m.t === 'recusado', 7000, `início de ${operation}`);
+      const started = await main.waitFor(m => (m.t === 'farm_job_started' && m.stationId === 0 && m.operation === operation) || m.t === 'recusado', 7000, `início de ${operation}`, beforeJob);
       assert.equal(started.t, 'farm_job_started', `servidor recusou ${operation}: ${started.motivo || JSON.stringify(started)}; posição=${JSON.stringify(main.messages.filter(m => m.t === 'correcao').at(-1) || main.messages.find(m => m.t === 'lote_atribuido')?.posicao)}`);
       await main.waitFor(m => m.t === 'farm_job_ok' && m.stationId === 0 && m.operation === operation && m.estagio === stage, 7000, `conclusão de ${operation}`);
       await waitFarmState(main, m => m.estoque.some(l => l.id === stockId && l.estagio === stage), `estoque após ${operation}`);
     }
-    const finalState = main.messages.filter(m => m.t === 'estado' && m.farm).at(-1);
-    assert.equal(finalState.farm.tables.length, 6);
+    const finalState = main.messages.filter(m => m.t === 'estado' && m.farm && m.farm.slot).at(-1);
+    assert.equal(finalState.farm.tables.length, 1);
+    assert.equal(finalState.farm.tables[0].farmSlotIndex, 0);
     assert.ok(finalState.estoque.some(l => l.id === 7001 && l.estagio === 'cura'));
     assert.ok(finalState.estoque.some(l => l.id === 7002 && l.estagio === 'embalagem'));
     assert.ok(finalState.estoque.some(l => l.id === 7003 && l.estagio === 'pronto'));

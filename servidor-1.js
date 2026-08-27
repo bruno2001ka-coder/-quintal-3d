@@ -182,7 +182,7 @@ const farmSlots = FARM_SLOT_SPOTS.map(([x, z], slotIndex) => ({
 }));
 const farmSlotDe = new Map();
 const farmTables = FARM_TABLE_SPOTS.map(([x, z], stationId) => ({
-  stationId, x: FARM_BARN.x + x, z: FARM_BARN.z + z,
+  stationId, farmSlotIndex: stationId, x: FARM_BARN.x + x, z: FARM_BARN.z + z,
   job: null, queue: []
 }));
 
@@ -579,7 +579,7 @@ function farmSlotPublic(slot, includePlots = false) {
 }
 function farmTablePublic(table) {
   const j = table.job;
-  return { stationId: table.stationId, x: table.x, z: table.z,
+  return { stationId: table.stationId, farmSlotIndex: table.farmSlotIndex, x: table.x, z: table.z,
     status: j ? 'working' : (table.queue.length ? 'queued' : 'idle'),
     jobId: j ? j.jobId : null, operation: j ? j.operation : null,
     ownerKey: j ? j.ownerKey : null, quantity: j ? j.quantity : 0,
@@ -587,9 +587,10 @@ function farmTablePublic(table) {
 }
 function farmStateFor(j) {
   const slot = j && j.chave && farmSlotDe.has(j.chave) ? farmSlots[farmSlotDe.get(j.chave)] : null;
+  const tables = slot ? farmTables.filter(t => t.farmSlotIndex === slot.slotIndex) : [];
   return { unlocked: !!slot, slot: slot ? farmSlotPublic(slot, true) : null,
     slots: farmSlots.map(s => farmSlotPublic(s, false)),
-    tables: farmTables.map(farmTablePublic) };
+    tables: tables.map(farmTablePublic) };
 }
 function aplicarFarmJobRows(rows) {
   for (const table of farmTables) { table.job = null; table.queue = []; }
@@ -740,7 +741,9 @@ function farmLocalPlotDoJogador(j, index) {
 }
 function farmDistanciaMesa(j, stationId) {
   const table = farmTables[num(stationId, 0, farmTables.length - 1, -1) | 0];
-  return table && Math.hypot(j.x - table.x, j.z - table.z) <= 3.4 ? table : null;
+  const slot = farmSlotDoJogador(j);
+  return table && slot && table.farmSlotIndex === slot.slotIndex &&
+    Math.hypot(j.x - table.x, j.z - table.z) <= 3.4 ? table : null;
 }
 function farmTemAcessoAoGalpao(j) {
   const slot = farmSlotDoJogador(j);
@@ -753,10 +756,11 @@ function farmEnviarSlots() {
   for (const j of jogadores.values()) if (j.autenticado) enviar(j, ev);
 }
 function farmEnviarTabelas() {
-  const ev = { t:'farm_tables', tables:farmTables.map(farmTablePublic) };
   for (const j of jogadores.values()) {
     if (!j.autenticado || !j.carteiraPronta) continue;
-    if (Math.hypot(j.x - FARM_BARN.x, j.z - FARM_BARN.z) <= AOI_RAIO || farmSlotDe.has(j.chave)) enviar(j, ev);
+    if (Math.hypot(j.x - FARM_BARN.x, j.z - FARM_BARN.z) > AOI_RAIO && !farmSlotDe.has(j.chave)) continue;
+    const tables = farmTables.filter(t => t.farmSlotIndex === farmSlotDe.get(j.chave)).map(farmTablePublic);
+    enviar(j, { t:'farm_tables', tables });
   }
 }
 function farmEnviarPlotUpdates(slot, updates) {
@@ -2167,7 +2171,7 @@ async function ativarSessao(j, chave, dados = {}) {
   enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: !!retomada,
     posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null,
     farm: farmSlot ? farmSlotPublic(farmSlot, true) : null,
-    farmTables: farmTables.map(farmTablePublic) });
+    farmTables: farmSlot ? farmTables.filter(t => t.farmSlotIndex === farmSlot.slotIndex).map(farmTablePublic) : [] });
   paraTodos({ t: 'nome', id:j.id, nome:j.nome, avatarId:j.avatarId }, j.id);
   for (const nomeTerr of Object.keys(c.territorios || {})) {
     const terr = TERRITORIOS.find(x => x.nome === nomeTerr);
@@ -3146,10 +3150,12 @@ setInterval(() => {
     metricas.snapshots++;
     const farmsPerto = farmSlots.filter(s => Math.hypot(j.x - s.x, j.z - s.z) <= AOI_RAIO)
       .map(s => farmSlotPublic(s, true));
+    const minhaFarmSlot = farmSlotDe.has(j.chave) ? farmSlotDe.get(j.chave) : null;
+    const minhasMesas = minhaFarmSlot === null ? [] : farmTables
+      .filter(t => t.farmSlotIndex === minhaFarmSlot).map(farmTablePublic);
     enviar(j, { t: 'snap', tick: tickAtual, players: perto, bots: botsPerto,
       funcs: funcsPerto, clientes: clientesPerto, lotes: lotesNovos,
-      farms: farmsPerto, farmTables: Math.hypot(j.x - FARM_BARN.x, j.z - FARM_BARN.z) <= AOI_RAIO
-        ? farmTables.map(farmTablePublic) : [] });
+      farms: farmsPerto, farmTables: minhasMesas });
   }
   metricas.tickMaxMs = Math.max(metricas.tickMaxMs, performance.now() - tickInicio);
 }, TICK_MS);

@@ -128,6 +128,12 @@ assert.match(html, /function farmAtualizarPortao\(slot\)\{const aberto=!!slot\.p
   'o colisor do setor deve seguir o estado authoritative da porteira');
 assert.match(html, /const farmTablesOnline=FARM_TABLE_SPOTS\.map/,
   'as seis mesas devem ser representadas pelo estado do servidor');
+assert.match(html, /farmSlotIndex:stationId/,
+  'cada mesa deve estar associada ao bloco/lote de mesmo índice');
+assert.match(html, /function farmMesasVisiveis\(\)\{return Number\.isInteger\(meuFarmSlotIndex\)\?farmTablesOnline\.filter/,
+  'o cliente deve filtrar o menu para a mesa do lote comprado');
+assert.match(html, /const mesasDoLote=farmMesasVisiveis\(\)/,
+  'o menu de produção deve usar apenas as mesas do lote do jogador');
 assert.match(html, /const farmTableVisuals=\[\]/,
   'cada mesa deve guardar referências de suas placas e indicadores visuais');
 assert.match(html, /function atualizarFarmMesaVisual\(t\)/,
@@ -142,6 +148,8 @@ assert.match(html, /focus\.t==='farmTable'/,
   'o foco deve diferenciar mesa interna do galpão');
 assert.match(html, /t:'farm_job',stationId:table\.stationId,operation:op,stockId:l\.id/,
   'a UI deve solicitar jobs com estação, operação e lote authoritative');
+assert.match(html, /cada lote comprado tem uma mesa própria/i,
+  'a UI deve explicar que cada lote recebe uma mesa própria');
 assert.match(html, /const FARM_GATE_W=10/,
   'a abertura visual da porteira externa deve ter largura explícita');
 assert.match(html, /const FARM_APPROACH_W=16/,

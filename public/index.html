@@ -1445,7 +1445,7 @@ const farmTableVisuals=[];
   const mesa=new THREE.Group();mesa.position.set(tx,0,tz);
   const tampo=new THREE.Mesh(new THREE.BoxGeometry(5.2, .16, 1.8),madeiraGalp);tampo.position.y=1.05;tampo.castShadow=true;mesa.add(tampo);
   [-2.2,2.2].forEach(x=>{[-.65,.65].forEach(z=>{const pe=new THREE.Mesh(new THREE.BoxGeometry(.14,.98,.14),madeiraGalp);pe.position.set(x,.5,z);pe.castShadow=true;mesa.add(pe)})});
-  const placaMesa=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('MESA '+(i+1),'#e8d264')),transparent:true,depthTest:false}));placaMesa.scale.set(1.25,.28,1);placaMesa.position.set(0,1.72,0);mesa.add(placaMesa);
+  const placaMesa=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('MESA LOTE '+(i+1),'#e8d264')),transparent:true,depthTest:false}));placaMesa.scale.set(1.35,.28,1);placaMesa.position.set(0,1.72,0);mesa.add(placaMesa);
   const lamp=new THREE.Mesh(new THREE.BoxGeometry(1.1,.08,.18),luzGalp.clone());lamp.position.set(0,2.25,0);mesa.add(lamp);
   const caixa=new THREE.Mesh(new THREE.BoxGeometry(1.15,.22,.78),new THREE.MeshStandardMaterial({color:0x8fe063,roughness:.82}));caixa.position.set(0,1.2,0);caixa.visible=false;caixa.castShadow=true;mesa.add(caixa);
   farmTableVisuals[i]={placa:placaMesa,lamp,caixa};
@@ -2590,10 +2590,12 @@ function renderBanca(){
    r.appendChild(bt);b.appendChild(r);
   })}
  else if(bancaTab==='proc'){
-  b.innerHTML+='<h2 class="mt">GALPÃO · 6 MESAS</h2><div class="sub">As mesas ficam dentro do galpão da fazenda. Cada etapa é controlada pelo servidor e pode formar fila.</div>';
-  if(!farmUnlocked){b.innerHTML+='<div class="sub">A área é pública. Compre um dos seis lotes no nível 10 para liberar seus 12 canteiros e o acesso produtivo.</div>'}
+  const mesasDoLote=farmMesasVisiveis();
+  b.innerHTML+=`<h2 class="mt">${farmUnlocked?'MESA DO SEU LOTE':'MESAS POR LOTE'}</h2><div class="sub">Cada lote comprado tem uma mesa própria no galpão. O servidor controla as etapas e a fila.</div>`;
+  if(!farmUnlocked){b.innerHTML+='<div class="sub">A área é pública. Compre um dos seis lotes no nível 10 para receber a mesa correspondente.</div>'}
   const ops=[['secagem','sec','SECAR'],['cura','cura','CURAR'],['embalagem','embalagem','EMBALAR']];
-  farmTablesOnline.forEach(table=>{
+  if(!mesasDoLote.length){b.innerHTML+='<div class="sub">Compre um lote da fazenda para receber a mesa correspondente. Cada lote tem uma única mesa.</div>'}
+  mesasDoLote.forEach(table=>{
    const r=document.createElement('div');r.className='row';
    const ocupado=table.status==='working';
    const desc=ocupado?`${table.operation} · termina em ${Math.max(0,Math.ceil((table.completesAt-Date.now())/1000))}s`:table.status==='queued'?`fila ${table.queueLength}`:'livre';
@@ -3221,7 +3223,7 @@ function findFocus(){
   for(const slot of farmSlotsOnline){
    for(const P of slot.plots){if(Math.hypot(p.x-P.x,p.z-P.z)<1.45)return{t:'farmPlotOnline',P,slot}}
   }
-  for(const mesa of farmTablesOnline){if(Math.hypot(p.x-mesa.x,p.z-mesa.z)<3.5)return{t:'farmTable',mesa}}
+  for(const mesa of farmMesasVisiveis()){if(Math.hypot(p.x-mesa.x,p.z-mesa.z)<3.5)return{t:'farmTable',mesa}}
   // canteiro de lote online tem prioridade quando você está bem em cima dele
   for(const lote of lotesOnline){
   if(Math.abs(p.x-lote.x)>LOTE_W/2+2||Math.abs(p.z-lote.z)>LOTE_D/2+2)continue;
@@ -4384,7 +4386,8 @@ const FARM_SLOT_SPOTS=[[-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]];
 const FARM_PLOT_OFFSETS=[[-7,-10],[-2.3,-10],[2.4,-10],[-7,-4],[-2.3,-4],[2.4,-4],[-7,2],[-2.3,2],[2.4,2],[-7,8],[-2.3,8],[2.4,8]];
 const FARM_TABLE_SPOTS=[[-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]];
 const farmSlotsOnline=FARM_SLOT_SPOTS.map(([x,z],slotIndex)=>({slotIndex,x,z,preco:FARM_LOT_PRICES[slotIndex],disponivel:true,portaoId:null,portaoAberto:false,donoNome:null,donoId:null,plots:FARM_PLOT_OFFSETS.map(([dx,dz],localIndex)=>({id:`farm_${slotIndex}_${localIndex}`,x:x+dx,z:z+dz,localIndex,dados:null,mesh:null,meshEstagio:-1,meshSeedId:null,group:null,ring:null}))}));
-const farmTablesOnline=FARM_TABLE_SPOTS.map(([dx,dz],stationId)=>({stationId,x:FARM_BARN.x+dx,z:FARM_BARN.z+dz,status:'idle',operation:null,ownerKey:null,quantity:0,completesAt:0,queueLength:0}));
+const farmTablesOnline=FARM_TABLE_SPOTS.map(([dx,dz],stationId)=>({stationId,farmSlotIndex:stationId,x:FARM_BARN.x+dx,z:FARM_BARN.z+dz,status:'idle',operation:null,ownerKey:null,quantity:0,completesAt:0,queueLength:0}));
+function farmMesasVisiveis(){return Number.isInteger(meuFarmSlotIndex)?farmTablesOnline.filter(t=>t.farmSlotIndex===meuFarmSlotIndex):[]}
 let meuFarmSlotIndex=null,farmUnlocked=false;
 const farmSectorCols=[];
 function farmPlotVisual(slot,P){
@@ -4436,7 +4439,9 @@ function atualizarFarmMesaVisual(t){
  ref.placa.material.map=T(placaLote(texto,cor));ref.placa.material.needsUpdate=true;
  ref.lamp.material.color.setHex(hex);ref.lamp.material.emissive.setHex(hex);ref.caixa.material.color.setHex(hex);ref.caixa.visible=caixa;
 }
-function aplicarFarmTabelas(tables){(tables||[]).forEach(t=>{const v=farmTablesOnline[t.stationId];if(!v)return;Object.assign(v,t);atualizarFarmMesaVisual(v)});}
+function aplicarFarmTabelas(tables){
+ (tables||[]).forEach(t=>{const v=farmTablesOnline[t.stationId];if(!v)return;if(Number.isInteger(t.farmSlotIndex)&&t.farmSlotIndex!==v.farmSlotIndex)return;Object.assign(v,t);atualizarFarmMesaVisual(v)});
+}
 function aplicarFarmState(f){
  if(!f)return;farmUnlocked=!!f.unlocked;meuFarmSlotIndex=f.slot&&Number.isInteger(f.slot.slotIndex)?f.slot.slotIndex:null;
  aplicarFarmSlotsMeta(f.slots||[]);
