@@ -14,7 +14,7 @@ const SERVER = path.join(__dirname, '..', 'servidor-1.js');
 const AUTH_SECRET = 'repro-farm-persistence-secret';
 const KEY = `repro_farm_${process.pid}`;
 const NAME = 'Reprodução Fazenda';
-const SEED = { id: 1, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
+const SEED = { id: 3, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
   t: { ritmo: 66, rendimento: 58, resistencia: 88, aroma: 52, brilho: 48 } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const tokenFor = sub => {

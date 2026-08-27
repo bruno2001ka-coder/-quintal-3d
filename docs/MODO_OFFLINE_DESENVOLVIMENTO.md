@@ -13,13 +13,13 @@ O **sandbox offline** é uma ferramenta temporária de desenvolvimento. Ele perm
 3. Clique em **TESTAR OFFLINE** e depois em **ENTRAR NO MUNDO**.
 4. A interface exibirá a etiqueta **sandbox** e a mensagem de que nada será salvo na conta online.
 
-O sandbox começa deliberadamente com valores de teste: carteira de R$ 10.000, nível 12, três sementes Blueberry Auto e recursos suficientes para exercitar as mecânicas visuais. Esses valores não vêm de uma conta e não devem ser interpretados como progressão.
+O sandbox começa deliberadamente com valores de teste: carteira de R$ 10.000, nível 12, três sementes Blueberry Auto e recursos suficientes para exercitar as mecânicas visuais. A entrada acontece na **Casa Nova de demonstração**, com os canteiros da fazenda visíveis ao fundo. Ele também exibe três plantas Blueberry Auto de demonstração, em fases diferentes, para que a cena não comece vazia. Esses valores e plantas não vêm de uma conta e não devem ser interpretados como progressão.
 
 ## O que funciona localmente
 
 O sandbox reutiliza a simulação visual existente para permitir movimento, câmera, chuva, canteiros locais, crescimento, rega, colheita, processamento em secagem/cura/embalagem, venda a clientes locais, compra de sementes e melhorias, contratação visual de funcionários, troca de armas, munição, colete e interações de combate. A finalidade é validar cena e mecânicas enquanto o serviço remoto não pode ser usado.
 
-O modo local começa com os canteiros vazios de propósito. Se a mesma cena for iniciada novamente sem recarregar a página, os testes locais já feitos não são apagados pelo segundo `start`; para obter um sandbox novo, recarregue a página e entre novamente.
+O modo local começa com três plantas de demonstração nos primeiros canteiros da Casa Nova; os demais canteiros locais e os canteiros visuais da fazenda ficam livres para inspeção e teste. As plantas de demonstração são temporárias e locais. Se a mesma cena for iniciada novamente sem recarregar a página, os testes locais já feitos não são apagados pelo segundo `start`; para obter um sandbox novo, recarregue a página e entre novamente.
 
 ## O que não funciona — por decisão de segurança
 

@@ -404,6 +404,11 @@ const BASE=[
  mkS('OG Kush',0x5e8f42,{ritmo:46,rendimento:60,resistencia:58,aroma:86,brilho:62},0,'comum',metaSemente(11,5,'og-kush','cítrico, terra e combustível','cítrico intenso, diesel e terroso')),
  mkS('Sour Diesel',0x7fbf6a,{ritmo:44,rendimento:66,resistencia:56,aroma:90,brilho:50},0,'comum',metaSemente(11,5,'sour-diesel','diesel, cítrico azedo e terra','combustível, sour e cítrico'))
 ];
+const BASE_POR_ID=new Map(BASE.map(s=>[s.id,s]));
+function sementeOficialLocal(raw){
+ const s=raw&&BASE_POR_ID.get(Number(raw.id));
+ return s&&s.nome===raw.nome?s:null;
+}
 const GENETICA_ART=Object.freeze({
  'Blueberry Auto':'/assets/plantas-estagios-real/blueberry-auto/stage-4-pronta.webp','Amnesia Haze Auto':'/assets/plantas-estagios-real/amnesia-haze-auto/stage-4-pronta.webp','Northern Lights':'/assets/plantas-estagios-real/northern-lights/stage-4-pronta.webp','White Widow':'/assets/geneticas/white-widow.jpg','Northern Light Auto':'/assets/geneticas/northern-auto.jpg','White Widow Auto':'/assets/geneticas/white-widow.jpg','OG Kush':'/assets/geneticas/og-kush.jpg','Sour Diesel':'/assets/geneticas/sour-diesel.jpg'
 });
@@ -423,24 +428,18 @@ const traitAvg=s=>TRAITS.reduce((a,t)=>a+s.t[t.k],0)/TRAITS.length;
 const PRE=['Super','Royal','Purple','White','Blue','Green','Critical','Sweet','Early','Black'];
 const SUF=['Kush','Haze','Auto','OG','Widow','Diesel','Glue','Cookies','Punch','Dream','Skunk','#2'];
 function cross(a,b){
- const t={},marks=[];
- TRAITS.forEach(tr=>{let v=(a.t[tr.k]+b.t[tr.k])/2+rnd(-7,7);
-  if(Math.random()<.16){v=Math.max(a.t[tr.k],b.t[tr.k])+rnd(2,13);marks.push(tr.n)}
-  if(Math.random()<.09)v-=rnd(9,20);
-  t[tr.k]=Math.round(clamp(v,5,100))});
- const cc=new THREE.Color(a.cor).lerp(new THREE.Color(b.cor),.5).offsetHSL(rnd(-.06,.06),rnd(-.08,.08),rnd(-.05,.05));
- // nome de híbrido no padrão real do mercado: pedaço de um pai + pedaço do outro
- const pa=a.nome.split(' '), pb=b.nome.split(' ');
- const r=Math.random();
- let nome;
- if(r<.45)      nome=`${pa[0]} ${pb[pb.length-1]}`;
- else if(r<.75) nome=`${pb[0]} ${pa[pa.length-1]}`;
- else           nome=`${pick([pa[0],pb[0]])} ${pick(SUF)}`;
- if(nome===a.nome||nome===b.nome)nome=`${pa[0]} x ${pb[0]}`;
- const s=mkS(nome,cc.getHex(),t,Math.max(a.gen,b.gen)+1);
- s.auto=(a.auto&&b.auto)||((a.auto||b.auto)&&Math.random()<.35);
- if(s.auto&&!/Auto/i.test(s.nome))s.nome+=' Auto';
- s.marks=marks;return s}
+ // Cruzamento visual não cria uma nona genética: escolhe a entrada oficial
+ // mais próxima da combinação dos pais, igual ao servidor authoritative.
+ const preferAuto=!!(a.auto&&b.auto),alvo=Object.fromEntries(TRAITS.map(tr=>[tr.k,(a.t[tr.k]+b.t[tr.k])/2]));
+ let melhor=null,scoreMelhor=Infinity;
+ for(const candidato of BASE){
+  if(candidato.id===a.id||candidato.id===b.id)continue;
+  let score=preferAuto===candidato.auto?0:250;
+  for(const tr of TRAITS)score+=(candidato.t[tr.k]-alvo[tr.k])**2;
+  if(score<scoreMelhor){scoreMelhor=score;melhor=candidato}
+ }
+ return {...melhor,t:{...melhor.t}};
+}
 
 /* ═════════ TEXTURAS ═════════ */
 function cv(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
@@ -2002,6 +2001,19 @@ function plantSeed(plot,e){
   g.position.set(plot.x,plot.baseY,plot.z);g.scale.setScalar(escalaPlantaCultivada(0,g));scene.add(g);
  plot.plant={s:e.s,prog:0,agua:1,saude:1,praga:0,estagio:0,mesh:g,sway:Math.random()*6,
   adubOrg:0,adubCres:0,adubFlor:false}}
+// O sandbox começa com uma pequena vitrine visual, não com dados de conta.
+// Estas três plantas são locais, não têm ID do servidor e nunca entram no save
+// ou em mensagens WebSocket. O restante dos canteiros continua livre para o teste.
+function criarPlantasDemoOffline(){
+ const demos=[{plot:casaNovaPlots[0],prog:28},{plot:casaNovaPlots[1],prog:58},{plot:casaNovaPlots[2],prog:100}];
+ for(const d of demos){
+  const p=d.plot;if(!p||p.locked||p.plant)continue;
+  plantSeed(p,{s:BASE[0]});
+  const pl=p.plant;pl.prog=d.prog;pl.estagio=estagioDe(d.prog);pl.agua=1;pl.saude=1;
+  pl.mesh.scale.setScalar(escalaPlantaCultivada(pl.prog,pl.mesh));
+  aplicarFormaPlanta(pl.mesh,pl.estagio,pl.prog,pl.s.t.rendimento);
+ }
+}
 
 /* ═════════ SECAGEM / CURA ═════════ */
 const DRY={x:1.4,z:-11.4};
@@ -2344,7 +2356,7 @@ const G={running:false,cash:80,sel:0,day:1,clock:6*60,DAYLEN:600,
  inimigos:[],policia:[],civis:[],
  up:{vasos:false,led:false,rack:false,placa:false,auto:false,irrig:false},
  gate:{open:false},fert:{organico:0,crescimento:0,floracao:0},func:{},nivel:1,xp:0,admin:false,
- respawnT:0};
+ respawnT:0,_nasceuNoLote:false,_esperandoLote:true};
 // adubos: buffs de jogo aplicados na planta. Números são de balanceamento,
 // não é receita de nutrição — é o mesmo padrão das outras mecânicas.
 const ADUBOS=[
@@ -2417,15 +2429,19 @@ function aplicarEstado(d){
   try{localStorage.setItem('quintal3d-avatar',d.avatarId)}catch(e){}
  }
  G.cash=d.cash;
- G.bank=(d.bank||[]).map(e=>({s:e.s,qtd:e.qtd}));
+ G.bank=(Array.isArray(d.bank)?d.bank:[]).flatMap(e=>{
+  const s=sementeOficialLocal(e&&e.s),qtd=Math.floor(Number(e&&e.qtd));
+  return s&&qtd>0?[{s,qtd}]:[];
+ });
  if(G.sel>=G.bank.length)G.sel=Math.max(0,G.bank.length-1);
  // estoque: preserva o cronômetro visual local de cada lote pelo id
  const antigos=new Map(G.lotes.map(l=>[l.id,l]));
- G.lotes=(d.estoque||[]).map(l=>{
+ G.lotes=(Array.isArray(d.estoque)?d.estoque:[]).flatMap(l=>{
+  const s=sementeOficialLocal(l&&l.s);if(!s)return[];
   const v=antigos.get(l.id);
-  return {id:l.id,s:l.s,qtd:l.qtd,stage:l.estagio,qual:l.qual,
+  return [{id:l.id,s,qtd:l.qtd,stage:l.estagio,qual:l.qual,
    t:(v&&v.stage===l.estagio)?v.t:(l.estagio==='sec'?55:l.estagio==='cura'?70:l.estagio==='embalagem'?35:0),
-   pedindo:false};
+   pedindo:false}];
  });
   G.rackMax=d.rackMax||6;
   if(d.municao)G.municao=JSON.parse(JSON.stringify(d.municao));
@@ -2773,7 +2789,7 @@ function renderStock(){const el=$('stockList');
 function updHUD(){
   $('cash').textContent=Math.floor(G.cash);
   const cashQuick=$('cashQuickValue');if(cashQuick)cashQuick.textContent=Math.floor(G.cash);
- $('alive').textContent=plots.concat(fazPlots,casaNovaPlots).filter(p=>p.plant).length;
+ $('alive').textContent=plots.filter(p=>p.plant).length;
  $('lotes').textContent=G.lotes.length;
  $('terr').textContent=TERR.filter(t=>t.dono==='seu').length;
  const _l=$('lvl');if(_l)_l.textContent=G.nivel;
@@ -3284,12 +3300,15 @@ function findFocus(){
  if(!offlineAtivo()&&(!mpConnected||!mpReady||!estadoDoServidor))return null;
  const p=player.position;
  if(Math.hypot(p.x-GATEX,p.z-C.z1)<2.4)return{t:'gate'};
- // portão da casa: detecta antes dos canteiros
- for(const lote of lotesOnline){
-  if(!lote.montado||!lote.portaoPos)continue;
-  if(Math.hypot(p.x-lote.portaoPos.x,p.z-lote.portaoPos.z)<2.2)
-   return{t:'portaoCasa',lote};
- }
+ // Portões, lotes e canteiros da rede só podem capturar foco no online.
+ // No sandbox, a interação fica nos canteiros locais de demonstração.
+ if(!offlineAtivo()){
+  // portão da casa: detecta antes dos canteiros
+  for(const lote of lotesOnline){
+   if(!lote.montado||!lote.portaoPos)continue;
+   if(Math.hypot(p.x-lote.portaoPos.x,p.z-lote.portaoPos.z)<2.2)
+    return{t:'portaoCasa',lote};
+  }
   // A área geral é pública; a única barreira privada de cada setor é a
   // porteira frontal, cujo estado vem do servidor.
   for(const slot of farmSlotsOnline){
@@ -3300,6 +3319,7 @@ function findFocus(){
   for(const slot of farmSlotsOnline){
    for(const P of slot.plots){if(Math.hypot(p.x-P.x,p.z-P.z)<1.45)return{t:'farmPlotOnline',P,slot}}
   }
+ }
   for(const mesa of farmMesasVisiveis()){if(Math.hypot(p.x-mesa.x,p.z-mesa.z)<3.5)return{t:'farmTable',mesa}}
   // canteiro de lote online tem prioridade quando você está bem em cima dele
   for(const lote of lotesOnline){
@@ -3400,7 +3420,7 @@ function tickFuncs(dt){
   F.cd-=dt;
   if(!F.alvo||F.cd<=0){
    F.cd=rnd(2,5);F.alvo=null;
-   for(const p of plots.concat(fazPlots,casaNovaPlots)){
+   for(const p of plots){
     if(p.locked||!p.plant)continue;
     if(ehFaz!==!!p.fazenda)continue;
     const pl=p.plant;
@@ -3801,15 +3821,22 @@ function iniciarSandboxOffline(){
   gate:{open:false},fert:{organico:0,crescimento:0,floracao:0},func:{},nivel:12,xp:4950,
   respawnT:0,running:false,_nasceuNoLote:true,_esperandoLote:false});
  IMOVEIS.forEach(im=>{im.comprado=false;im.ring.material.color.setHex(0xe8d264)});
- plots.concat(fazPlots,casaNovaPlots).forEach(p=>{if(p.plant){scene.remove(p.plant.mesh);p.plant=null}});
+ // A entrada offline é uma cena de desenvolvimento independente: mostra a
+ // Casa Nova e os canteiros públicos da fazenda, mas não cria posse online.
+ const casaDemo=IMOVEIS.find(im=>im.k==='casanova');
+ if(casaDemo){casaDemo.comprado=true;casaDemo.ring.material.color.setHex(0x8fe063)}
+ fazPlots.forEach(p=>{p.locked=false;p.group.visible=true});
+ casaNovaPlots.forEach(p=>{p.locked=false;p.group.visible=true});
+ plots.forEach(p=>{if(p.plant){scene.remove(p.plant.mesh);p.plant=null}});
  setModoMultiplayerVisual(false);
- player.position.set(GATEX,0,C.z1-4);player.rotation.y=Math.PI;camYaw=0;
+ criarPlantasDemoOffline();
+ player.position.set(CN.x,0,CN.z+5.2);player.rotation.y=Math.PI;camYaw=0;
  if(gateCol)gateCol.active=true;if(gateLeaf)gateLeaf.rotation.y=0;
  const panel=$('authPanel');if(panel)panel.hidden=true;
  const off=$('offlineBtn');if(off)off.style.display='none';
  const startBtn=$('startBtn');if(startBtn){startBtn.style.display='';startBtn.textContent='ENTRAR NO MUNDO'}
  const nt=$('netTag');if(nt){nt.textContent='sandbox';nt.classList.remove('on')}
- const nm=$('netMenu');if(nm){nm.textContent='modo offline · sem salvamento online';nm.classList.remove('ok')}
+ const nm=$('netMenu');if(nm){nm.textContent='sandbox · Casa Nova + fazenda de demonstração · sem salvamento online';nm.classList.remove('ok')}
  authStatus('sandbox local: nada será salvo na conta online');
  toast('modo offline de desenvolvimento ativado');
 }
@@ -3832,10 +3859,10 @@ function start(){
  }
  // A entrada do sandbox já começa de propósito com plantas vazias. Se o
  // jogador apenas relançar a cena local, não destrua o que ele acabou de testar.
- if(!offlineAtivo())plots.concat(fazPlots,casaNovaPlots).forEach(p=>{
+ if(!offlineAtivo())plots.forEach(p=>{
   if(p.plant){scene.remove(p.plant.mesh);p.plant=null}
  });
- if(!offlineAtivo())plots.concat(fazPlots,casaNovaPlots).forEach(p=>{if(p.group)p.group.visible=false});
+ if(!offlineAtivo())plots.forEach(p=>{if(p.group)p.group.visible=false});
   setModoMultiplayerVisual(offlineAtivo()?false:true);
  if(!offlineAtivo()&&!G._nasceuNoLote){toast('aguarde sua posição authoritative');G.running=false;return}
  $('overlay').classList.add('hide');
@@ -4072,7 +4099,7 @@ function tick(){
   if(G.rainTimer<=0){
    if(G.rain>0){G.rain=0;G.rainTimer=rnd(60,120);toast('a chuva passou')}
    else{G.rain=1;G.rainTimer=rnd(12,26);toast('chuva — os canteiros do sol se regam sozinhos');
-    plots.concat(fazPlots,casaNovaPlots).forEach(p=>{if(p.tipo==='sol'&&p.plant&&!p.online)p.plant.agua=1})}}}
+    plots.forEach(p=>{if(p.tipo==='sol'&&p.plant&&!p.online)p.plant.agua=1})}}}
 
  /* movimento */
  let ix=0,iz=0;
@@ -4182,7 +4209,7 @@ function tick(){
  skyDome.position.copy(camera.position);
 
  /* plantas */
- if(G.running) for(const p of plots.concat(fazPlots,casaNovaPlots)){
+ if(G.running) for(const p of plots){
   const pl=p.plant;if(!pl)continue;const s=pl.s;
   if(mpConnected&&!p.online){
    if(pl.mesh)pl.mesh.visible=false;
@@ -4949,7 +4976,7 @@ function setModoMultiplayerVisual(online){
  // A representação autoritativa online é exclusivamente lotesOnline.
  // Isso esconde sol, estufa, grow, fazenda e Casa Nova enquanto conectado,
  // evitando duas simulações visuais para a mesma propriedade.
- const locais=plots.concat(fazPlots,casaNovaPlots);
+ const locais=plots;
  for(const p of locais){
   if(p.group)p.group.visible=online?false:!p.locked;
   if(p.plant&&p.plant.mesh)p.plant.mesh.visible=!online;
@@ -5041,6 +5068,8 @@ function aplicarPlotOnline(loteIndex,plotIndex,dados){
  const lote=lotesOnline[loteIndex]; if(!lote)return;
  const P=lote.plots[plotIndex]; if(!P)return;
  const idAnterior=P.entId;
+ const semente= dados&&sementeOficialLocal(dados.s);
+ dados=semente?{...dados,s:semente}:null;
  P.dados=dados;
  if(dados&&dados.id){
   P.entId=dados.id;   // ETAPA C: id da planta

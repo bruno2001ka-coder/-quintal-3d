@@ -48,7 +48,7 @@ function seedDb() {
     const salt = `salt-${user.level}`;
     const hash = crypto.pbkdf2Sync('SenhaCatalogo9!', salt, 120000, 32, 'sha256').toString('hex');
     insertConta.run(user.key, user.key, user.name, salt, hash, now, now);
-    insertUsuario.run(user.key, user.name, 100000, '[]', '[]', JSON.stringify({ _posicao: { x: 0, y: 0, z: 170, ry: 0 } }), JSON.stringify({ pistola: true }), '{}', 6, 0, '{}', '[]', '[]', user.level, 0, '{}', now);
+    insertUsuario.run(user.key, user.name, 100000, '[]', '[]', JSON.stringify({ _posicao: { x: 5, y: 0, z: 6.5, ry: Math.PI } }), JSON.stringify({ pistola: true }), '{}', 6, 0, '{}', '[]', '[]', user.level, 0, '{}', now);
   }
   db.close();
 }
@@ -124,6 +124,11 @@ async function main() {
   try {
     server = startServer(); await waitHealth();
     const level10 = await authenticated(USERS[0]); clients.push(level10);
+    const spawn10 = level10.messages.find(m => m.t === 'lote_atribuido');
+    assert.ok(spawn10, 'o servidor deve enviar a atribuição do lote');
+    assert.equal(spawn10.loteIndex, 0, 'a conta antiga deve receber o primeiro lote');
+    assert.equal(spawn10.posicao.x, -34, 'posição antiga deve ser migrada para o lote novo');
+    assert.equal(spawn10.posicao.z, 35.8, 'spawn migrado deve ficar atrás do portão do lote novo');
     level10.send({ t: 'comprar', oq: 'semente', strain: SEEDS[0] });
     await level10.waitFor(m => m.t === 'estado' && m.bank.some(entry => entry.s && entry.s.nome === SEEDS[0].nome), 5000, 'compra nível 10');
     level10.send({ t: 'comprar', oq: 'semente', strain: SEEDS[4] });

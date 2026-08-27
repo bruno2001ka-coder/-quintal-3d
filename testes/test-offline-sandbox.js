@@ -11,6 +11,16 @@ assert.match(html, /const offlineAtivo=\(\)=>modoOfflineDev&&!mpConnected/,
   'offline só pode ser ativo sem conexão online');
 assert.match(html, /function iniciarSandboxOffline\(\)/,
   'o sandbox precisa de uma entrada explícita');
+assert.match(html, /function criarPlantasDemoOffline\(\)/,
+  'o sandbox deve ter uma vitrine visual de plantas sem usar dados da conta');
+assert.match(html, /criarPlantasDemoOffline\(\);\s*player\.position\.set/,
+  'as plantas de demonstração devem ser criadas na entrada offline');
+assert.match(html, /const demos=\[\{plot:casaNovaPlots\[0\],prog:28\},\{plot:casaNovaPlots\[1\],prog:58\},\{plot:casaNovaPlots\[2\],prog:100\}\]/,
+  'a vitrine offline deve mostrar três fases diferentes na Casa Nova');
+assert.match(html, /player\.position\.set\(CN\.x,0,CN\.z\+5\.2\)/,
+  'o sandbox não deve nascer novamente na casa antiga');
+assert.match(html, /fazPlots\.forEach\(p=>\{p\.locked=false;p\.group\.visible=true\}\)/,
+  'a fazenda deve ficar visível no sandbox para testar seus canteiros');
 assert.match(html, /modoOfflineDev=true;mpReconnecting=false/,
   'a entrada offline deve interromper a reconexão automática');
 assert.match(html, /if\(modoOfflineDev\|\|!MP_URL\)return;/,
@@ -39,7 +49,11 @@ assert.match(html, /function tickFuncs\(dt\)\{[\s\S]*?if\(!offlineAtivo\(\)\)ret
   'funcionários não podem simular trabalho depois de sair do sandbox');
 assert.match(html, /Object\.values\(G\.func\|\|\{\}\)\.forEach\(f=>\{if\(f&&f\.g\)scene\.remove\(f\.g\)\}\);/,
   'entrar novamente no sandbox deve remover funcionários visuais antigos');
-assert.match(html, /if\(!offlineAtivo\(\)\)plots\.concat\(fazPlots,casaNovaPlots\)\.forEach\(p=>\{if\(p\.group\)p\.group\.visible=false\}\);\s*setModoMultiplayerVisual\(offlineAtivo\(\)\?false:true\);/,
+assert.match(html, /if\(!offlineAtivo\(\)\)plots\.forEach\(p=>\{if\(p\.group\)p\.group\.visible=false\}\);\s*setModoMultiplayerVisual\(offlineAtivo\(\)\?false:true\);/,
   'o start só deve esconder os grupos legados no online e mostrar canteiros no sandbox');
+assert.match(html, /\$\('alive'\)\.textContent=plots\.filter\(p=>p\.plant\)\.length/,
+  'o HUD deve contar cada canteiro uma única vez');
+assert.doesNotMatch(html, /plots\.concat\(fazPlots,casaNovaPlots\)/,
+  'os arrays especializados não podem duplicar canteiros já registrados em plots');
 
 console.log('OFFLINE_SANDBOX_STATIC_OK');

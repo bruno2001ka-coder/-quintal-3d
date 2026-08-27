@@ -15,7 +15,7 @@ const DB_PATH = path.join(os.tmpdir(), `quintal-farm-${process.pid}.db`);
 const AUTH_SECRET = 'farm-multiplayer-regression-secret';
 const SERVER = path.join(__dirname, '..', 'servidor-1.js');
 const PASSWORD = 'SenhaFazenda9!';
-const SEED = { id: 101, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
+const SEED = { id: 3, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
   t: { ritmo: 66, rendimento: 58, resistencia: 88, aroma: 52, brilho: 48 } };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const tokenFor = sub => {

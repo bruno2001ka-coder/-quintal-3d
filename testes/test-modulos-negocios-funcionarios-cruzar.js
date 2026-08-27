@@ -19,10 +19,12 @@ const OBS_USER = `obs_${process.pid}`.slice(0, 24);
 const PASSWORD = 'SenhaModulos9!';
 const NAME = 'Teste Módulos';
 const OBS_NAME = 'Observador Módulos';
-const BASE_A = { id: 101, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
+const BASE_A = { id: 3, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
+  nivelMin: 10, qualidade: 3, slug: 'northern-lights', aromaPerfil: 'pinho, terra e madeira doce', cheiro: 'resinoso, terroso e picante',
   t: { ritmo: 66, rendimento: 58, resistencia: 88, aroma: 52, brilho: 48 } };
-const BASE_B = { id: 102, nome: 'Critical', cor: 0x7b5aa6, gen: 0, auto: false, rar: 'comum',
-  t: { ritmo: 76, rendimento: 72, resistencia: 64, aroma: 80, brilho: 74 } };
+const BASE_B = { id: 4, nome: 'White Widow', cor: 0xc9d8bc, gen: 0, auto: false, rar: 'comum',
+  nivelMin: 10, qualidade: 3, slug: 'white-widow', aromaPerfil: 'terra, especiarias e pimenta', cheiro: 'pungente, herbal e apimentado',
+  t: { ritmo: 58, rendimento: 62, resistencia: 74, aroma: 60, brilho: 92 } };
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const tokenFor = sub => {
@@ -229,13 +231,17 @@ function closeClient(client) {
     assert.equal(afterCross.bank.find(e => e.s.id === BASE_A.id).qtd, 1, 'uma das duas sementes A deve permanecer');
     assert.equal(afterCross.bank.find(e => e.s.id === BASE_B.id), undefined, 'a semente B unitária deve ser consumida');
     assert.equal(afterCross.bank.find(e => e.s.id === crossed.filho.id).qtd, 2, 'o filho deve entrar com quantidade 2');
-    assert.equal(crossed.filho.gen, 1, 'a geração do filho deve ser criada no servidor');
+    assert.equal(crossed.filho.gen, 0, 'o cruzamento deve retornar uma genética oficial');
+    assert.ok([1, 2, 3, 4, 5, 6, 7, 8].includes(crossed.filho.id), 'o filho deve pertencer às oito genéticas oficiais');
     assert.notEqual(crossed.filho.id, BASE_A.id);
     assert.notEqual(crossed.filho.id, BASE_B.id);
+    // O primeiro cruzamento continua no histórico do socket. Limpar a fila
+    // antes da segunda ação evita que waitFor consuma um evento antigo.
+    client.messages.length = 0;
     client.send({ t: 'cruzar', a: crossed.filho.id, b: crossed.filho.id });
-    const sameChild = await client.waitFor(m => m.t === 'cruzamento_ok' && m.filho && m.filho.gen === 2, 6000, 'cruzamento da mesma semente com duas unidades');
+    const sameChild = await client.waitFor(m => m.t === 'cruzamento_ok' && m.filho && [1, 2, 3, 4, 5, 6, 7, 8].includes(m.filho.id), 6000, 'cruzamento da mesma semente com duas unidades');
     const afterSameCross = await client.waitFor(m => m.t === 'estado' && m.cash === cashBeforeCross - 240 && m.bank.some(e => e.s.id === sameChild.filho.id), 6000, 'estado após segundo cruzamento');
-    assert.equal(sameChild.filho.gen, 2, 'duas unidades da mesma entrada devem ser aceitas');
+    assert.equal(sameChild.filho.gen, 0, 'duas unidades devem continuar apontando para uma genética oficial');
 
     // Multiplayer: a segunda conta ocupa outro lote e recebe seu próprio cliente NPC.
     observer = await connect();
@@ -281,7 +287,7 @@ function closeClient(client) {
 
     console.log('MODULOS_NEGOCIOS_OK', JSON.stringify({
       funcionario: { cargo: contratado.func.cargo, id: contratado.func.id, cobranca: 1200, duplicidadeBloqueada: true, persistiuNoReinicio: true, visivelNoAOI: true, colhedorAtualizouEstado: true, colhedorId: harvester.func.id },
-      cruzar: { filhoId: crossed.filho.id, gen: crossed.filho.gen, cobranca: 120, mesmasDuasUnidadesAceitas: sameChild.filho.gen === 2, payloadForjadoBloqueado: true, unidadeUnicaBloqueada: true },
+      cruzar: { filhoId: crossed.filho.id, gen: crossed.filho.gen, cobranca: 120, mesmasDuasUnidadesAceitas: sameChild.filho.gen === 0, payloadForjadoBloqueado: true, unidadeUnicaBloqueada: true },
       negocios: { clienteProprio: mainNpc.id, clienteAlheio: otherNpc.id, valor: sale.valor, qtd: sale.qtd, estoqueRestante: 1, vendaConfirmada: true, vendaAlheiaBloqueada: true }
     }));
   } catch (error) {

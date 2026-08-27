@@ -290,6 +290,27 @@ function sementeCatalogada(raw) {
   for (const k of TRAIT_KEYS) if (s.t[k] !== base.t[k]) return null;
   return { ...base, t: { ...base.t } };
 }
+function normalizarBancoCatalogo(c) {
+  const porId = new Map();
+  for (const entrada of Array.isArray(c && c.bank) ? c.bank : []) {
+    const s = sementeCatalogada(entrada && entrada.s);
+    const qtd = Math.floor(Number(entrada && entrada.qtd));
+    if (!s || !Number.isSafeInteger(qtd) || qtd <= 0) continue;
+    porId.set(s.id, (porId.get(s.id) || 0) + Math.min(qtd, 9999));
+  }
+  c.bank = [...porId].map(([id, qtd]) => {
+    const base = CATALOGO_SEMENTES.find(s => s.id === id);
+    return { s: { ...base, t: { ...base.t } }, qtd };
+  });
+  return c.bank;
+}
+function normalizarEstoqueCatalogo(c) {
+  c.estoque = (Array.isArray(c && c.estoque) ? c.estoque : []).flatMap(lote => {
+    const s = sementeCatalogada(lote && lote.s);
+    return s ? [{ ...lote, s }] : [];
+  });
+  return c.estoque;
+}
 
 /* ═════════ PERSISTÊNCIA ═════════
    O estado vivia só na memória e sumia a cada reinício.
@@ -532,7 +553,9 @@ function aplicarLoteSalvo(l, r) {
     const ps = JSON.parse(r.plots || '[]');
     for (let i = 0; i < PLOTS_POR_LOTE; i++) {
       const pl = ps[i];
-      if (!pl || !pl.s) { l.plots[i] = null; continue; }
+      const s = pl && sementeCatalogada(pl.s);
+      if (!pl || !s) { l.plots[i] = null; continue; }
+      pl.s = s;
       // a planta volta como entidade nova: o ID é sempre do servidor
       const ent = registrar('pl', l.donoChave, pl);
       pl.id = ent.id; pl.loteIndex = l.index; pl.plotIndex = i;
@@ -561,8 +584,9 @@ function carregarLotes() {
   return Promise.resolve();
 }
 function farmPlantPublic(pl) {
-  if (!pl || !pl.s) return null;
-  return { id: pl.id || null, s: pl.s, prog: num(pl.prog, 0, 100, 0), agua: num(pl.agua, 0, 1, 0),
+  const s = pl && sementeCatalogada(pl.s);
+  if (!s) return null;
+  return { id: pl.id || null, s, prog: num(pl.prog, 0, 100, 0), agua: num(pl.agua, 0, 1, 0),
     saude: num(pl.saude, 0, 1, 0), praga: num(pl.praga, 0, 1, 0), estagio: num(pl.estagio, 0, 4, 0) | 0,
     adubOrg: num(pl.adubOrg, 0, 1000, 0), adubCres: num(pl.adubCres, 0, 1000, 0), adubFlor: !!pl.adubFlor };
 }
@@ -599,7 +623,7 @@ function aplicarFarmJobRows(rows) {
     if (!table || !r.owner_key) continue;
     let sourceRaw = {};
     try { sourceRaw = JSON.parse(r.source_json || '{}'); } catch (_) { sourceRaw = {}; }
-    const source = { s: limparStrain(sourceRaw.s), qual: num(sourceRaw.qual, 0, 1.35, .55), desde: num(sourceRaw.desde, 0, Number.MAX_SAFE_INTEGER, agora()) };
+    const source = { s: sementeCatalogada(sourceRaw.s), qual: num(sourceRaw.qual, 0, 1.35, .55), desde: num(sourceRaw.desde, 0, Number.MAX_SAFE_INTEGER, agora()) };
     if (!source.s) { console.error('job de fazenda ignorado: genética de origem inválida'); continue; }
     const job = { jobId: String(r.job_id), ownerKey: String(r.owner_key), stationId,
       operation: String(r.operation), stockId: Number(r.stock_id), quantity: Number(r.quantity),
@@ -1027,7 +1051,9 @@ function carteiraDe(j) {
       rackMax: 6, up: {}, avatarId: avatarCatalogado(j.avatarId), armas: { pistola: true }, fert: {}, municao: {}, funcs: [] });
   }
   const c = carteiras.get(k);
-  for (const lote of (Array.isArray(c.estoque) ? c.estoque : [])) {
+  normalizarBancoCatalogo(c);
+  normalizarEstoqueCatalogo(c);
+  for (const lote of c.estoque) {
     const id = Number(lote && lote.id);
     if (Number.isSafeInteger(id) && id >= 0 && id < 1e9) proxLoteId = Math.max(proxLoteId, id + 1);
   }
@@ -1094,6 +1120,12 @@ function posicaoCarteira(c) {
   if (!p || ![p.x, p.y, p.z, p.ry].every(Number.isFinite)) return null;
   if (dentroDeParede(p.x, p.z, RAIO_JOGADOR)) return null;
   return { x: p.x, y: 0, z: p.z, ry: p.ry };
+}
+// Migração de contas antigas: antes dos lotes novos, o jogador era salvo no
+// corredor/fundos. Essa posição não pode vencer o primeiro spawn do lote novo.
+// Fora dessa faixa, uma retomada válida continua preservada.
+function posicaoNaCasaAntiga(p) {
+  return !!p && p.x >= -25.5 && p.x <= 9.5 && p.z >= -13.5 && p.z <= 10.9;
 }
 function consumirPosicaoRetomada(chave) {
   const p = chave && posicoesRetomada.get(chave);
@@ -1179,8 +1211,12 @@ function enviarEstado(j) {
   });
 }
 function bankAdd(c, s, n) {
-  const e = c.bank.find(x => x.s.id === s.id);
-  if (e) e.qtd += n; else c.bank.push({ s, qtd: n });
+  const oficial = sementeCatalogada(s);
+  const qtd = Math.floor(Number(n));
+  if (!oficial || !Number.isSafeInteger(qtd) || qtd <= 0) return false;
+  const e = c.bank.find(x => x.s.id === oficial.id);
+  if (e) e.qtd += qtd; else c.bank.push({ s: oficial, qtd });
+  return true;
 }
 function bankTirar(c, id, n) {
   const i = c.bank.findIndex(x => x.s.id === id);
@@ -1190,17 +1226,18 @@ function bankTirar(c, id, n) {
   return true;
 }
 function gerarFilhoServer(a, b) {
-  const traits = {};
-  for (const k of TRAIT_KEYS) {
-    const media = ((a.t[k] || 0) + (b.t[k] || 0)) / 2;
-    traits[k] = Math.round(num(media + (Math.random() < .12 ? (Math.random() < .5 ? 8 : -8) : 0), 0, 100, 50));
+  // O cruzamento continua como mecânica, mas não cria uma nona genética.
+  // Escolhe a entrada oficial mais próxima da combinação dos pais.
+  const alvo = Object.fromEntries(TRAIT_KEYS.map(k => [k, ((a.t[k] || 0) + (b.t[k] || 0)) / 2]));
+  const preferAuto = !!(a.auto && b.auto);
+  let melhor = null, melhorScore = Infinity;
+  for (const candidato of CATALOGO_SEMENTES) {
+    if (candidato.id === a.id || candidato.id === b.id) continue;
+    let score = preferAuto === candidato.auto ? 0 : 250;
+    for (const k of TRAIT_KEYS) score += (candidato.t[k] - alvo[k]) ** 2;
+    if (score < melhorScore) { melhorScore = score; melhor = candidato; }
   }
-  const rar = Math.random() < .08 ? 'hibrida' : (a.rar === b.rar ? a.rar : 'comum');
-  return limparStrain({
-    id: crypto.randomInt(1, 1e9), nome: str(a.nome + ' × ' + b.nome, 28),
-    cor: Math.round((a.cor + b.cor) / 2), gen: Math.min(50, Math.max(a.gen, b.gen) + 1),
-    auto: a.auto || b.auto, rar, t: traits
-  });
+  return { ...melhor, t: { ...melhor.t } };
 }
 
 /* ═════════ GEOMETRIA DO MUNDO NO SERVIDOR ═════════
@@ -2164,9 +2201,14 @@ async function ativarSessao(j, chave, dados = {}) {
   // migra uma única vez para um setor individual sem cobrar novamente. Contas
   // novas, mesmo no nível 12, precisam comprar um lote explicitamente.
   if (!farmSlot && c.imoveis && c.imoveis.includes('fazenda')) farmSlot = atribuirFarmSlot(j, c);
-  const retomada = consumirPosicaoRetomada(j.chave) || posicaoCarteira(c);
+  const retomadaBruta = consumirPosicaoRetomada(j.chave) || posicaoCarteira(c);
   const idx = atribuirLote(j.chave, j.nome);
   const loteInicial = idx !== null ? lotes[idx] : null;
+  // Se já existe lote novo, descartar somente o ponto da casa antiga. Uma
+  // retomada válida em outra região ainda é respeitada para não teletransportar
+  // quem saiu no meio da cidade ou da fazenda.
+  const retomadaLegada = loteInicial && posicaoNaCasaAntiga(retomadaBruta);
+  const retomada = retomadaLegada ? null : retomadaBruta;
   const spawn = retomada || (loteInicial ? {
     x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
   } : spawnOficial(j));
