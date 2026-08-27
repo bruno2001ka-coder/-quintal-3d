@@ -140,6 +140,10 @@ assert.match(html, /t:'farm_job',stationId:table\.stationId,operation:op,stockId
   'a UI deve solicitar jobs com estação, operação e lote authoritative');
 assert.match(html, /const FARM_GATE_W=10/,
   'a abertura visual da porteira externa deve ter largura explícita');
+const farmGateDecl=html.indexOf('const FARM_GATE_W=10;');
+const farmGateUse=html.indexOf('FARM_GATE_W/2');
+assert.ok(farmGateDecl>=0&&farmGateUse>farmGateDecl,
+  'FARM_GATE_W deve ser declarado antes da montagem visual da porteira');
 assert.match(html, /slot\.gateCol=col\(x-1\.6,x\+1\.6/,
   'cada setor deve ter uma porteira física com colisor próprio');
 assert.match(html, /FARM_GATE_W\/2,FAZ\.z0-\.3/,
