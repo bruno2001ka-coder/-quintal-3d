@@ -33,7 +33,7 @@ const accepted = serverSeeds.filter(s => {
   return local && local.nome === s.nome && local.cor === s.cor && local.auto === s.auto;
 });
 assert.equal(accepted.length, 8, 'as oito respostas authoritative devem ser reconhecidas pelo cliente');
-assert.deepEqual(serverSeeds.filter(s => s.nivelMin === 10).map(s => s.auto), [true, true, false, false]);
+assert.deepEqual(serverSeeds.filter(s => s.nivelMin === 1).map(s => s.auto), [true, true, false, false]);
 assert.deepEqual(serverSeeds.filter(s => s.nivelMin === 11).map(s => s.auto), [true, true, false, false]);
 
 function cycle(seed) {
@@ -72,4 +72,4 @@ const photos = growth.filter(s => !s.auto).sort((a, b) => a.ciclo - b.ciclo);
 assert.ok(autos.every(s => s.ciclo < photos[0].ciclo), 'automáticas devem ter ciclos mais rápidos que as fotoperíodo');
 assert.match(server, /pl\.estagio = pl\.prog >= 100 \? 4 : pl\.prog >= 75 \? 3 : pl\.prog >= 50 \? 2 : pl\.prog >= 25 \? 1 : 0/);
 assert.match(client, /function estagioDe\(prog\)\{return prog>=100\?4:prog>=75\?3:prog>=50\?2:prog>=25\?1:0\}/);
-console.log('EIGHT_GENETICS_CLIENT_SERVER_OK', JSON.stringify({ total:8, nivel10:4, nivel11:4, accepted:accepted.length, growth }));
+console.log('EIGHT_GENETICS_CLIENT_SERVER_OK', JSON.stringify({ total:8, nivel1:4, nivel11:4, accepted:accepted.length, growth }));

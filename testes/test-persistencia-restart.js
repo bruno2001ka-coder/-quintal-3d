@@ -13,7 +13,7 @@ const AUTH_SECRET = 'persistencia-regression-secret';
 const SERVER = path.join(__dirname, '..', 'servidor-1.js');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const BASE = {
-  id: 1, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
+  id: 3, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
   t: { ritmo: 66, rendimento: 58, resistencia: 88, aroma: 52, brilho: 48 }
 };
 
@@ -121,9 +121,9 @@ function totalSeeds(state) {
     assert.equal(estadoInicial.cash, 350, 'carteira inicial deve ter R$350');
     assert.ok((estadoInicial.bank || []).some(e => e.s && e.qtd >= 2), 'conta nova deve receber sementes iniciais');
 
-    // A conta nova começa no nível 1 e deve ser bloqueada para sementes de
-    // nível 10. A promoção abaixo acontece apenas no SQLite descartável da
-    // fixture; o servidor continua sendo a autoridade da compra.
+    // A conta nova começa no nível 1. A promoção abaixo acontece apenas no
+    // SQLite descartável da fixture; o servidor continua sendo a autoridade
+    // da compra.
     await fechar(first);
     first = null;
     await sleep(150);

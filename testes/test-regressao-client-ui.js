@@ -207,7 +207,7 @@ assert.match(html,/const GENETICA_ART=Object\.freeze\(/,
 assert.match(html,/function artGenetica\(s,cls='geneticArt'\)/,
  'o HTML deve ter um renderer único para as artes das genéticas');
 for(const nome of geneticNames)assert.ok(html.includes(`'${nome}'`),`genética ausente no catálogo visual: ${nome}`);
-assert.ok((html.match(/metaSemente\(10,/g)||[]).length >= 4,'quatro genéticas devem liberar no nível 10');
+assert.ok((html.match(/metaSemente\(1,/g)||[]).length >= 4,'quatro genéticas iniciais devem liberar no nível 1');
 assert.ok((html.match(/metaSemente\(11,/g)||[]).length >= 4,'quatro genéticas avançadas devem liberar após o nível 10');
 assert.match(html,/const PLANT_STAGE_ART_BY_NAME=Object\.freeze\(/,
  'o cliente deve declarar pacotes de arte por genética');

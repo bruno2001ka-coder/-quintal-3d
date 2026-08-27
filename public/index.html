@@ -395,10 +395,10 @@ const metaSemente=(nivelMin,qualidade,slug,aromaPerfil,cheiro)=>({nivelMin,quali
 const mkS=(nome,cor,t,gen=0,rar='comum',meta={})=>({id:sid++,nome,cor,t,gen,auto:false,rar,...meta});
 const mkA=(nome,cor,t,gen=0,rar='comum',meta={})=>({id:sid++,nome,cor,t,gen,auto:true,rar,...meta});
 const BASE=[
- mkA('Blueberry Auto',0x7fa8c4,{ritmo:82,rendimento:62,resistencia:78,aroma:76,brilho:70},0,'comum',metaSemente(10,2,'blueberry-auto','mirtilo e frutas vermelhas','doce, frutado e fresco')),
- mkA('Amnesia Haze Auto',0x86c65a,{ritmo:84,rendimento:68,resistencia:66,aroma:84,brilho:64},0,'comum',metaSemente(10,2,'amnesia-haze-auto','limão, cítrico e terra','cítrico, herbal e haze')),
- mkS('Northern Lights',0x5f9c46,{ritmo:66,rendimento:58,resistencia:88,aroma:52,brilho:48},0,'comum',metaSemente(10,3,'northern-lights','pinho, terra e madeira doce','resinoso, terroso e picante')),
- mkS('White Widow',0xc9d8bc,{ritmo:58,rendimento:62,resistencia:74,aroma:60,brilho:92},0,'comum',metaSemente(10,3,'white-widow','terra, especiarias e pimenta','pungente, herbal e apimentado')),
+ mkA('Blueberry Auto',0x7fa8c4,{ritmo:82,rendimento:62,resistencia:78,aroma:76,brilho:70},0,'comum',metaSemente(1,2,'blueberry-auto','mirtilo e frutas vermelhas','doce, frutado e fresco')),
+ mkA('Amnesia Haze Auto',0x86c65a,{ritmo:84,rendimento:68,resistencia:66,aroma:84,brilho:64},0,'comum',metaSemente(1,2,'amnesia-haze-auto','limão, cítrico e terra','cítrico, herbal e haze')),
+ mkS('Northern Lights',0x5f9c46,{ritmo:66,rendimento:58,resistencia:88,aroma:52,brilho:48},0,'comum',metaSemente(1,3,'northern-lights','pinho, terra e madeira doce','resinoso, terroso e picante')),
+ mkS('White Widow',0xc9d8bc,{ritmo:58,rendimento:62,resistencia:74,aroma:60,brilho:92},0,'comum',metaSemente(1,3,'white-widow','terra, especiarias e pimenta','pungente, herbal e apimentado')),
  mkA('Northern Light Auto',0x63a05a,{ritmo:88,rendimento:70,resistencia:86,aroma:64,brilho:58},0,'comum',metaSemente(11,4,'northern-light-auto','doçura, pinho e terra','doce, resinoso e amadeirado')),
  mkA('White Widow Auto',0xb8cf9d,{ritmo:86,rendimento:74,resistencia:76,aroma:72,brilho:88},0,'comum',metaSemente(11,4,'white-widow-auto','madeira, terra e especiarias','pungente, terroso e resinoso')),
  mkS('OG Kush',0x5e8f42,{ritmo:46,rendimento:60,resistencia:58,aroma:86,brilho:62},0,'comum',metaSemente(11,5,'og-kush','cítrico, terra e combustível','cítrico intenso, diesel e terroso')),

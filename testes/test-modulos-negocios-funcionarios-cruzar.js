@@ -20,10 +20,10 @@ const PASSWORD = 'SenhaModulos9!';
 const NAME = 'Teste Módulos';
 const OBS_NAME = 'Observador Módulos';
 const BASE_A = { id: 3, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum',
-  nivelMin: 10, qualidade: 3, slug: 'northern-lights', aromaPerfil: 'pinho, terra e madeira doce', cheiro: 'resinoso, terroso e picante',
+  nivelMin: 1, qualidade: 3, slug: 'northern-lights', aromaPerfil: 'pinho, terra e madeira doce', cheiro: 'resinoso, terroso e picante',
   t: { ritmo: 66, rendimento: 58, resistencia: 88, aroma: 52, brilho: 48 } };
 const BASE_B = { id: 4, nome: 'White Widow', cor: 0xc9d8bc, gen: 0, auto: false, rar: 'comum',
-  nivelMin: 10, qualidade: 3, slug: 'white-widow', aromaPerfil: 'terra, especiarias e pimenta', cheiro: 'pungente, herbal e apimentado',
+  nivelMin: 1, qualidade: 3, slug: 'white-widow', aromaPerfil: 'terra, especiarias e pimenta', cheiro: 'pungente, herbal e apimentado',
   t: { ritmo: 58, rendimento: 62, resistencia: 74, aroma: 60, brilho: 92 } };
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

@@ -13,14 +13,14 @@ const PORT = Number(process.env.TEST_CATALOG_PORT || 19125);
 const DB_PATH = path.join('/tmp', `quintal-catalogo-${process.pid}.db`);
 const AUTH_SECRET = 'catalogo-local-secret';
 const USERS = [
-  { key: `catalogo_nivel10_${process.pid}`, name: 'Catálogo Nível 10', level: 10 },
+  { key: `catalogo_nivel1_${process.pid}`, name: 'Catálogo Nível 1', level: 1 },
   { key: `catalogo_nivel11_${process.pid}`, name: 'Catálogo Nível 11', level: 11 }
 ];
 const SEEDS = [
-  { id: 1, nome: 'Blueberry Auto', cor: 0x7fa8c4, gen: 0, auto: true, rar: 'comum', nivelMin: 10, qualidade: 2, slug: 'blueberry-auto', aromaPerfil: 'mirtilo e frutas vermelhas', cheiro: 'doce, frutado e fresco', t: { ritmo: 82, rendimento: 62, resistencia: 78, aroma: 76, brilho: 70 } },
-  { id: 2, nome: 'Amnesia Haze Auto', cor: 0x86c65a, gen: 0, auto: true, rar: 'comum', nivelMin: 10, qualidade: 2, slug: 'amnesia-haze-auto', aromaPerfil: 'limão, cítrico e terra', cheiro: 'cítrico, herbal e haze', t: { ritmo: 84, rendimento: 68, resistencia: 66, aroma: 84, brilho: 64 } },
-  { id: 3, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum', nivelMin: 10, qualidade: 3, slug: 'northern-lights', aromaPerfil: 'pinho, terra e madeira doce', cheiro: 'resinoso, terroso e picante', t: { ritmo: 66, rendimento: 58, resistencia: 88, aroma: 52, brilho: 48 } },
-  { id: 4, nome: 'White Widow', cor: 0xc9d8bc, gen: 0, auto: false, rar: 'comum', nivelMin: 10, qualidade: 3, slug: 'white-widow', aromaPerfil: 'terra, especiarias e pimenta', cheiro: 'pungente, herbal e apimentado', t: { ritmo: 58, rendimento: 62, resistencia: 74, aroma: 60, brilho: 92 } },
+  { id: 1, nome: 'Blueberry Auto', cor: 0x7fa8c4, gen: 0, auto: true, rar: 'comum', nivelMin: 1, qualidade: 2, slug: 'blueberry-auto', aromaPerfil: 'mirtilo e frutas vermelhas', cheiro: 'doce, frutado e fresco', t: { ritmo: 82, rendimento: 62, resistencia: 78, aroma: 76, brilho: 70 } },
+  { id: 2, nome: 'Amnesia Haze Auto', cor: 0x86c65a, gen: 0, auto: true, rar: 'comum', nivelMin: 1, qualidade: 2, slug: 'amnesia-haze-auto', aromaPerfil: 'limão, cítrico e terra', cheiro: 'cítrico, herbal e haze', t: { ritmo: 84, rendimento: 68, resistencia: 66, aroma: 84, brilho: 64 } },
+  { id: 3, nome: 'Northern Lights', cor: 0x5f9c46, gen: 0, auto: false, rar: 'comum', nivelMin: 1, qualidade: 3, slug: 'northern-lights', aromaPerfil: 'pinho, terra e madeira doce', cheiro: 'resinoso, terroso e picante', t: { ritmo: 66, rendimento: 58, resistencia: 88, aroma: 52, brilho: 48 } },
+  { id: 4, nome: 'White Widow', cor: 0xc9d8bc, gen: 0, auto: false, rar: 'comum', nivelMin: 1, qualidade: 3, slug: 'white-widow', aromaPerfil: 'terra, especiarias e pimenta', cheiro: 'pungente, herbal e apimentado', t: { ritmo: 58, rendimento: 62, resistencia: 74, aroma: 60, brilho: 92 } },
   { id: 5, nome: 'Northern Light Auto', cor: 0x63a05a, gen: 0, auto: true, rar: 'comum', nivelMin: 11, qualidade: 4, slug: 'northern-light-auto', aromaPerfil: 'doçura, pinho e terra', cheiro: 'doce, resinoso e amadeirado', t: { ritmo: 88, rendimento: 70, resistencia: 86, aroma: 64, brilho: 58 } },
   { id: 6, nome: 'White Widow Auto', cor: 0xb8cf9d, gen: 0, auto: true, rar: 'comum', nivelMin: 11, qualidade: 4, slug: 'white-widow-auto', aromaPerfil: 'madeira, terra e especiarias', cheiro: 'pungente, terroso e resinoso', t: { ritmo: 86, rendimento: 74, resistencia: 76, aroma: 72, brilho: 88 } },
   { id: 7, nome: 'OG Kush', cor: 0x5e8f42, gen: 0, auto: false, rar: 'comum', nivelMin: 11, qualidade: 5, slug: 'og-kush', aromaPerfil: 'cítrico, terra e combustível', cheiro: 'cítrico intenso, diesel e terroso', t: { ritmo: 46, rendimento: 60, resistencia: 58, aroma: 86, brilho: 62 } },
@@ -108,10 +108,10 @@ function validateCatalogSource() {
   assert.ok(block, 'catálogo authoritative não encontrado');
   const names = [...block[1].matchAll(/nome:'([^']+)'/g)].map(match => match[1]);
   assert.deepEqual(names, SEEDS.map(seed => seed.nome), 'o servidor deve expor exatamente oito genéticas, na ordem oficial');
-  assert.equal(SEEDS.filter(seed => seed.nivelMin === 10).length, 4);
+  assert.equal(SEEDS.filter(seed => seed.nivelMin === 1).length, 4);
   assert.equal(SEEDS.filter(seed => seed.nivelMin === 11).length, 4);
-  assert.equal(SEEDS.filter(seed => seed.nivelMin === 10 && seed.auto).length, 2);
-  assert.equal(SEEDS.filter(seed => seed.nivelMin === 10 && !seed.auto).length, 2);
+  assert.equal(SEEDS.filter(seed => seed.nivelMin === 1 && seed.auto).length, 2);
+  assert.equal(SEEDS.filter(seed => seed.nivelMin === 1 && !seed.auto).length, 2);
   assert.equal(SEEDS.filter(seed => seed.nivelMin === 11 && seed.auto).length, 2);
   assert.equal(SEEDS.filter(seed => seed.nivelMin === 11 && !seed.auto).length, 2);
   assert.match(source, /if \(Number\(c\.nivel\) < Number\(sem\.nivelMin \|\| 10\)\)/, 'compra deve conferir nível no servidor');
@@ -123,25 +123,27 @@ async function main() {
   const clients = [];
   try {
     server = startServer(); await waitHealth();
-    const level10 = await authenticated(USERS[0]); clients.push(level10);
-    const spawn10 = level10.messages.find(m => m.t === 'lote_atribuido');
+    const level1 = await authenticated(USERS[0]); clients.push(level1);
+    const spawn10 = level1.messages.find(m => m.t === 'lote_atribuido');
     assert.ok(spawn10, 'o servidor deve enviar a atribuição do lote');
     assert.equal(spawn10.loteIndex, 0, 'a conta antiga deve receber o primeiro lote');
     assert.equal(spawn10.posicao.x, -34, 'posição antiga deve ser migrada para o lote novo');
     assert.equal(spawn10.posicao.z, 35.8, 'spawn migrado deve ficar atrás do portão do lote novo');
-    level10.send({ t: 'comprar', oq: 'semente', strain: SEEDS[0] });
-    await level10.waitFor(m => m.t === 'estado' && m.bank.some(entry => entry.s && entry.s.nome === SEEDS[0].nome), 5000, 'compra nível 10');
-    level10.send({ t: 'comprar', oq: 'semente', strain: SEEDS[4] });
-    const rejected = await level10.waitFor(m => m.t === 'recusado' && /nível 11/.test(m.motivo), 5000, 'bloqueio de genética avançada no nível 10');
+    for (const seed of SEEDS.slice(0, 4)) {
+      level1.send({ t: 'comprar', oq: 'semente', strain: seed });
+      await level1.waitFor(m => m.t === 'estado' && m.bank.some(entry => entry.s && entry.s.nome === seed.nome), 5000, `compra nível 1: ${seed.nome}`);
+    }
+    level1.send({ t: 'comprar', oq: 'semente', strain: SEEDS[4] });
+    const rejected = await level1.waitFor(m => m.t === 'recusado' && /nível 11/.test(m.motivo), 5000, 'bloqueio de genética avançada no nível 1');
     assert.match(rejected.motivo, /genética liberada no nível 11/);
-    level10.send({ t: 'comprar', oq: 'semente', strain: { ...SEEDS[0], nome: 'Genética Inventada' } });
-    await level10.waitFor(m => m.t === 'recusado' && /fora do catálogo/.test(m.motivo), 5000, 'genética inventada recusada');
+    level1.send({ t: 'comprar', oq: 'semente', strain: { ...SEEDS[0], nome: 'Genética Inventada' } });
+    await level1.waitFor(m => m.t === 'recusado' && /fora do catálogo/.test(m.motivo), 5000, 'genética inventada recusada');
 
     const level11 = await authenticated(USERS[1]); clients.push(level11);
     level11.send({ t: 'comprar', oq: 'semente', strain: SEEDS[4] });
     const accepted = await level11.waitFor(m => m.t === 'estado' && m.bank.some(entry => entry.s && entry.s.nome === SEEDS[4].nome), 5000, 'compra nível 11');
     assert.ok(accepted.bank.some(entry => entry.s.nome === 'Northern Light Auto'));
-    console.log('SEED_CATALOG_OK', JSON.stringify({ total: SEEDS.length, nivel10: 4, nivel11: 4, blockedAt10: true, acceptedAt11: true }));
+    console.log('SEED_CATALOG_OK', JSON.stringify({ total: SEEDS.length, nivel1: 4, nivel11: 4, quatroCompradasNoNivel1: true, blockedAt1: true, acceptedAt11: true }));
   } finally {
     for (const client of clients) if (client.ws.readyState === WebSocket.OPEN) client.ws.close();
     await stopServer(server); removeDb();

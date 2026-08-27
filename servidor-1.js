@@ -271,10 +271,10 @@ function limparStrain(raw) {
   };
 }
 const CATALOGO_SEMENTES = [
-  { id:1, nome:'Blueberry Auto', cor:0x7fa8c4, auto:true, nivelMin:10, qualidade:2, slug:'blueberry-auto', aromaPerfil:'mirtilo e frutas vermelhas', cheiro:'doce, frutado e fresco', t:[82,62,78,76,70] },
-  { id:2, nome:'Amnesia Haze Auto', cor:0x86c65a, auto:true, nivelMin:10, qualidade:2, slug:'amnesia-haze-auto', aromaPerfil:'limão, cítrico e terra', cheiro:'cítrico, herbal e haze', t:[84,68,66,84,64] },
-  { id:3, nome:'Northern Lights', cor:0x5f9c46, auto:false, nivelMin:10, qualidade:3, slug:'northern-lights', aromaPerfil:'pinho, terra e madeira doce', cheiro:'resinoso, terroso e picante', t:[66,58,88,52,48] },
-  { id:4, nome:'White Widow', cor:0xc9d8bc, auto:false, nivelMin:10, qualidade:3, slug:'white-widow', aromaPerfil:'terra, especiarias e pimenta', cheiro:'pungente, herbal e apimentado', t:[58,62,74,60,92] },
+  { id:1, nome:'Blueberry Auto', cor:0x7fa8c4, auto:true, nivelMin:1, qualidade:2, slug:'blueberry-auto', aromaPerfil:'mirtilo e frutas vermelhas', cheiro:'doce, frutado e fresco', t:[82,62,78,76,70] },
+  { id:2, nome:'Amnesia Haze Auto', cor:0x86c65a, auto:true, nivelMin:1, qualidade:2, slug:'amnesia-haze-auto', aromaPerfil:'limão, cítrico e terra', cheiro:'cítrico, herbal e haze', t:[84,68,66,84,64] },
+  { id:3, nome:'Northern Lights', cor:0x5f9c46, auto:false, nivelMin:1, qualidade:3, slug:'northern-lights', aromaPerfil:'pinho, terra e madeira doce', cheiro:'resinoso, terroso e picante', t:[66,58,88,52,48] },
+  { id:4, nome:'White Widow', cor:0xc9d8bc, auto:false, nivelMin:1, qualidade:3, slug:'white-widow', aromaPerfil:'terra, especiarias e pimenta', cheiro:'pungente, herbal e apimentado', t:[58,62,74,60,92] },
   { id:5, nome:'Northern Light Auto', cor:0x63a05a, auto:true, nivelMin:11, qualidade:4, slug:'northern-light-auto', aromaPerfil:'doçura, pinho e terra', cheiro:'doce, resinoso e amadeirado', t:[88,70,86,64,58] },
   { id:6, nome:'White Widow Auto', cor:0xb8cf9d, auto:true, nivelMin:11, qualidade:4, slug:'white-widow-auto', aromaPerfil:'madeira, terra e especiarias', cheiro:'pungente, terroso e resinoso', t:[86,74,76,72,88] },
   { id:7, nome:'OG Kush', cor:0x5e8f42, auto:false, nivelMin:11, qualidade:5, slug:'og-kush', aromaPerfil:'cítrico, terra e combustível', cheiro:'cítrico intenso, diesel e terroso', t:[46,60,58,86,62] },
