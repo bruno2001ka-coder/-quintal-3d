@@ -1180,6 +1180,14 @@ function passoFuncionario(f, dt) {
       lote.plots[alvo.i] = null; remover(alvo.pl.id);
       metricas.loteUpdates++;
       paraInteresse({ t:'lote_update', loteIndex:lote.index, plotIndex:alvo.i, plot:null }, lote.x, lote.z, lote.donoChave);
+      // A colheita automática já altera a carteira authoritative acima. Sem
+      // este envio, o cliente só descobriria a produção ao reconectar, porque
+      // marcarSuja apenas agenda persistência e não atualiza a UI.
+      for (const jogador of jogadores.values()) {
+        if (jogador.chave !== f.dono || !jogador.autenticado) continue;
+        enviar(jogador, { t:'colheita', plotIndex:alvo.i, qtd:q, strain:alvo.pl.s, por:'funcionario' });
+        enviarEstado(jogador);
+      }
       marcarSuja({ chave:f.dono });
     }
   } else {

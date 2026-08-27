@@ -14,6 +14,7 @@
     "test:reconexao": "node testes/test-reconexao-posicao.js",
     "test:login": "node testes/test-login-conta.js",
     "test:clientes": "node testes/test-clientes-casa.js",
+    "test:modulos": "node testes/test-modulos-negocios-funcionarios-cruzar.js",
     "test:plantio": "node testes/test-plantio-proprio.js",
     "test:crescimento": "node testes/test-crescimento.js",
     "test:colheita": "node testes/test-colheita-estoque.js",
