@@ -48,6 +48,8 @@ jobs:
           node --check testes/test-modulos-negocios-funcionarios-cruzar.js
           node --check testes/test-fazenda-multiplayer.js
           node --check testes/test-persistencia-restart.js
+          node --check testes/test-persistencia-fazenda.js
+          node --check testes/test-catalogo-sementes.js
           node --check testes/test-render-config.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
@@ -77,9 +79,6 @@ jobs:
           rm -f "$RUNNER_TEMP/quintal-8807.db" "$RUNNER_TEMP/quintal-8807.db-shm" "$RUNNER_TEMP/quintal-8807.db-wal"
           PORT=8807 DB_PATH="$RUNNER_TEMP/quintal-8807.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8807.log" 2>&1 &
           pids+=("$!")
-          rm -f "$RUNNER_TEMP/quintal-8808.db" "$RUNNER_TEMP/quintal-8808.db-shm" "$RUNNER_TEMP/quintal-8808.db-wal"
-          ALLOW_ANONYMOUS=0 PORT=8808 DB_PATH="$RUNNER_TEMP/quintal-8808.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8808.log" 2>&1 &
-          pids+=("$!")
           rm -f "$RUNNER_TEMP/quintal-8809.db" "$RUNNER_TEMP/quintal-8809.db-shm" "$RUNNER_TEMP/quintal-8809.db-wal"
           ALLOW_ANONYMOUS=0 PORT=8809 DB_PATH="$RUNNER_TEMP/quintal-8809.db" node servidor-1.js > "$RUNNER_TEMP/quintal-8809.log" 2>&1 &
           pids+=("$!")
@@ -108,6 +107,8 @@ jobs:
           npm run test:modulos
           npm run test:fazenda
           TEST_PERSIST_PORT=8808 npm run test:persistencia
+          npm run test:persistencia-fazenda
+          npm run test:catalogo-sementes
           npm run test:colheita
           npm run test:render-config
-          for port in 8800 8801 8802 8803 8804 8805 8806 8807 8808 8809 8810; do cat "$RUNNER_TEMP/quintal-$port.log"; done
+          for port in 8800 8801 8802 8803 8804 8805 8806 8807 8809 8810; do cat "$RUNNER_TEMP/quintal-$port.log"; done

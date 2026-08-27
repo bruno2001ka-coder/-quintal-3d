@@ -201,35 +201,43 @@ assert.match(html, /col\(FARM_GATE_W\/2, FAZ\.x1, FAZ\.z0-\.3/,
 assert.match(html, /setModoMultiplayerVisual\(true\)/,
   'o modo online deve desativar o visual legado que poderia duplicar canteiros');
 
-const geneticAssetSlugs=[
- 'northern-lights','white-widow','skunk-1','hindu-kush','amnesia-haze','sour-diesel','blue-dream','og-kush',
- 'purple-haze','jack-herer','critical','gorilla-glue','lsd-25-auto','auto-69','critical-auto','northern-auto'
-];
+const geneticNames=['Blueberry Auto','Amnesia Haze Auto','Northern Lights','White Widow','Northern Light Auto','White Widow Auto','OG Kush','Sour Diesel'];
 assert.match(html,/const GENETICA_ART=Object\.freeze\(/,
- 'o catálogo deve mapear as artes das genéticas sem duplicar a fonte de nomes');
+ 'o catálogo deve mapear as artes das oito genéticas sem duplicar a fonte de nomes');
 assert.match(html,/function artGenetica\(s,cls='geneticArt'\)/,
  'o HTML deve ter um renderer único para as artes das genéticas');
-for(const slug of geneticAssetSlugs){
- const asset=path.join(__dirname,'..','public','assets','geneticas',`${slug}.jpg`);
- assert.ok(fs.existsSync(asset),`asset ausente: ${slug}.jpg`);
- assert.match(html,new RegExp(`/assets/geneticas/${slug}\\.jpg`),`asset não referenciado no HTML: ${slug}.jpg`);
-}
-const plantStageSlugs=['stage-0-semente','stage-1-broto','stage-2-vegetativa','stage-3-floracao','stage-4-pronta'];
-assert.match(html,/const PLANT_STAGE_ART=Object\.freeze\(\[/,
- 'o cliente deve declarar o pacote de artes dos cinco estágios');
+for(const nome of geneticNames)assert.ok(html.includes(`'${nome}'`),`genética ausente no catálogo visual: ${nome}`);
+assert.ok((html.match(/metaSemente\(10,/g)||[]).length >= 4,'quatro genéticas devem liberar no nível 10');
+assert.ok((html.match(/metaSemente\(11,/g)||[]).length >= 4,'quatro genéticas avançadas devem liberar após o nível 10');
+assert.match(html,/const PLANT_STAGE_ART_BY_NAME=Object\.freeze\(/,
+ 'o cliente deve declarar pacotes de arte por genética');
+assert.match(html,/const plantArtTexturesByName=Object\.freeze\(/,
+ 'o cliente deve carregar texturas de estágio por genética');
 assert.match(html,/function buildPlantArt\(s\)/,
  'a planta deve ter um construtor leve baseado em imagem por estágio');
-assert.match(html,/return s&&String\(s\.nome\)==='White Widow'\?buildPlantArt\(s\):buildPlantProcedural\(s\)/,
- 'somente a genética com pacote aprovado deve usar as artes novas');
-for(const slug of plantStageSlugs){
- const asset=path.join(__dirname,'..','public','assets','plantas-estagios','white-widow',`${slug}.webp`);
- assert.ok(fs.existsSync(asset),`arte de estágio ausente: ${slug}.webp`);
- assert.match(html,new RegExp(`/assets/plantas-estagios/white-widow/${slug}\\.webp`),`arte de estágio não referenciada: ${slug}.webp`);
+assert.match(html,/return PLANT_STAGE_ART_BY_NAME\[String\(s&&s\.nome\)\]\?buildPlantArt\(s\):buildPlantProcedural\(s\)/,
+ 'a seleção de arte deve depender da genética, sem usar a imagem de outra variedade');
+const stagePackages={
+ 'blueberry-auto':'png','amnesia-haze-auto':'png','northern-lights':'png',
+ 'white-widow':'webp'
+};
+for(const [slug,ext] of Object.entries(stagePackages)){
+ for(const stage of ['stage-0-semente','stage-1-broto','stage-2-vegetativa','stage-3-floracao','stage-4-pronta']){
+  const dir=slug==='white-widow'?'plantas-estagios':'plantas-estagios-real';
+  const asset=path.join(__dirname,'..','public','assets',dir,slug,`${stage}.${ext}`);
+  assert.ok(fs.existsSync(asset),`arte de estágio ausente: ${slug}/${stage}.${ext}`);
+  if(ext==='png'){
+   const png=fs.readFileSync(asset);
+   assert.equal(png.toString('ascii',1,4),'PNG',`arquivo não é PNG: ${asset}`);
+   assert.equal(png[25],6,`PNG sem canal alpha RGBA: ${asset}`);
+  }
+  assert.match(html,new RegExp(`${dir}/${slug}/${stage}\\.${ext}`),`arte de estágio não referenciada: ${slug}/${stage}.${ext}`);
+ }
 }
 assert.match(html,/g\.userData=\{art:sp,stageSprite:sp,artMats:\[mat\]/,
- 'cada White Widow deve manter um único sprite compartilhado');
-assert.match(html,/const mapa=plantArtTextures\[e\]\|\|null/,
- 'o estágio authoritative deve trocar somente o mapa do sprite');
+ 'cada planta com arte deve manter um único sprite compartilhado');
+assert.match(html,/const mapa=\(ud\.artTextures\|\|plantArtTextures\)\[e\]\|\|null/,
+ 'o estágio authoritative deve trocar somente o mapa do pacote da própria genética');
 assert.match(html,/sp\.visible=true/,
  'o sprite único deve permanecer visível após aplicar o estágio');
 assert.doesNotMatch(html,/ud\.art\.forEach\(\(sp,i\)=>\{sp\.visible=i===e;\}\)/,

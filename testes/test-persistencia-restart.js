@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const WebSocket = require('ws');
+const Database = require('better-sqlite3');
 
 const PORT = Number(process.env.TEST_PERSIST_PORT || 8810);
 const DB_PATH = path.join(os.tmpdir(), `quintal-persist-${process.pid}.db`);
@@ -119,6 +120,28 @@ function totalSeeds(state) {
     assert.equal(criado.usuario, usuario);
     assert.equal(estadoInicial.cash, 350, 'carteira inicial deve ter R$350');
     assert.ok((estadoInicial.bank || []).some(e => e.s && e.qtd >= 2), 'conta nova deve receber sementes iniciais');
+
+    // A conta nova começa no nível 1 e deve ser bloqueada para sementes de
+    // nível 10. A promoção abaixo acontece apenas no SQLite descartável da
+    // fixture; o servidor continua sendo a autoridade da compra.
+    await fechar(first);
+    first = null;
+    await sleep(150);
+    await stopServer(server);
+    const dbNivel = new Database(DB_PATH);
+    dbNivel.prepare('UPDATE usuarios SET nivel=10 WHERE chave=?').run(sessao.persistId);
+    dbNivel.close();
+    server = startServer();
+    await waitHealth();
+    first = await connect();
+    first.ws.send(JSON.stringify({ t: 'hello', nome: 'relogin nível 10', avatarId: 'verde', aparelhoId: 'teste-restart-nivel-10' }));
+    await waitFor(first, m => m.t === 'login_required', 'login de nível 10');
+    first.ws.send(JSON.stringify({ t: 'auth_login', usuario, senha, avatarId: 'verde', aparelhoId: 'teste-restart-nivel-10' }));
+    await waitFor(first, m => m.t === 'auth_ok' && m.novo === false, 'conta promovida');
+    const loteNivel10 = await waitFor(first, m => m.t === 'lote_atribuido' && m.posicao, 'lote após promoção');
+    const estadoNivel10 = await waitFor(first, m => m.t === 'estado' && Number.isFinite(m.cash), 'estado após promoção');
+    assert.equal(estadoNivel10.nivel, 10, 'a fixture deve relogar a conta explicitamente no nível 10');
+    assert.equal(loteNivel10.loteIndex, lote.loteIndex, 'a promoção local não deve trocar o lote');
 
     first.ws.send(JSON.stringify({ t: 'comprar', oq: 'semente', strain: BASE }));
     const comprado = await waitFor(first, m => m.t === 'estado' && m.cash === 292 && totalSeeds(m) >= 3, 'compra antes do restart');

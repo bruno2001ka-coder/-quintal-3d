@@ -122,6 +122,7 @@ const FARM_STAGE_TIMES = Object.freeze({
   cura: num(process.env.FARM_CURA_S, .1, 3600, 70),
   embalagem: num(process.env.FARM_EMBALAGEM_S, .1, 3600, 35)
 });
+const FARM_SAVE_MS = num(process.env.FARM_SAVE_S, .2, 120, 20) * 1000;
 const str = (v, max) => String(v == null ? '' : v).slice(0, max);
 const CLIENTE_FIRST_S   = num(process.env.CLIENTE_FIRST_S, 1, 60, 5);
 const CLIENTE_MIN_S     = num(process.env.CLIENTE_MIN_S, 1, 120, 12);
@@ -181,6 +182,7 @@ const farmSlots = FARM_SLOT_SPOTS.map(([x, z], slotIndex) => ({
   }))
 }));
 const farmSlotDe = new Map();
+const farmSujas = new Set();
 const farmTables = FARM_TABLE_SPOTS.map(([x, z], stationId) => ({
   stationId, farmSlotIndex: stationId, x: FARM_BARN.x + x, z: FARM_BARN.z + z,
   job: null, queue: []
@@ -254,6 +256,11 @@ function limparStrain(raw) {
     gen: num(raw.gen, 0, 50, 0),
     auto: !!raw.auto,
     rar,
+    nivelMin: num(raw.nivelMin, 1, 100, 10) | 0,
+    qualidade: num(raw.qualidade, 1, 5, 1),
+    aromaPerfil: str(raw.aromaPerfil, 80),
+    cheiro: str(raw.cheiro, 80),
+    slug: str(raw.slug, 48),
     t: {
       ritmo:       num(raw.t.ritmo, 0, 100, 50),
       rendimento:  num(raw.t.rendimento, 0, 100, 50),
@@ -264,24 +271,17 @@ function limparStrain(raw) {
   };
 }
 const CATALOGO_SEMENTES = [
-  ['Northern Lights',0x5f9c46,66,58,88,52,48,false],
-  ['White Widow',0xc9d8bc,58,62,74,60,92,false],
-  ['Skunk #1',0x6fae44,70,70,80,78,40,false],
-  ['Hindu Kush',0x4f7a3c,62,54,90,56,44,false],
-  ['Amnesia Haze',0x86c65a,30,76,46,82,58,false],
-  ['Sour Diesel',0x7fbf6a,44,66,56,90,50,false],
-  ['Blue Dream',0x7fa8c4,52,84,62,70,66,false],
-  ['OG Kush',0x5e8f42,46,60,58,86,62,false],
-  ['Purple Haze',0x9a7ec4,34,58,52,76,94,false],
-  ['Jack Herer',0x8fc257,56,68,66,74,70,false],
-  ['Critical',0x6aa84f,78,88,60,54,46,false],
-  ['Gorilla Glue',0x4a7c38,48,80,70,80,84,false],
-  ['LSD 25 Auto',0x8f7fc4,88,62,78,72,80,true],
-  ['Auto 69',0xa8c452,94,69,70,58,54,true],
-  ['Critical Auto',0x74b04c,90,74,66,52,44,true],
-  ['Northern Auto',0x63a05a,86,60,86,50,50,true]
-].map((x, i) => ({ id:i + 1, nome:x[0], cor:x[1], gen:0, auto:x[7], rar:'comum',
-  t:{ritmo:x[2], rendimento:x[3], resistencia:x[4], aroma:x[5], brilho:x[6]} }));
+  { id:1, nome:'Blueberry Auto', cor:0x7fa8c4, auto:true, nivelMin:10, qualidade:2, slug:'blueberry-auto', aromaPerfil:'mirtilo e frutas vermelhas', cheiro:'doce, frutado e fresco', t:[82,62,78,76,70] },
+  { id:2, nome:'Amnesia Haze Auto', cor:0x86c65a, auto:true, nivelMin:10, qualidade:2, slug:'amnesia-haze-auto', aromaPerfil:'limão, cítrico e terra', cheiro:'cítrico, herbal e haze', t:[84,68,66,84,64] },
+  { id:3, nome:'Northern Lights', cor:0x5f9c46, auto:false, nivelMin:10, qualidade:3, slug:'northern-lights', aromaPerfil:'pinho, terra e madeira doce', cheiro:'resinoso, terroso e picante', t:[66,58,88,52,48] },
+  { id:4, nome:'White Widow', cor:0xc9d8bc, auto:false, nivelMin:10, qualidade:3, slug:'white-widow', aromaPerfil:'terra, especiarias e pimenta', cheiro:'pungente, herbal e apimentado', t:[58,62,74,60,92] },
+  { id:5, nome:'Northern Light Auto', cor:0x63a05a, auto:true, nivelMin:11, qualidade:4, slug:'northern-light-auto', aromaPerfil:'doçura, pinho e terra', cheiro:'doce, resinoso e amadeirado', t:[88,70,86,64,58] },
+  { id:6, nome:'White Widow Auto', cor:0xb8cf9d, auto:true, nivelMin:11, qualidade:4, slug:'white-widow-auto', aromaPerfil:'madeira, terra e especiarias', cheiro:'pungente, terroso e resinoso', t:[86,74,76,72,88] },
+  { id:7, nome:'OG Kush', cor:0x5e8f42, auto:false, nivelMin:11, qualidade:5, slug:'og-kush', aromaPerfil:'cítrico, terra e combustível', cheiro:'cítrico intenso, diesel e terroso', t:[46,60,58,86,62] },
+  { id:8, nome:'Sour Diesel', cor:0x7fbf6a, auto:false, nivelMin:11, qualidade:5, slug:'sour-diesel', aromaPerfil:'diesel, cítrico azedo e terra', cheiro:'combustível, sour e cítrico', t:[44,66,56,90,50] }
+].map(s => ({ id:s.id, nome:s.nome, cor:s.cor, gen:0, auto:s.auto, rar:'comum', nivelMin:s.nivelMin,
+  qualidade:s.qualidade, slug:s.slug, aromaPerfil:s.aromaPerfil, cheiro:s.cheiro,
+  t:{ritmo:s.t[0], rendimento:s.t[1], resistencia:s.t[2], aroma:s.t[3], brilho:s.t[4]} }));
 const CATALOGO_SEMENTES_MAP = new Map(CATALOGO_SEMENTES.map(s => [s.nome, s]));
 function sementeCatalogada(raw) {
   const s = limparStrain(raw);
@@ -1601,6 +1601,9 @@ function passoFuncionario(f, dt) {
       trabalho.slot.updatedAt = agora();
       farmEnviarPlotUpdates(trabalho.slot, [{ localIndex:alvo.plot.localIndex, plot:farmPlotPublic(alvo.plot) }]);
       farmEnviarSlots();
+      // O caseiro salva imediatamente, mas também deixa o slot na fila para
+      // que qualquer alteração agrícola próxima ao mesmo tick não se perca.
+      farmSujas.add(trabalho.slot.slotIndex);
       salvarFarmState();
     } else {
       metricas.loteUpdates++;
@@ -2570,6 +2573,10 @@ wss.on('connection', (ws, req) => {
             enviar(j, { t:'recusado', motivo:'semente fora do catálogo' });
             metricas.rejeitadas++; return;
           }
+          if (Number(c.nivel) < Number(sem.nivelMin || 10)) {
+            enviar(j, { t:'recusado', motivo:`genética liberada no nível ${sem.nivelMin}` });
+            metricas.rejeitadas++; return;
+          }
           custo = precoSemente(sem);
           // o fenótipo é sorteado AQUI: o cliente não escolhe a raridade
           const r = Math.random();
@@ -3209,20 +3216,28 @@ setInterval(() => {
         plot.updatedAt = agora(); updates.push({ localIndex:plot.localIndex, plot:farmPlotPublic(plot) });
       }
     }
-    if (updates.length) { slot.updatedAt = agora(); farmEnviarPlotUpdates(slot, updates); }
+    if (updates.length) {
+      slot.updatedAt = agora();
+      farmSujas.add(slot.slotIndex);
+      farmEnviarPlotUpdates(slot, updates);
+    }
   }
 }, GROW_MS);
 
 /* ───────── gravação periódica ─────────
-   Grava só o que mudou, a cada 20s, e os lotes a cada minuto. Escrever a
-   cada alteração seria I/O demais; deixar só no fim seria perder tudo num
-   crash. Este é o meio-termo. */
+   Grava só o que mudou no intervalo configurável (20s por padrão), e os
+   lotes urbanos a cada minuto. Escrever a cada alteração seria I/O demais;
+   deixar só no fim perderia o crescimento agrícola num crash. */
 setInterval(() => {
   for (const j of jogadores.values()) copiarPosicaoParaCarteira(j);
-  if (!sujas.size) return;
+  if (!sujas.size && !farmSujas.size) return;
   for (const k of sujas) salvarCarteira(k);
   sujas.clear();
-}, 20000);
+  if (farmSujas.size) {
+    salvarFarmState();
+    farmSujas.clear();
+  }
+}, FARM_SAVE_MS);
 setInterval(salvarLotes, 60000);
 
 /* ───────── heartbeat: mata conexão zumbi ───────── */

@@ -387,36 +387,29 @@ function sorteiaRaridade(){
  for(const k in RARIDADES){ac+=RARIDADES[k].chance;if(r<=ac)return k}
  return 'comum';
 }
-const mkS=(nome,cor,t,gen,rar)=>({id:sid++,nome,cor,t,gen:gen||0,auto:false,rar:rar||'comum'});
-const mkA=(nome,cor,t,gen,rar)=>({id:sid++,nome,cor,t,gen:gen||0,auto:true,rar:rar||'comum'});
+const metaSemente=(nivelMin,qualidade,slug,aromaPerfil,cheiro)=>({nivelMin,qualidade,slug,aromaPerfil,cheiro});
+const mkS=(nome,cor,t,gen=0,rar='comum',meta={})=>({id:sid++,nome,cor,t,gen,auto:false,rar,...meta});
+const mkA=(nome,cor,t,gen=0,rar='comum',meta={})=>({id:sid++,nome,cor,t,gen,auto:true,rar,...meta});
 const BASE=[
- mkS('Northern Lights',0x5f9c46,{ritmo:66,rendimento:58,resistencia:88,aroma:52,brilho:48}),
- mkS('White Widow',    0xc9d8bc,{ritmo:58,rendimento:62,resistencia:74,aroma:60,brilho:92}),
- mkS('Skunk #1',       0x6fae44,{ritmo:70,rendimento:70,resistencia:80,aroma:78,brilho:40}),
- mkS('Hindu Kush',     0x4f7a3c,{ritmo:62,rendimento:54,resistencia:90,aroma:56,brilho:44}),
- mkS('Amnesia Haze',   0x86c65a,{ritmo:30,rendimento:76,resistencia:46,aroma:82,brilho:58}),
- mkS('Sour Diesel',    0x7fbf6a,{ritmo:44,rendimento:66,resistencia:56,aroma:90,brilho:50}),
- mkS('Blue Dream',     0x7fa8c4,{ritmo:52,rendimento:84,resistencia:62,aroma:70,brilho:66}),
- mkS('OG Kush',        0x5e8f42,{ritmo:46,rendimento:60,resistencia:58,aroma:86,brilho:62}),
- mkS('Purple Haze',    0x9a7ec4,{ritmo:34,rendimento:58,resistencia:52,aroma:76,brilho:94}),
- mkS('Jack Herer',     0x8fc257,{ritmo:56,rendimento:68,resistencia:66,aroma:74,brilho:70}),
- mkS('Critical',       0x6aa84f,{ritmo:78,rendimento:88,resistencia:60,aroma:54,brilho:46}),
- mkS('Gorilla Glue',   0x4a7c38,{ritmo:48,rendimento:80,resistencia:70,aroma:80,brilho:84}),
- // autoflorescentes: ciclo curto, não dependem de luz, mas rendem menos
- mkA('LSD 25 Auto',       0x8f7fc4,{ritmo:88,rendimento:62,resistencia:78,aroma:72,brilho:80}),
- mkA('Auto 69',           0xa8c452,{ritmo:94,rendimento:69,resistencia:70,aroma:58,brilho:54}),
- mkA('Critical Auto',     0x74b04c,{ritmo:90,rendimento:74,resistencia:66,aroma:52,brilho:44}),
- mkA('Northern Auto',     0x63a05a,{ritmo:86,rendimento:60,resistencia:86,aroma:50,brilho:50})];
+ mkA('Blueberry Auto',0x7fa8c4,{ritmo:82,rendimento:62,resistencia:78,aroma:76,brilho:70},0,'comum',metaSemente(10,2,'blueberry-auto','mirtilo e frutas vermelhas','doce, frutado e fresco')),
+ mkA('Amnesia Haze Auto',0x86c65a,{ritmo:84,rendimento:68,resistencia:66,aroma:84,brilho:64},0,'comum',metaSemente(10,2,'amnesia-haze-auto','limão, cítrico e terra','cítrico, herbal e haze')),
+ mkS('Northern Lights',0x5f9c46,{ritmo:66,rendimento:58,resistencia:88,aroma:52,brilho:48},0,'comum',metaSemente(10,3,'northern-lights','pinho, terra e madeira doce','resinoso, terroso e picante')),
+ mkS('White Widow',0xc9d8bc,{ritmo:58,rendimento:62,resistencia:74,aroma:60,brilho:92},0,'comum',metaSemente(10,3,'white-widow','terra, especiarias e pimenta','pungente, herbal e apimentado')),
+ mkA('Northern Light Auto',0x63a05a,{ritmo:88,rendimento:70,resistencia:86,aroma:64,brilho:58},0,'comum',metaSemente(11,4,'northern-light-auto','doçura, pinho e terra','doce, resinoso e amadeirado')),
+ mkA('White Widow Auto',0xb8cf9d,{ritmo:86,rendimento:74,resistencia:76,aroma:72,brilho:88},0,'comum',metaSemente(11,4,'white-widow-auto','madeira, terra e especiarias','pungente, terroso e resinoso')),
+ mkS('OG Kush',0x5e8f42,{ritmo:46,rendimento:60,resistencia:58,aroma:86,brilho:62},0,'comum',metaSemente(11,5,'og-kush','cítrico, terra e combustível','cítrico intenso, diesel e terroso')),
+ mkS('Sour Diesel',0x7fbf6a,{ritmo:44,rendimento:66,resistencia:56,aroma:90,brilho:50},0,'comum',metaSemente(11,5,'sour-diesel','diesel, cítrico azedo e terra','combustível, sour e cítrico'))
+];
 const GENETICA_ART=Object.freeze({
- 'Northern Lights':'/assets/geneticas/northern-lights.jpg','White Widow':'/assets/geneticas/white-widow.jpg','Skunk #1':'/assets/geneticas/skunk-1.jpg','Hindu Kush':'/assets/geneticas/hindu-kush.jpg','Amnesia Haze':'/assets/geneticas/amnesia-haze.jpg','Sour Diesel':'/assets/geneticas/sour-diesel.jpg','Blue Dream':'/assets/geneticas/blue-dream.jpg','OG Kush':'/assets/geneticas/og-kush.jpg','Purple Haze':'/assets/geneticas/purple-haze.jpg','Jack Herer':'/assets/geneticas/jack-herer.jpg','Critical':'/assets/geneticas/critical.jpg','Gorilla Glue':'/assets/geneticas/gorilla-glue.jpg','LSD 25 Auto':'/assets/geneticas/lsd-25-auto.jpg','Auto 69':'/assets/geneticas/auto-69.jpg','Critical Auto':'/assets/geneticas/critical-auto.jpg','Northern Auto':'/assets/geneticas/northern-auto.jpg'
-  });
- const PLANT_STAGE_ART=Object.freeze([
-  '/assets/plantas-estagios/white-widow/stage-0-semente.webp',
-  '/assets/plantas-estagios/white-widow/stage-1-broto.webp',
-  '/assets/plantas-estagios/white-widow/stage-2-vegetativa.webp',
-  '/assets/plantas-estagios/white-widow/stage-3-floracao.webp',
-  '/assets/plantas-estagios/white-widow/stage-4-pronta.webp'
- ]);
+ 'Blueberry Auto':'/assets/plantas-estagios-real/blueberry-auto/stage-4-pronta.png','Amnesia Haze Auto':'/assets/plantas-estagios-real/amnesia-haze-auto/stage-4-pronta.png','Northern Lights':'/assets/plantas-estagios-real/northern-lights/stage-4-pronta.png','White Widow':'/assets/geneticas/white-widow.jpg','Northern Light Auto':'/assets/geneticas/northern-auto.jpg','White Widow Auto':'/assets/geneticas/white-widow.jpg','OG Kush':'/assets/geneticas/og-kush.jpg','Sour Diesel':'/assets/geneticas/sour-diesel.jpg'
+});
+const PLANT_STAGE_ART_BY_NAME=Object.freeze({
+ 'Blueberry Auto':Object.freeze(['/assets/plantas-estagios-real/blueberry-auto/stage-0-semente.png','/assets/plantas-estagios-real/blueberry-auto/stage-1-broto.png','/assets/plantas-estagios-real/blueberry-auto/stage-2-vegetativa.png','/assets/plantas-estagios-real/blueberry-auto/stage-3-floracao.png','/assets/plantas-estagios-real/blueberry-auto/stage-4-pronta.png']),
+ 'Amnesia Haze Auto':Object.freeze(['/assets/plantas-estagios-real/amnesia-haze-auto/stage-0-semente.png','/assets/plantas-estagios-real/amnesia-haze-auto/stage-1-broto.png','/assets/plantas-estagios-real/amnesia-haze-auto/stage-2-vegetativa.png','/assets/plantas-estagios-real/amnesia-haze-auto/stage-3-floracao.png','/assets/plantas-estagios-real/amnesia-haze-auto/stage-4-pronta.png']),
+ 'Northern Lights':Object.freeze(['/assets/plantas-estagios-real/northern-lights/stage-0-semente.png','/assets/plantas-estagios-real/northern-lights/stage-1-broto.png','/assets/plantas-estagios-real/northern-lights/stage-2-vegetativa.png','/assets/plantas-estagios-real/northern-lights/stage-3-floracao.png','/assets/plantas-estagios-real/northern-lights/stage-4-pronta.png']),
+ 'White Widow':Object.freeze(['/assets/plantas-estagios/white-widow/stage-0-semente.webp','/assets/plantas-estagios/white-widow/stage-1-broto.webp','/assets/plantas-estagios/white-widow/stage-2-vegetativa.webp','/assets/plantas-estagios/white-widow/stage-3-floracao.webp','/assets/plantas-estagios/white-widow/stage-4-pronta.webp'])
+});
+const PLANT_STAGE_ART=PLANT_STAGE_ART_BY_NAME['White Widow'];
  function artGenetica(s,cls='geneticArt'){
  const nome=String(s&&s.nome||'');const src=GENETICA_ART[nome];
  return src?`<img class="${cls}" src="${src}" alt="${escaparHTML(nome)}" loading="lazy" decoding="async">`:`<span class="${cls}" style="background:${hex(s&&s.cor||0x385235)}"></span>`;
@@ -567,16 +560,18 @@ renderer.shadowMap.enabled=cfgQual().sombras;renderer.shadowMap.type=cfgQual().t
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.82;
  document.body.appendChild(renderer.domElement);
- // Cinco texturas compartilhadas; cada planta cria apenas um Sprite visível.
- // White Widow usa a sequência visual gerada; as demais genéticas continuam no
- // modelo procedural até receberem seu próprio pacote, sem misturar fenótipos.
+ // Cada genética possui no máximo cinco texturas compartilhadas; cada planta
+ // cria apenas um Sprite visível. Pacotes ainda não gerados permanecem no
+ // procedural, sem apontar para a imagem de outra genética.
  const plantArtLoader=new THREE.TextureLoader();
- const plantArtTextures=PLANT_STAGE_ART.map(src=>{
+ const carregarPacotePlanta=fontes=>fontes.map(src=>{
   const tex=plantArtLoader.load(src);
   tex.encoding=THREE.sRGBEncoding;tex.minFilter=THREE.LinearFilter;
   tex.magFilter=THREE.LinearFilter;tex.generateMipmaps=false;
   return tex;
  });
+ const plantArtTexturesByName=Object.freeze(Object.fromEntries(Object.entries(PLANT_STAGE_ART_BY_NAME).map(([nome,fontes])=>[nome,carregarPacotePlanta(fontes)])));
+ const plantArtTextures=plantArtTexturesByName['White Widow']||[];
 const skyC=cv(4,256),skyT=T(skyC);
 const skyDome=new THREE.Mesh(new THREE.SphereGeometry(230,26,18),
  new THREE.MeshBasicMaterial({map:skyT,side:THREE.BackSide,depthWrite:false,fog:false}));
@@ -1956,9 +1951,11 @@ function buildPlantProcedural(s){
   g.userData={buds,drop,bug,leafM,budM:bm,fans};return g}
 function buildPlantArt(s){
  const g=new THREE.Group(),plane=1.55;
+ const texturas=plantArtTexturesByName[String(s&&s.nome)]||[];
  // Uma planta usa um único billboard. As cinco imagens são texturas
- // compartilhadas e apenas o mapa do sprite troca quando o servidor muda o estágio.
- const mat=new THREE.SpriteMaterial({map:plantArtTextures[0]||null,transparent:true,
+ // compartilhadas da própria genética e apenas o mapa do sprite troca quando
+ // o servidor muda o estágio.
+ const mat=new THREE.SpriteMaterial({map:texturas[0]||null,transparent:true,
   depthWrite:false,depthTest:true,alphaTest:.035,color:0xffffff});
  const sp=new THREE.Sprite(mat);sp.center.set(.5,0);sp.scale.set(plane,plane,1);
  sp.position.set(0,0,0);g.add(sp);
@@ -1969,11 +1966,11 @@ function buildPlantArt(s){
  drop.position.y=1.48;drop.visible=false;g.add(drop);
  const bug=new THREE.Mesh(new THREE.SphereGeometry(.085,6,4),new THREE.MeshBasicMaterial({color:0xff6a3d}));
  bug.position.y=1.48;bug.visible=false;g.add(bug);
- g.userData={art:sp,stageSprite:sp,artMats:[mat],artPlane:plane,leafM,buds:null,drop,bug,fans:[]};
+ g.userData={art:sp,stageSprite:sp,artMats:[mat],artTextures:texturas,artPlane:plane,leafM,buds:null,drop,bug,fans:[]};
  return g;
 }
 function buildPlant(s){
- return s&&String(s.nome)==='White Widow'?buildPlantArt(s):buildPlantProcedural(s);
+ return PLANT_STAGE_ART_BY_NAME[String(s&&s.nome)]?buildPlantArt(s):buildPlantProcedural(s);
 }
 // Escala e silhueta são compartilhadas pelo cliente local e pelo espelho online.
 // O servidor continua decidindo prog/estágio; isto só impede que a planta nasça
@@ -1986,7 +1983,7 @@ function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
   // WebP já tem altura padronizada; somente o mapa muda quando o servidor manda
   // outro estágio, em vez de manter cinco sprites por planta.
   const sp=ud.stageSprite||ud.art;
-  const mapa=plantArtTextures[e]||null;
+  const mapa=(ud.artTextures||plantArtTextures)[e]||null;
   if(sp.material.map!==mapa){sp.material.map=mapa;sp.material.needsUpdate=true}
   sp.visible=true;
   const fase=e===4?1:clamp((p-e*25)/25,0,1);const f=.94+fase*.06;
@@ -2519,10 +2516,14 @@ function renderBanca(){
   b.innerHTML+='<h2 class="mt">SEMENTES BASE</h2><div class="sub">Barras: ritmo, rendimento, resistência, aroma, brilho.</div>';
   BASE.forEach(s=>{const c=seedCost(s),r=document.createElement('div');r.className='row';
    const possuida=G.bank.filter(e=>e.s&&e.s.nome===s.nome).reduce((n,e)=>n+Number(e.qtd||0),0);
-   r.innerHTML=`${artGenetica(s,'geneticArt')}<div class="info">${escaparHTML(s.nome)} — R$ ${c}${barsHTML(s)}<small>${traitLine(s)}</small>${possuida?`<small style="color:#8fe063">no inventário: ${possuida}x</small>`:''}</div>`;
-   const btn=document.createElement('button');btn.textContent=possuida?`COMPRAR MAIS · ${possuida}x`:'COMPRAR';btn.disabled=G.cash<c;
+   const liberada=Number(G.nivel||0)>=Number(s.nivelMin||10),tipo=s.auto?'AUTOMÁTICA':'FOTOPERÍODO';
+   const qualidade='★'.repeat(Math.max(1,Math.min(5,Number(s.qualidade)||1)));
+   const bloqueio=liberada?'':`<small style="color:#e8d264">libera no nível ${s.nivelMin}</small>`;
+   r.innerHTML=`${artGenetica(s,'geneticArt')}<div class="info"><b>${escaparHTML(s.nome)}</b> — ${tipo} — ${qualidade} — R$ ${c}${barsHTML(s)}<small>${escaparHTML(s.aromaPerfil||'perfil aromático em descoberta')}</small><small>cheiro: ${escaparHTML(s.cheiro||'perfil variável')}</small><small>${traitLine(s)}</small>${bloqueio}${possuida?`<small style="color:#8fe063">no inventário: ${possuida}x</small>`:''}</div>`;
+   const btn=document.createElement('button');btn.textContent=!liberada?`NÍVEL ${s.nivelMin}`:(possuida?`COMPRAR MAIS · ${possuida}x`:'COMPRAR');btn.disabled=!liberada||G.cash<c;
    btn.onclick=()=>{
-    // ETAPA B: o preço e o fenótipo são decididos pelo SERVIDOR
+    if(!liberada){toast(`${s.nome} libera no nível ${s.nivelMin}`);return}
+    // O preço, o nível e o fenótipo são decididos pelo SERVIDOR.
     if(pedirAoServidor({t:'comprar',oq:'semente',strain:s}))blip(680,.1,'triangle',.06);};
    r.appendChild(btn);b.appendChild(r)})}
  else if(bancaTab==='cruz'){
