@@ -4723,13 +4723,14 @@ function mpAddFunc(F){
  const h=humanoid(pick([0x6f88a0,0x8a9268,0xb08a5a]),pick([0x39424c,0x4a3f34]),
   pick([0xc98d63,0xa06d47,0xe0b48c]));
  h.g.position.set(F.x||0,0,F.z||0);h.g.rotation.y=F.ry||0;
- // etiqueta com o nome e o dono, pra ficar claro de quem é
- const meu = F.loteIndex!==null && F.loteIndex!==undefined && meuLoteIndex!==null && F.loteIndex===meuLoteIndex;
- const lbl=mpLabel((F.nome||'Funcionário')+(meu?'':' ·'));
+ // Nome e cargo ficam visíveis para todos; o lote continua sendo decidido pelo servidor.
+ const cargosVisiveis={zelador:'Zelador',colhedor:'Colhedora',caseiro:'Caseiro'};
+ const cargoNome=cargosVisiveis[F.cargo]||'Funcionário';
+ const lbl=mpLabel((F.nome||'Funcionário')+' · '+cargoNome);
  lbl.scale.set(1.0,.25,1);h.g.add(lbl);
  scene.add(h.g);
- mpFuncs.set(F.id,{g:h.g,L:h.L,nome:F.nome,loteIndex:F.loteIndex,cargo:F.cargo,
-  tx:F.x||0,tz:F.z||0,tr:F.ry||0,walk:0,buf:[],ultimoVisto:performance.now()});
+ mpFuncs.set(F.id,{g:h.g,L:h.L,nome:F.nome,loteIndex:F.loteIndex,cargo:F.cargo,cargoNome,
+  estado:F.estado||'parado',tx:F.x||0,tz:F.z||0,tr:F.ry||0,walk:0,work:0,buf:[],ultimoVisto:performance.now()});
 }
 function mpRemoveFunc(id){
  const f=mpFuncs.get(id);
@@ -4775,6 +4776,38 @@ function mpTickClientes(dt){
   if(vel>.25){c.walk+=dt*Math.min(10,3+vel*2);const sw=Math.sin(c.walk)*.45;
    c.L.legL.rotation.x=sw;c.L.legR.rotation.x=-sw;c.L.armL.rotation.x=-sw*.5}
   else{c.L.legL.rotation.x*=.8;c.L.legR.rotation.x*=.8}
+ }
+}
+function mpTickFuncs(dt){
+ const tAlvo=performance.now()-MP_ATRASO;
+ for(const [id,f] of mpFuncs){
+  let antes=null,depois=null;
+  for(let i=0;i<f.buf.length;i++){
+   if(f.buf[i].t<=tAlvo)antes=f.buf[i];
+   if(f.buf[i].t>tAlvo){depois=f.buf[i];break}
+  }
+  let x,z,r;
+  if(antes&&depois){const q=(tAlvo-antes.t)/Math.max(1,depois.t-antes.t);
+   x=antes.x+(depois.x-antes.x)*q;z=antes.z+(depois.z-antes.z)*q;r=antes.ry+(depois.ry-antes.ry)*q}
+  else if(f.buf.length){const u=f.buf[f.buf.length-1];x=u.x;z=u.z;r=u.ry}
+  else{x=f.tx;z=f.tz;r=f.tr}
+  const ax=f.g.position.x,az=f.g.position.z;
+  f.g.position.x+=(x-f.g.position.x)*Math.min(1,dt*14);
+  f.g.position.z+=(z-f.g.position.z)*Math.min(1,dt*14);
+  let dr=r-f.g.rotation.y;
+  while(dr>Math.PI)dr-=6.283;while(dr<-Math.PI)dr+=6.283;
+  f.g.rotation.y+=dr*Math.min(1,dt*14);
+  const vel=Math.hypot(f.g.position.x-ax,f.g.position.z-az)/Math.max(dt,.001);
+  if(vel>.25||f.estado==='indo'){
+   f.walk+=dt*Math.min(10,3+vel*2);const sw=Math.sin(f.walk)*.45;
+   f.L.legL.rotation.x=sw;f.L.legR.rotation.x=-sw;f.L.armL.rotation.x=-sw*.5;
+  }else{f.L.legL.rotation.x*=.8;f.L.legR.rotation.x*=.8}
+  if(f.estado==='trabalhando'){
+   f.work+=dt*8;const ac=Math.sin(f.work)*.28;
+   f.L.armR.rotation.x=-.6-ac;f.L.armL.rotation.x=-.6+ac;
+  }else if(f.estado!=='indo'){
+   f.L.armR.rotation.x=-.25;f.L.armL.rotation.x=0;
+  }
  }
 }
 function mpAddBot(id,tipo,x,z,ry){
@@ -5027,6 +5060,7 @@ function mpConnect(){
      fVistos.add(F.id);
      if(!mpFuncs.has(F.id))mpAddFunc(F);
      const f=mpFuncs.get(F.id); if(!f)continue;
+     f.estado=F.estado||f.estado||'parado';f.cargo=F.cargo||f.cargo;
      f.buf.push({t:agora,x:F.x,z:F.z,ry:F.ry});
      if(f.buf.length>20)f.buf.shift();
      f.ultimoVisto=agora;
@@ -5175,6 +5209,7 @@ function mpConnect(){
 }
  function mpTick(dt){
  mpTickClientes(dt);
+ mpTickFuncs(dt);
  // manda minha posição uns 10x por segundo, nunca mais que isso
  mpSendT+=dt;
  if(mpConnected&&mpReady&&G.running&&mpSendT>.1){

@@ -89,7 +89,19 @@ assert.match(html, /new THREE\.CylinderGeometry\(\.16,\.18,\.32,12\)/,
 assert.match(html, /slot\.g\.visible=true/,
   'a atualização do estoque deve tornar visível o pote da cura');
 assert.match(html, /lote\.curaPotes=null/,
-  'os potes devem ser liberados quando a casa é desmontada');
+ 'os potes devem ser liberados quando a casa é desmontada');
+assert.match(html, /const cargosVisiveis=\{zelador:'Zelador',colhedor:'Colhedora',caseiro:'Caseiro'\}/,
+ 'o funcionário deve exibir cargo legível junto do nome');
+assert.match(html, /const lbl=mpLabel\(\(F\.nome\|\|'Funcionário'\)\+' · '\+cargoNome\)/,
+ 'o rótulo do funcionário deve mostrar nome e cargo');
+assert.match(html, /function mpTickFuncs\(dt\)/,
+ 'o cliente deve ter um loop dedicado para atualizar funcionários');
+assert.match(html, /f\.estado=F\.estado\|\|f\.estado\|\|'parado'/,
+ 'o cliente deve guardar o estado de trabalho enviado pelo servidor');
+assert.match(html, /if\(f\.estado==='trabalhando'\)/,
+ 'o estado authoritative trabalhando deve acionar animação visível');
+assert.match(html, /mpTickFuncs\(dt\)/,
+ 'o loop principal deve atualizar funcionários a cada frame');
 assert.match(html, /const vaoEstufa=1\.4,ladoEstufa=\(ew-vaoEstufa\)\/2/,
   'cada estufa deve reservar uma abertura de entrada');
 assert.match(html, /addColLocal\(ex-ew\/2,ex-vaoEstufa\/2,ez\+ed\/2-\.1,ez\+ed\/2\+\.1\)/,
