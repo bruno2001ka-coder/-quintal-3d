@@ -479,8 +479,13 @@ function cTerra(){const c=cv(512,512),g=c.getContext('2d');
  for(let i=0;i<1200;i++){const v=rnd(0,1);
   g.fillStyle=`rgba(${118+v*80|0},${114+v*74|0},${106+v*68|0},.85)`;
   g.beginPath();g.arc(rnd(0,512),rnd(0,512),rnd(1,3.6),0,7);g.fill()}
- return c}
-function cBrita(){const c=cv(512,512),g=c.getContext('2d');
+  return c}
+ function cSoloFazenda(){const c=cv(512,512),g=c.getContext('2d');
+  g.fillStyle='#3f2718';g.fillRect(0,0,512,512);
+  for(let i=0;i<11000;i++){const v=rnd(-18,18);g.fillStyle=`rgba(${62+v|0},${40+v|0},${24+v|0},.62)`;g.fillRect(rnd(0,512),rnd(0,512),rnd(1,4),rnd(1,3))}
+  for(let i=0;i<950;i++){const v=rnd(0,1);g.fillStyle=`rgba(${78+v*48|0},${66+v*38|0},${48+v*28|0},.72)`;g.beginPath();g.ellipse(rnd(0,512),rnd(0,512),rnd(1,3.8),rnd(.7,2.3),rnd(0,3),0,7);g.fill()}
+  return c}
+ function cBrita(){const c=cv(512,512),g=c.getContext('2d');
  g.fillStyle='#4e4a44';g.fillRect(0,0,512,512);
  for(let i=0;i<7000;i++){const v=rnd(-24,56);
   g.fillStyle=`rgba(${92+v|0},${88+v|0},${82+v|0},.9)`;
@@ -1391,7 +1396,7 @@ let fazPortao=null;
  const cx=(FAZ.x0+FAZ.x1)/2, cz=(FAZ.z0+FAZ.z1)/2;
  // chão da fazenda: terra lavrada
  const ch=new THREE.Mesh(new THREE.PlaneGeometry(FAZ.x1-FAZ.x0,FAZ.z1-FAZ.z0),
-  mat(cTerra(),26,26,{bumpScale:.07,roughness:1}));
+  mat(cSoloFazenda(),26,26,{bumpScale:.07,roughness:1,color:0xffffff}));
  ch.rotation.x=-Math.PI/2;ch.position.set(cx,.02,cz);ch.receiveShadow=true;g.add(ch);
  // portão de entrada da fazenda
  const pm=new THREE.MeshStandardMaterial({color:0x6b5236,roughness:.95});
@@ -1587,6 +1592,85 @@ function makePlot(x,z,tipo,hidden){ // tipo: 'sol' | 'estufa' | 'grow'
   [-9,8],[-3,8],[3,8],[9,8]].forEach(pp=>{
   const pl=makePlot(cx+pp[0]*1.6,cz+pp[1]*1.6,'sol',true);
   pl.fazenda=true;fazPlots.push(pl)})})();
+
+/* ═════════ PASSE VISUAL DA FAZENDA ═════════
+   Cenário procedural leve: não cria estado nem muda colisão, crescimento,
+   estoque, processamento ou economia. O servidor continua sendo a autoridade.
+*/
+(function(){
+ const madeira=new THREE.MeshStandardMaterial({color:0x6b4228,roughness:.94});
+ const madeiraClara=new THREE.MeshStandardMaterial({color:0x9a6b3f,roughness:.9});
+ const solo=new THREE.MeshStandardMaterial({color:0x3f2a1d,roughness:1});
+ const palha=new THREE.MeshStandardMaterial({color:0x856b35,roughness:1});
+ const ferro=new THREE.MeshStandardMaterial({color:0x34383a,roughness:.55,metalness:.45});
+ const luz=new THREE.MeshStandardMaterial({color:0xffc96b,roughness:.4,emissive:0xff8a27,emissiveIntensity:.8});
+ const caminhos=mat(cSoloFazenda(),7,20,{bumpScale:.04,roughness:1,color:0xffffff});
+ const pedras=new THREE.MeshStandardMaterial({color:0x777265,roughness:1});
+ const fazDetalhe=new THREE.Group();fazDetalhe.name='fazendaVisualDetalhada';
+ function caixa(w,h,d,x,y,z,m,g=fazDetalhe){
+  const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;g.add(o);return o;
+ }
+ function caminho(w,d,x,z){
+  const p=new THREE.Mesh(new THREE.PlaneGeometry(w,d),caminhos);p.rotation.x=-Math.PI/2;p.position.set(x,.035,z);p.receiveShadow=true;fazDetalhe.add(p);
+ }
+ // Avenida central e cruzamentos deixam as fileiras fáceis de ler e percorrer.
+ caminho(9,92,0,(FAZ.z0+FAZ.z1)/2);
+ caminho(78,4.2,0,212.8);caminho(78,4.2,0,226.4);
+ caminho(4.2,92,-24,220);caminho(4.2,92,24,220);
+ // Cerca baixa decorativa. Não adicionamos colliders nesta camada para não
+ // bloquear a navegação authoritative já existente.
+ function cerca(x1,z1,x2,z2){
+  const dx=x2-x1,dz=z2-z1,len=Math.hypot(dx,dz),ang=Math.atan2(dz,dx);
+  for(let t=0;t<=len+.01;t+=8){
+   const q=Math.min(t,len),x=x1+dx*q/len,z=z1+dz*q/len;
+   const p=new THREE.Mesh(new THREE.CylinderGeometry(.09,.12,1.35,6),madeira);
+   p.position.set(x,.675,z);p.castShadow=true;fazDetalhe.add(p);
+  }
+  [0.48,0.92].forEach(y=>{const r=caixa(len,.07,.07,(x1+x2)/2,y,(z1+z2)/2,madeira);r.rotation.y=-ang});
+ }
+ cerca(FAZ.x0+1,FAZ.z0+5,FAZ.x0+1,FAZ.z1-1);
+ cerca(FAZ.x1-1,FAZ.z0+5,FAZ.x1-1,FAZ.z1-1);
+ cerca(FAZ.x0+1,FAZ.z1-1,FAZ.x1-1,FAZ.z1-1);
+ cerca(FAZ.x0+1,FAZ.z0+5,-6,FAZ.z0+5);cerca(6,FAZ.z0+5,FAZ.x1-1,FAZ.z0+5);
+ // Detalhes compartilhados dos canteiros: borda, solo elevado, irrigação e treliça.
+ const faixaGeom=new THREE.BoxGeometry(1.08,.045,.09),tuboGeom=new THREE.CylinderGeometry(.022,.022,1.25,6),cantoGeom=new THREE.BoxGeometry(.09,.42,.09);
+ fazPlots.forEach((pl,i)=>{
+  const d=new THREE.Group();d.name='detalheCanteiro'+(i+1);pl.group.add(d);
+  for(let q=-.4;q<=.4;q+=.4){const faixa=new THREE.Mesh(faixaGeom,solo);faixa.position.set(0,.18,q);faixa.receiveShadow=true;d.add(faixa)}
+  const tubo=new THREE.Mesh(tuboGeom,ferro);tubo.rotation.z=Math.PI/2;tubo.position.set(0,.25,.58);d.add(tubo);
+  const registro=new THREE.Mesh(new THREE.SphereGeometry(.065,7,5),luz);registro.position.set(.64,.25,.58);d.add(registro);
+  [[-.67,-.67],[.67,-.67],[-.67,.67],[.67,.67]].forEach(([x,z])=>{const p=new THREE.Mesh(cantoGeom,madeiraClara);p.position.set(x,.25,z);p.castShadow=true;d.add(p)});
+  if(i%4===0){[-.52,.52].forEach(x=>caixa(.07,1.35,.07,x,.78,0,madeiraClara,d));caixa(1.15,.06,.06,0,1.35,0,madeiraClara,d)}
+  const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('CANTEIRO '+(i+1),'#e8d264')),transparent:true,depthTest:false}));tag.scale.set(.82,.21,1);tag.position.set(0,1.48,.72);d.add(tag);
+ });
+ // Lanternas marcam interseções e melhoram a leitura no período noturno.
+ function lanterna(x,z){
+  const g=new THREE.Group();g.position.set(x,0,z);
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,1.35,6),madeira);post.position.y=.675;post.castShadow=true;g.add(post);
+  caixa(.28,.06,.28,0,1.36,0,madeira,g);
+  const lamp=new THREE.Mesh(new THREE.BoxGeometry(.16,.2,.16),luz);lamp.position.y=1.22;g.add(lamp);fazDetalhe.add(g);
+ }
+ [[-24,212.8],[24,212.8],[-24,226.4],[24,226.4],[0,202],[0,238]].forEach(p=>lanterna(p[0],p[1]));
+ // Pátio visual das seis mesas, reservado para o fluxo futuro de produção.
+ const patio=new THREE.Group();patio.name='patioProcessamentoVisual';patio.position.set(18,0,191);fazDetalhe.add(patio);
+ for(let i=0;i<6;i++){
+  const x=(i%3)*3.1-3.1,z=Math.floor(i/3)*2.8;
+  caixa(2.25,.12,1.05,x,1,z,madeiraClara,patio);
+  [[-.9,-.36],[.9,-.36],[-.9,.36],[.9,.36]].forEach(([lx,lz])=>caixa(.09,1,.09,x+lx,.5,z+lz,madeira,patio));
+  const caixaProd=caixa(.42,.28,.34,x-.55,.2,z,madeira,patio);caixaProd.rotation.y=.18;
+ }
+ const faixaPatio=new THREE.Mesh(new THREE.PlaneGeometry(11,8),caminhos);faixaPatio.rotation.x=-Math.PI/2;faixaPatio.position.set(0,.032,1.2);faixaPatio.receiveShadow=true;patio.add(faixaPatio);
+ const placaProc=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('PROCESSAMENTO','#8fe063')),transparent:true,depthTest:false}));placaProc.scale.set(2.35,.58,1);placaProc.position.set(0,3.05,-2.7);patio.add(placaProc);
+ const placaMesas=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('6 MESAS','#e8d264')),transparent:true,depthTest:false}));placaMesas.scale.set(1.55,.38,1);placaMesas.position.set(0,2.55,-2.7);patio.add(placaMesas);
+ // Caixas, sacos e pedras dão escala à área sem usar texturas pesadas.
+ [[-37,186],[-34,186],[-37,189],[34,248],[37,248],[34,251]].forEach(([x,z],i)=>{caixa(.72,.5,.62,x,.25,z,i%2?madeira:palha);if(i%2===0)caixa(.48,.06,.05,x,.54,z+.32,madeiraClara)});
+ [[-41,203],[-40,203.8],[-40.5,202.5],[40,238],[41,239]].forEach(([x,z])=>{const p=new THREE.Mesh(new THREE.DodecahedronGeometry(.32,0),pedras);p.position.set(x,.25,z);p.scale.y=.65;p.castShadow=true;fazDetalhe.add(p)});
+ // Portal de entrada com rótulo procedural, sem alterar a porta authoritative.
+ const portal=new THREE.Group();portal.position.set(0,0,FAZ.z0+.5);fazDetalhe.add(portal);
+ caixa(.22,3.1,.22,-5.8,1.55,0,madeira,portal);caixa(.22,3.1,.22,5.8,1.55,0,madeira,portal);caixa(12,.22,.22,0,3.05,0,madeira,portal);
+ const placaFarm=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('FAZENDA','#8fe063')),transparent:true,depthTest:false}));placaFarm.scale.set(3.4,.86,1);placaFarm.position.set(0,3.65,-.12);portal.add(placaFarm);
+ scene.add(fazDetalhe);
+})();
 
 /* ═════════ CASA NOVA — sítio simples e genérico pra outro jogador ═════════
    Não tenta copiar as fotos do seu quintal real. É uma casa qualquer, numa

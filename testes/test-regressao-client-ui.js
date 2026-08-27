@@ -108,6 +108,16 @@ assert.match(html, /addColLocal\(ex-ew\/2,ex-vaoEstufa\/2,ez\+ed\/2-\.1,ez\+ed\/
   'o colisor esquerdo da frente deve terminar antes da porta');
 assert.match(html, /addColLocal\(ex\+vaoEstufa\/2,ex\+ew\/2,ez\+ed\/2-\.1,ez\+ed\/2\+\.1\)/,
   'o colisor direito da frente deve começar depois da porta');
+assert.match(html, /fazendaVisualDetalhada/,
+  'a fazenda deve possuir uma camada visual procedural identificável');
+assert.match(html, /detalheCanteiro/,
+  'os canteiros da fazenda devem receber detalhes visuais próprios');
+assert.match(html, /patioProcessamentoVisual/,
+  'a fazenda deve reservar visualmente um pátio de processamento');
+assert.match(html, /placaLote\('6 MESAS'/,
+  'o pátio deve mostrar visualmente as seis mesas de produção');
+assert.match(html, /Não adicionamos colliders nesta camada/,
+  'o passe visual não deve criar colisões que quebrem a navegação');
 
 const geneticAssetSlugs=[
  'northern-lights','white-widow','skunk-1','hindu-kush','amnesia-haze','sour-diesel','blue-dream','og-kush',
