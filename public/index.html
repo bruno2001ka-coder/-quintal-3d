@@ -3182,19 +3182,27 @@ function trocarArma(){
 
 /* ═════════ INPUT ═════════ */
 const keys={};let jumpPressed=false;
-addEventListener('keydown',e=>{keys[e.code]=true;
- if(e.code==='Space'){jumpPressed=true;mpJumpQueued=true}
- if(e.code==='KeyE')doAction();
- if(e.code==='KeyR')recarregar();
- if(e.code==='KeyI')openInventory();
- if(e.code==='Escape')closeAll();
- if(e.code==='KeyQ')trocarArma();
- if(e.code==='F9'){e.preventDefault();alternarAdmin();return}
-  if(G.admin&&e.code==='F10'&&!mpConnected){e.preventDefault();G.cash+=5000;ganharXP(500);
+// Alguns WebViews móveis e teclados Bluetooth entregam `key` corretamente,
+// mas deixam `code` vazio ou diferente. Normalizamos ambos para não congelar
+// o jogador quando o evento chega por uma camada de compatibilidade.
+function normalizarTecla(e){
+ const k=e.code||e.key||'';
+ return ({w:'KeyW',W:'KeyW',s:'KeyS',S:'KeyS',a:'KeyA',A:'KeyA',d:'KeyD',D:'KeyD',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',Shift:'ShiftLeft',' ':'Space',Spacebar:'Space'}[k]||k);
+}
+addEventListener('keydown',e=>{const tecla=normalizarTecla(e);keys[tecla]=true;
+ if(tecla==='Space'){jumpPressed=true;mpJumpQueued=true}
+ if(tecla==='KeyE')doAction();
+ if(tecla==='KeyR')recarregar();
+ if(tecla==='KeyI')openInventory();
+ if(tecla==='Escape')closeAll();
+ if(tecla==='KeyQ')trocarArma();
+ if(tecla==='F9'){e.preventDefault();alternarAdmin();return}
+  if(G.admin&&tecla==='F10'&&!mpConnected){e.preventDefault();G.cash+=5000;ganharXP(500);
   toast('admin: +R$ 5000 e +500 xp');updHUD();return}
- if(e.code.startsWith('Digit')){const n=+e.code.slice(5);if(n>=1&&n<=9&&G.bank[n-1]){G.sel=n-1;renderSeeds()}}
- if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault()});
-addEventListener('keyup',e=>{keys[e.code]=false});
+ if(tecla.startsWith('Digit')){const n=+tecla.slice(5);if(n>=1&&n<=9&&G.bank[n-1]){G.sel=n-1;renderSeeds()}}
+ if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(tecla))e.preventDefault()});
+addEventListener('keyup',e=>{keys[normalizarTecla(e)]=false});
+addEventListener('blur',()=>{Object.keys(keys).forEach(k=>{keys[k]=false});jumpPressed=false});
 let camYaw=0,camPitch=.22,camDist=6.2,dragging=false,lx=0,ly=0;
 // Mouse-look de verdade: a câmera acompanha o mouse o tempo todo (pointer lock),
 // sem precisar segurar botão nenhum pra olhar em volta — isso é o que causava
@@ -3849,6 +3857,8 @@ function start(){
  // redefinir cash, sementes, imóveis, plantas ou progressão com defaults locais.
  // No sandbox, os defaults de teste foram definidos explicitamente na entrada.
  Object.assign(G,{running:true,day:1,clock:6*60,rain:0,rainTimer:rnd(40,90),cliTimer:8,heat:0,crimeT:0});
+  // Nenhum painel invisível ou tecla presa pode bloquear a primeira entrada.
+  closeAll();Object.keys(keys).forEach(k=>{keys[k]=false});jumpPressed=false;TC.id=null;
   document.body.classList.add('gameStarted');
  G.clientes.forEach(c=>scene.remove(c.g));G.clientes=[];
  if(!offlineAtivo()){

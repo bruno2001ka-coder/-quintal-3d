@@ -3,6 +3,15 @@ const assert = require('assert');
 
 const html = fs.readFileSync('public/index.html', 'utf8');
 
+assert.match(html, /function normalizarTecla\(e\)/,
+  'o cliente deve aceitar eventos de teclado por code ou key');
+assert.match(html, /addEventListener\('keyup',e=>\{keys\[normalizarTecla\(e\)\]=false\}\)/,
+  'o keyup deve liberar a mesma tecla normalizada do keydown');
+assert.match(html, /closeAll\(\);Object\.keys\(keys\)\.forEach\(k=>\{keys\[k\]=false\}\)/,
+  'a entrada no mundo deve remover modal invisível e tecla presa');
+assert.match(html, /const aguardandoPrimeiroLote=!offlineAtivo\(\)&&\(!mpConnected\|\|!mpReady\|\|!estadoDoServidor\)/,
+  'somente o online sem estado authoritative deve aguardar antes de mover');
+
 assert.match(html, /id="offlineBtn"[^>]*>TESTAR OFFLINE<\//,
   'o overlay deve oferecer o botão explícito do sandbox offline');
 assert.match(html, /let modoOfflineDev=false;/,
