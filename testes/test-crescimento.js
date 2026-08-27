@@ -44,6 +44,8 @@ assert.match(client, /function escalaPlantaCultivada\(prog,mesh\)\{return mesh&&
   'a escala deve crescer continuamente também nas artes WebP e manter o fallback procedural compacto');
 assert.match(client, /const PLANT_STAGE_ART_BY_NAME=Object\.freeze\(/,
   'o cliente deve declarar pacotes de artes dos cinco estágios por genética');
+assert.match(client, /let sid=1;/,
+  'os IDs das genéticas no cliente devem começar em 1 e coincidir com o servidor');
 assert.equal(client.includes("'/assets/"), false,
   'as artes devem usar caminho relativo para funcionar no GitHub Pages e no Render');
 assert.equal(client.includes('plantas-estagios-real/blueberry-auto/stage-1-broto.webp'), true,
