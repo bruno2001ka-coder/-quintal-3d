@@ -1173,6 +1173,7 @@ function enviarEstado(j) {
     }).filter(Boolean),
     imoveis: c.imoveis || [], nivel: c.nivel || 1, xp: c.xp || 0,
     territorios:     c.territorios || {}, hp: j.hp, armor: j.armor, wanted: j.procurado || 0, avatarId: j.avatarId,
+    arma: Number.isInteger(j.arma) ? j.arma : 0,
     farm: farmStateFor(j)
 
   });

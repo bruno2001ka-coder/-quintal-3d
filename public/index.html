@@ -243,6 +243,8 @@ body.touch .geneticArt{width:58px;height:58px} body.touch .seedArt{width:38px;he
  background:rgba(255,255,255,.14);border:3px solid rgba(255,255,255,.45)}
 #rel {right:calc(var(--pad) + var(--btn) * 2.35); bottom:calc(var(--pad) + var(--btn) * .35); width:var(--btn2); height:var(--btn2);
  background:rgba(232,210,100,.22);border:3px solid rgba(232,210,100,.7);color:#f4e9b6}
+#wep {right:calc(var(--pad) + var(--btn) * 2.35); bottom:calc(var(--pad) + var(--btn) * 1.65); width:var(--btn2); height:var(--btn2);
+ background:rgba(90,168,224,.22);border:3px solid rgba(90,168,224,.78);color:#d9efff}
 #rel.vazio{animation:pisca .7s infinite}
 @keyframes pisca{0%,100%{background:rgba(232,210,100,.22)}50%{background:rgba(232,120,60,.55)}}
 body.touch #touch{display:block}
@@ -330,7 +332,7 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
   <button class="close" data-close>FECHAR</button></div>
 <div id="touch"><div id="stick"><div id="knob"></div></div>
   <div class="tb" id="act">AÇÃO</div><div class="tb" id="fire">TIRO</div>
-  <div class="tb" id="aimb">MIRA</div><div class="tb" id="jmp">PULO</div><div class="tb" id="rel">RECAR</div></div>
+  <div class="tb" id="aimb">MIRA</div><div class="tb" id="jmp">PULO</div><div class="tb" id="rel">RECAR</div><div class="tb" id="wep" aria-label="Equipar ou trocar arma">ARMA</div></div>
 <div id="overlay">
   <div id="marca">
     <div id="selo"></div>
@@ -2422,6 +2424,7 @@ function aplicarEstado(d){
  });
   G.rackMax=d.rackMax||6;
   if(d.municao)G.municao=JSON.parse(JSON.stringify(d.municao));
+  if(d.arma!==undefined){const armaNum=Math.max(0,Math.min(ARMAS.length-1,Number(d.arma)||0));G.arma=G.municao[ARMAS[armaNum].k]||armaNum===0?armaNum:0}
   if(d.fert)G.fert=Object.assign({organico:0,crescimento:0,floracao:0},d.fert);
   if(d.armor!==undefined)G.armor=Math.max(0,Math.min(100,Number(d.armor)||0));
   if(d.wanted!==undefined)G.wanted=Math.max(0,Math.min(5,Number(d.wanted)||0));
@@ -2636,7 +2639,9 @@ function renderBanca(){
    btn.onclick=()=>{if(!pedirAoServidor({t:'comprar',oq:'arma',k:a.k}))return;
     toast(tem?'munição solicitada':a.nome+' solicitada');
     blip(300,.13,'square',.06);renderBanca();updHUD()};
-   r.appendChild(btn);b.appendChild(r)});
+    r.appendChild(btn);
+    const equip=document.createElement('button');equip.textContent=G.arma===idx?'EQUIPADA':'EQUIPAR';equip.disabled=!tem||G.arma===idx;
+    equip.onclick=()=>{if(equiparArma(idx))renderBanca()};r.appendChild(equip);b.appendChild(r)});
   const r2=document.createElement('div');r2.className='row';
   r2.innerHTML='<div class="sw" style="background:#5aa8e0"></div><div class="info">Colete<small>+100 de proteção</small></div>';
   const b2=document.createElement('button');b2.textContent='R$ 520';b2.disabled=G.cash<520||G.armor>=100;
@@ -2734,7 +2739,8 @@ function updHUD(){
  $('wx').textContent=G.rain>0?'chuva':(h>=18||h<6?'noite':'sol');
  $('hpbar').firstElementChild.style.width=G.hp+'%';
  $('armbar').firstElementChild.style.width=G.armor+'%';
- const a=ARMAS[G.arma];$('gunName').textContent=a.nome;
+  const a=ARMAS[G.arma];$('gunName').textContent=a.k==='punho'?'Mãos':`[${a.nome}]`;
+  const _wep=$('wep');if(_wep){_wep.textContent=a.k==='punho'?'EQUIPAR':'TROCAR';_wep.setAttribute('aria-label',a.k==='punho'?'Equipar arma':'Trocar arma')}
  const _r=$('rel'),_m=G.municao[a.k];
  if(_r)_r.classList.toggle('vazio',!!(_m&&_m.pente<=Math.max(1,a.mag*.25)&&_m.reserva>0));
  const mu=G.municao[a.k];
@@ -3086,6 +3092,26 @@ function recarregar(){
  const falta=a.mag-mu.pente;if(falta<=0)return;
  const n=Math.min(falta,mu.reserva);mu.pente+=n;mu.reserva-=n;
  blip(380,.1,'square',.05);toast('recarregado');updHUD()}
+function enviarArmaEquipada(){
+ try{mpWs.send(JSON.stringify({t:'input',seq:++mpInputSeq,x:player.position.x,y:player.position.y,z:player.position.z,ry:player.rotation.y,arma:G.arma,salto:false}))}catch(e){toast('conexão perdida com o servidor')}
+}
+function equiparArma(indice){
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return false}
+ const i=Math.max(0,Math.min(ARMAS.length-1,Number(indice)||0)),a=ARMAS[i];
+ if(i!==0&&!G.municao[a.k]){toast('você ainda não possui essa arma');return false}
+ if(G.arma===i){toast(`${a.nome} já está equipada`);return true}
+ G.arma=i;updHUD();enviarArmaEquipada();toast(`equipada: ${a.nome}`);blip(420,.1,'triangle',.05);return true
+}
+function trocarArma(){
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ const anterior=G.arma;let proxima=anterior;
+ for(let passo=1;passo<=ARMAS.length;passo++){
+  const i=(anterior+passo)%ARMAS.length,a=ARMAS[i];
+  if(i===0||G.municao[a.k]){proxima=i;break}
+ }
+ if(proxima===anterior){toast('nenhuma outra arma disponível');return}
+ equiparArma(proxima)
+}
 
 /* ═════════ INPUT ═════════ */
 const keys={};let jumpPressed=false;
@@ -3095,8 +3121,7 @@ addEventListener('keydown',e=>{keys[e.code]=true;
  if(e.code==='KeyR')recarregar();
  if(e.code==='KeyI')openInventory();
  if(e.code==='Escape')closeAll();
- if(e.code==='KeyQ'){G.arma=(G.arma+1)%ARMAS.length;
-  while(G.arma>0&&!G.municao[ARMAS[G.arma].k])G.arma=(G.arma+1)%ARMAS.length;updHUD()}
+ if(e.code==='KeyQ')trocarArma();
  if(e.code==='F9'){e.preventDefault();alternarAdmin();return}
   if(G.admin&&e.code==='F10'&&!mpConnected){e.preventDefault();G.cash+=5000;ganharXP(500);
   toast('admin: +R$ 5000 e +500 xp');updHUD();return}
@@ -3162,6 +3187,7 @@ function bindHold(el,onDown,onUp){
 bindHold($('act'),()=>doAction());
 bindHold($('jmp'),()=>{jumpPressed=true;mpJumpQueued=true});
 bindHold($('rel'),()=>{recarregar()});
+bindHold($('wep'),()=>{trocarArma()});
 bindHold($('fire'),()=>{fireHeld=true},()=>{fireHeld=false});
 bindHold($('aimb'),()=>{aiming=!aiming;document.body.classList.toggle('aim',aiming)});
 

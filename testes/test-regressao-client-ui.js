@@ -68,6 +68,16 @@ assert.match(html, /perfBox\.style\.display=\(!isTouch&&!outroModal\)\|\|\(isTou
   'FPS e configurações devem ficar ocultos no celular até abrir o menu');
 assert.match(html, /cashQuickValue/,
   'o celular deve manter apenas o saldo resumido fora do menu');
+assert.match(html, /id="wep"[^>]*aria-label="Equipar ou trocar arma"/,
+  'o celular deve ter um controle explícito para equipar ou trocar arma');
+assert.match(html, /function equiparArma\(indice\)/,
+  'equipar arma deve passar por uma função única e validada');
+assert.match(html, /bindHold\(\$\('wep'\),\(\)=>\{trocarArma\(\)\}\)/,
+  'o botão touch de arma deve acionar a troca sem depender de teclado');
+assert.match(html, /if\(e\.code==='KeyQ'\)trocarArma\(\)/,
+  'o atalho de teclado deve compartilhar a mesma troca do celular');
+assert.match(html, /d\.arma!==undefined/,
+  'o cliente deve aceitar a arma equipada enviada pelo servidor');
 assert.match(html, /const temProducao=G\.lotes\.some\(/,
   'o painel de produção deve aparecer somente quando houver produção');
 assert.match(html, /id="authUser"[^>]*autocomplete="username"/,
