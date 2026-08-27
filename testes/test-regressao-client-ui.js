@@ -218,7 +218,7 @@ assert.match(html,/function buildPlantArt\(s\)/,
 assert.match(html,/return PLANT_STAGE_ART_BY_NAME\[String\(s&&s\.nome\)\]\?buildPlantArt\(s\):buildPlantProcedural\(s\)/,
  'a seleção de arte deve depender da genética, sem usar a imagem de outra variedade');
 const stagePackages={
- 'blueberry-auto':'png','amnesia-haze-auto':'png','northern-lights':'png',
+ 'blueberry-auto':'webp','amnesia-haze-auto':'webp','northern-lights':'webp',
  'white-widow':'webp'
 };
 for(const [slug,ext] of Object.entries(stagePackages)){
@@ -226,10 +226,12 @@ for(const [slug,ext] of Object.entries(stagePackages)){
   const dir=slug==='white-widow'?'plantas-estagios':'plantas-estagios-real';
   const asset=path.join(__dirname,'..','public','assets',dir,slug,`${stage}.${ext}`);
   assert.ok(fs.existsSync(asset),`arte de estágio ausente: ${slug}/${stage}.${ext}`);
-  if(ext==='png'){
-   const png=fs.readFileSync(asset);
-   assert.equal(png.toString('ascii',1,4),'PNG',`arquivo não é PNG: ${asset}`);
-   assert.equal(png[25],6,`PNG sem canal alpha RGBA: ${asset}`);
+  if(ext==='webp'){
+   const webp=fs.readFileSync(asset);
+   assert.equal(webp.toString('ascii',0,4),'RIFF',`arquivo não é WebP/RIFF: ${asset}`);
+   assert.equal(webp.toString('ascii',8,12),'WEBP',`arquivo não é WebP: ${asset}`);
+   assert.equal(webp.toString('ascii',12,16),'VP8X',`WebP sem suporte ao alpha: ${asset}`);
+   assert.ok((webp[20]&0x10)!==0,`WebP sem canal alpha: ${asset}`);
   }
   assert.match(html,new RegExp(`${dir}/${slug}/${stage}\\.${ext}`),`arte de estágio não referenciada: ${slug}/${stage}.${ext}`);
  }
