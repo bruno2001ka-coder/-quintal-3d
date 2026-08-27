@@ -624,6 +624,10 @@ const C={x0:3.4,x1:9,z0:0,z1:10.5};        // corredor
 const CITY={x0:-62,x1:76,z0:11,z1:150};
 const FAZ={x0:-46,x1:46,z0:172,z1:268};   // fazenda, liberada depois
 const FARM_GATE_W=10;
+// Faixa de recuperação do caminho público. A estrada visual tem 11 m,
+// mas o ombro navegável é mais largo para quem chega desalinhado não ficar
+// preso ao cruzar a transição cidade -> fazenda fora do vão central.
+const FARM_APPROACH_W=16;
 const INT={x0:-160,x1:160,z0:-340,z1:-300}; // faixa dos interiores das casas
 // espalhados pela cidade de propósito: juntos demais, o streaming não
 // adianta nada (testei — as 10 montavam ao mesmo tempo). Assim o pior
@@ -1455,9 +1459,13 @@ const farmTableVisuals=[];
   col(barnX+1.6,barnX+barnW/2,barnZ+barnD/2-.2,barnZ+barnD/2+.2)
  );
  // perímetro da fazenda: somente a abertura central é o portão.
- col(FAZ.x0-.3,FAZ.x0+.3,FAZ.z0,FAZ.z1);col(FAZ.x1-.3,FAZ.x1+.3,FAZ.z0,FAZ.z1);
- col(FAZ.x0,FAZ.x1,FAZ.z1-.3,FAZ.z1+.3);
- farmGateCol=col(-FARM_GATE_W/2,FARM_GATE_W/2,FAZ.z0-.3,FAZ.z0+.3);
+  col(FAZ.x0-.3,FAZ.x0+.3,FAZ.z0,FAZ.z1);col(FAZ.x1-.3,FAZ.x1+.3,FAZ.z0,FAZ.z1);
+  col(FAZ.x0,FAZ.x1,FAZ.z1-.3,FAZ.z1+.3);
+  // Os dois trechos laterais são permanentes; só o vão central abre para
+  // uma conta com fazenda. Assim cliente e servidor usam a mesma fronteira.
+  col(FAZ.x0, -FARM_GATE_W/2, FAZ.z0-.3, FAZ.z0+.3);
+  col(FARM_GATE_W/2, FAZ.x1, FAZ.z0-.3, FAZ.z0+.3);
+  farmGateCol=col(-FARM_GATE_W/2,FARM_GATE_W/2,FAZ.z0-.3,FAZ.z0+.3);
  // silo
  const silo=new THREE.Mesh(new THREE.CylinderGeometry(2.4,2.4,8,16),
   new THREE.MeshStandardMaterial({color:0xb0b4b8,roughness:.5,metalness:.55}));
@@ -3465,7 +3473,7 @@ const ZONAS=[
  {x0:C.x0+.5,x1:C.x1-.5,z0:Q.z1-.4,z1:C.z1+.4},        // corredor
  {x0:GATEX-1.1,x1:GATEX+1.1,z0:C.z1-.4,z1:C.z1+2.0},   // vão do portão
  {x0:CITY.x0+1,x1:CITY.x1-1,z0:C.z1+1.2,z1:CITY.z1-1}, // cidade
- {x0:-6,x1:6,z0:CITY.z1-1,z1:FAZ.z0+1},                // estrada da fazenda
+ {x0:-FARM_APPROACH_W,x1:FARM_APPROACH_W,z0:CITY.z1-1,z1:FAZ.z0+1}, // estrada + ombro de recuperação
  {x0:FAZ.x0,x1:FAZ.x1,z0:FAZ.z0,z1:FAZ.z1},            // fazenda
  // interiores: cada casa tem uma sala própria numa faixa afastada do
  // mundo. É como GTA/MTA faz — você não entra numa casa 'de verdade',

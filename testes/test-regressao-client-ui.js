@@ -140,6 +140,10 @@ assert.match(html, /t:'farm_job',stationId:table\.stationId,operation:op,stockId
   'a UI deve solicitar jobs com estação, operação e lote authoritative');
 assert.match(html, /const FARM_GATE_W=10/,
   'a abertura visual da porteira externa deve ter largura explícita');
+assert.match(html, /const FARM_APPROACH_W=16/,
+  'a estrada da fazenda deve ter uma faixa de recuperação navegável');
+assert.match(html, /x0:-FARM_APPROACH_W,x1:FARM_APPROACH_W,z0:CITY\.z1-1,z1:FAZ\.z0\+1/,
+  'o corredor de retorno deve permanecer conectado à porteira');
 const farmGateDecl=html.indexOf('const FARM_GATE_W=10;');
 const farmGateUse=html.indexOf('FARM_GATE_W/2');
 assert.ok(farmGateDecl>=0&&farmGateUse>farmGateDecl,
@@ -148,6 +152,10 @@ assert.match(html, /slot\.gateCol=col\(x-1\.6,x\+1\.6/,
   'cada setor deve ter uma porteira física com colisor próprio');
 assert.match(html, /FARM_GATE_W\/2,FAZ\.z0-\.3/,
   'o colisor da porteira externa deve acompanhar sua abertura visual');
+assert.match(html, /col\(FAZ\.x0, -FARM_GATE_W\/2, FAZ\.z0-\.3/,
+  'o lado esquerdo da porteira externa deve continuar bloqueando fora do vão');
+assert.match(html, /col\(FARM_GATE_W\/2, FAZ\.x1, FAZ\.z0-\.3/,
+  'o lado direito da porteira externa deve continuar bloqueando fora do vão');
 assert.match(html, /setModoMultiplayerVisual\(true\)/,
   'o modo online deve desativar o visual legado que poderia duplicar canteiros');
 

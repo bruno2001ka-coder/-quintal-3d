@@ -53,7 +53,7 @@ function seedDb() {
     db.prepare(`INSERT INTO usuarios
       (chave,nome,cash,bank,estoque,up,armas,fert,rack_max,armor,municao,funcs,imoveis,nivel,xp,territorios,atualizado)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(chave, nome, 50000, JSON.stringify([{ s: SEED, qtd: 2 }]), JSON.stringify(estoque), (i === 0 || i === 6) ? JSON.stringify({ _posicao:{ x:0, y:0, z:170, ry:0 } }) : '{}',
+      .run(chave, nome, 50000, JSON.stringify([{ s: SEED, qtd: 2 }]), JSON.stringify(estoque),         JSON.stringify({ _posicao:{ x:0, y:0, z:170, ry:0 } }),
         JSON.stringify({ pistola: true }), '{}', 12, 0, JSON.stringify({}), '[]', JSON.stringify(['fazenda']), 10, 0, '{}', agora);
   }
   db.close();
@@ -94,11 +94,16 @@ async function ready(client, key, index) {
   return { lote, estado };
 }
 async function moveTo(client, from, to) {
-  let cur = { x: from.x, z: from.z }, seq = 1;
+  let cur = { x: from.x, z: from.z }, seq = 1, guard = 0;
   while (Math.hypot(to.x - cur.x, to.z - cur.z) > .35) {
+    if (++guard > 900) throw new Error(`rota authoritative travou em ${JSON.stringify(cur)} para ${JSON.stringify(to)}`);
     const d = Math.hypot(to.x - cur.x, to.z - cur.z), step = Math.min(2.1, d);
     cur = { x: cur.x + (to.x - cur.x) / d * step, z: cur.z + (to.z - cur.z) / d * step };
-    client.send({ t: 'input', seq: seq++, x: cur.x, y: 0, z: cur.z, ry: 0, arma: 0 }); await sleep(170);
+    const sentSeq = seq++;
+    const before = client.messages.length;
+    client.send({ t: 'input', seq: sentSeq, x: cur.x, y: 0, z: cur.z, ry: 0, arma: 0 }); await sleep(170);
+    const correction = client.messages.slice(before).find(m => m.t === 'correcao' && m.seq === sentSeq);
+    if (correction) cur = { x: correction.x, z: correction.z };
   }
   return cur;
 }
@@ -112,14 +117,18 @@ async function waitFarmState(client, predicate, label) { return client.waitFor(m
     server = startServer(); await waitHealth();
     for (let i = 0; i < 6; i++) { const c = await connect(); clients.push(c); const r = await ready(c, `farm_key_${process.pid}_${i}`, i); assert.ok(r.estado.farm.unlocked, `estado farm recebido: ${JSON.stringify({farm:r.estado.farm,nivel:r.estado.nivel,imoveis:r.estado.imoveis})}`); assert.equal(r.estado.farm.slot.plots.length, 12, `jogador ${i + 1} deve receber 12 canteiros`); assert.equal(r.lote.farm.plots.length, 12); }
     const slots = clients.map(c => c.messages.find(m => m.t === 'estado' && m.farm && m.farm.slot)?.farm.slot.slotIndex);
+    const initialPositions = clients.slice(0, 6).map(c => {
+      const p = c.messages.find(m => m.t === 'lote_atribuido')?.posicao;
+      return { x: p.x, z: p.z };
+    });
     assert.deepEqual([...new Set(slots)].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5], 'seis contas devem ocupar setores distintos');
 
     // A sétima conta continua podendo autenticar na cidade, mas não recebe setor nem pode passar pelo portão.
     const outsider = await connect(); clients.push(outsider); const out = await ready(outsider, keys.outsiderKey, 6);
     assert.equal(out.estado.farm.unlocked, false, 'a sétima conta não deve receber setor da fazenda');
     const rejectsBefore = outsider.messages.filter(m => m.t === 'recusado').length;
-    await moveTo(outsider, out.lote.posicao, { x: 0, z: 174 });
-    outsider.send({ t: 'input', seq: 99, x: 0, y: 0, z: 180, ry: 0, arma: 0 });
+    await moveTo(outsider, out.lote.posicao, { x: 0, z: 170 });
+    outsider.send({ t: 'input', seq: 99, x: 0, y: 0, z: 174, ry: 0, arma: 0 });
     await outsider.waitFor(m => m.t === 'recusado' && /fazenda bloqueada|setor pertence/i.test(m.motivo), 7000, 'bloqueio do portão para sétimo jogador');
     assert.ok(outsider.messages.filter(m => m.t === 'recusado').length > rejectsBefore);
 
@@ -157,13 +166,46 @@ async function waitFarmState(client, predicate, label) { return client.waitFor(m
     pos = await moveTo(main, pos, { x: -15, z: 174 });
     pos = await moveTo(main, pos, { x: -30, z: 174 });
     pos = await moveTo(main, pos, { x: -30, z: 181 });
-    await moveTo(main, pos, { x: ownPlot.x, z: ownPlot.z });
+    pos = await moveTo(main, pos, { x: ownPlot.x, z: ownPlot.z });
     main.send({ t: 'farm_plantar', plotId: ownPlot.id, seedId: SEED.id });
     await main.waitFor(m => m.t === 'farm_plot_update' && m.slotIndex === 0 && m.localIndex === 0 && m.plot && m.plot.plant, 7000, 'plantio no canteiro próprio');
     const foreignPlot = clients[1].messages.find(m => m.t === 'estado' && m.farm)?.farm.slots.find(s => s.slotIndex === 1);
     assert.ok(foreignPlot);
     main.send({ t: 'farm_plantar', plotId: foreignPlot.plots?.[0]?.id || 'farm_1_0', seedId: SEED.id });
     await main.waitFor(m => m.t === 'recusado' && /não pertence|bloqueada/i.test(m.motivo), 7000, 'bloqueio de canteiro alheio');
+
+    // Saída completa: canteiro próprio -> porta do setor -> portão externo -> estrada.
+    pos = await moveTo(main, pos, { x: -30, z: 178 });
+    pos = await moveTo(main, pos, { x: 0, z: 178 });
+    pos = await moveTo(main, pos, { x: 0, z: 170 });
+    assert.ok(pos.z < 172, `o jogador deve conseguir sair pela porteira externa; posição=${JSON.stringify(pos)}`);
+    // Retorno completo pela estrada e pelo vão central da porteira.
+    pos = await moveTo(main, pos, { x: 0, z: 174 });
+    assert.ok(pos.z > 172 && pos.x > -5 && pos.x < 5, `o jogador deve retornar pela abertura central; posição=${JSON.stringify(pos)}`);
+
+    // Todos os seis setores devem ser acessíveis e também ter uma saída sem becos sem saída.
+    for (let i = 0; i < 6; i++) {
+      const c = clients[i];
+      const farm = c.messages.filter(m => m.t === 'estado' && m.farm && m.farm.slot).at(-1).farm.slot;
+      const top = farm.z < 210;
+      const gapX = farm.x < 0 ? -15 : 15;
+      let p = i === 0 ? pos : initialPositions[i];
+      p = await moveTo(c, p, { x: 0, z: 174 });
+      if (top) {
+        p = await moveTo(c, p, { x: farm.x, z: 174 });
+        p = await moveTo(c, p, { x: farm.x, z: farm.z - 13 });
+      } else {
+        p = await moveTo(c, p, { x: gapX, z: 174 });
+        p = await moveTo(c, p, { x: gapX, z: 212 });
+        p = await moveTo(c, p, { x: farm.x, z: 212 });
+        p = await moveTo(c, p, { x: farm.x, z: farm.z - 13 });
+      }
+      p = await moveTo(c, p, { x: farm.x, z: farm.z - 15 });
+      if (!top) p = await moveTo(c, p, { x: gapX, z: farm.z - 15 });
+      p = await moveTo(c, p, { x: gapX, z: 174 });
+      p = await moveTo(c, p, { x: 0, z: 170 });
+      assert.ok(p.z < 172, `setor ${farm.slotIndex} deve permitir saída pela porteira; posição=${JSON.stringify(p)}`);
+    }
 
     console.log('FARM_MULTIPLAYER_OK', JSON.stringify({ setores: 6, canteirosPorJogador: 12, totalCanteiros: 72, mesas: 6, galpaoInterno: true, portaoBloqueiaSetimo: true, processamento: ['secagem', 'cura', 'embalagem'], posseAuthoritative: true }));
   } catch (error) {

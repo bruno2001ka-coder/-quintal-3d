@@ -35,3 +35,11 @@ Com a tentativa WebSocket desativada corretamente apenas na cópia de prévia, a
 A fixture local foi iniciada com SQLite descartável, `DATABASE_URL` vazio e conta de teste no nível 10 com o imóvel `fazenda`. A regressão WebSocket confirmou seis setores, 12 canteiros por jogador, bloqueio do sétimo jogador, entrada no galpão, seis mesas e as três etapas de processamento.
 
 A inspeção do HTML no navegador confirmou que a cena carrega sem tela branca. O navegador isolado desta sessão não alcançou o WebSocket em `127.0.0.1`; o endereço proxied aceitou handshake WebSocket por um cliente Node, mas o navegador proxied permaneceu offline, indicando limitação do ambiente de pré-visualização e não uma falha reproduzida no fluxo da fixture. Por isso, a inspeção visual end-to-end do interior do galpão não é declarada como concluída nesta sessão. A verificação visual automatizada ficou limitada à presença dos elementos no HTML e aos testes authoritative do servidor.
+
+## Regressão de saída e retorno — 2026-08-27
+
+A reprodução no cliente proxied com uma conta descartável nível 10 confirmou que o servidor permaneceu online e sem correções de posição durante a caminhada. O jogador que se aproxima pelo eixo central pode encostar no poste esquerdo ou direito se tentar avançar fora do vão de 10 m; a posição `x≈-5.32,z≈173.5` foi observada junto à borda do poste. O movimento inverso funcionou, portanto não havia teleporte nem perda de conexão.
+
+A regressão authoritative foi ampliada para acompanhar correções e percorreu entrada, porta do setor, saída e retorno pelos seis setores. Para evitar falso positivo, a rota atravessa primeiro o vão central e só depois se desloca lateralmente. O fluxo completo passou.
+
+No cliente, a faixa válida da estrada entre cidade e fazenda foi ampliada para 16 m como área de recuperação, e os dois trechos laterais da porteira externa passaram a ter colisores permanentes alinhados com o servidor. O vão central continua sendo a única passagem autorizada para dentro e fora da fazenda. A alteração não libera atravessamento de cerca: apenas evita que uma chegada desalinhada fique presa na borda do caminho.
