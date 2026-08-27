@@ -640,6 +640,10 @@ const LOTE_W=20, LOTE_D=16;
 const LOTE_SPOTS=[
  [-34,31],[2,31],[38,31],[-34,63],[2,63],
  [38,63],[-34,95],[2,95],[38,95],[-34,127]];
+// A Casa Nova é um ponto fixo de demonstração e precisa ficar livre de
+// prédios procedurais. Esta constante vem antes da geração da cidade para
+// evitar referência temporal à declaração `CN`, que só é criada mais abaixo.
+const CASA_NOVA_AREA={x:69,z:60,w:9,d:8};
 
 /* ═════════ PISOS ═════════ */
 (function(){const g=new THREE.Mesh(new THREE.PlaneGeometry(155,180),mat(cTerra(),24,28,{bumpScale:.06}));
@@ -1198,7 +1202,9 @@ const RUAS_Z=[15,47,79,111,143],RUAS_X=[-50,-18,22,54];
  // 9 das 10 casas nasceram dentro de prédio. Agora é calculado a partir
  // das posições reais dos lotes, então nunca mais sai do lugar.
  const ehReservado=(bx,bz)=>LOTE_SPOTS.some(([lx,lz])=>
-   lx-5<bx[1] && lx+5>bx[0] && lz-5<bz[1] && lz+5>bz[0]);
+   lx-5<bx[1] && lx+5>bx[0] && lz-5<bz[1] && lz+5>bz[0]) ||
+   (CASA_NOVA_AREA.x-5<bx[1] && CASA_NOVA_AREA.x+5>bx[0] &&
+    CASA_NOVA_AREA.z-5<bz[1] && CASA_NOVA_AREA.z+5>bz[0]);
  const g=new THREE.Group();
  blocosX.forEach(bx=>blocosZ.forEach(bz=>{
   if(ehReservado(bx,bz))return;   // quarteirão dos lotes: fica vazio
@@ -1723,10 +1729,16 @@ const casaNovaPlots=[];
  const W=9,D=8;
  // muro simples ao redor do lote
  g.add(slab(W,1.8,.22,0,.9,-D/2,blocoMat,W/2.2,1.2));
- g.add(slab(W,1.8,.22,0,.9,D/2,blocoMat,W/2.2,1.2));
+ // A frente tem um vão real de 2m entre os postes da porteira; antes
+ // apenas os postes existiam visualmente, mas a parede e o collider eram
+ // contínuos, prendendo o jogador no ponto de spawn.
+ const vao=2;
+ g.add(slab((W-vao)/2,1.8,.22,-(W+vao)/4,.9,D/2,blocoMat,W/2.2,1.2));
+ g.add(slab((W-vao)/2,1.8,.22,(W+vao)/4,.9,D/2,blocoMat,W/2.2,1.2));
  g.add(slab(.22,1.8,D,-W/2,.9,0,blocoMat,D/2.2,1.2));
  col(CN.x-W/2,CN.x+W/2,CN.z-D/2-.15,CN.z-D/2+.15);
- col(CN.x-W/2,CN.x+W/2,CN.z+D/2-.15,CN.z+D/2+.15);
+ col(CN.x-W/2,CN.x-vao/2,CN.z+D/2-.15,CN.z+D/2+.15);
+ col(CN.x+vao/2,CN.x+W/2,CN.z+D/2-.15,CN.z+D/2+.15);
  col(CN.x-W/2-.15,CN.x-W/2+.15,CN.z-D/2,CN.z+D/2);
  // casinha simples: caixote com telha de duas águas, sem tentar ser fiel a nada real
  const casaM=new THREE.MeshStandardMaterial({color:0xcdbfa0,roughness:.85});

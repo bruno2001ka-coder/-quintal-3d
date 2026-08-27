@@ -74,8 +74,8 @@ assert.match(html, /function equiparArma\(indice\)/,
   'equipar arma deve passar por uma função única e validada');
 assert.match(html, /bindHold\(\$\('wep'\),\(\)=>\{trocarArma\(\)\}\)/,
   'o botão touch de arma deve acionar a troca sem depender de teclado');
-assert.match(html, /if\(e\.code==='KeyQ'\)trocarArma\(\)/,
-  'o atalho de teclado deve compartilhar a mesma troca do celular');
+assert.match(html, /if\(tecla==='KeyQ'\)trocarArma\(\)/,
+  'o atalho de teclado normalizado deve compartilhar a mesma troca do celular');
 assert.match(html, /d\.arma!==undefined/,
   'o cliente deve aceitar a arma equipada enviada pelo servidor');
 assert.match(html, /const temProducao=G\.lotes\.some\(/,

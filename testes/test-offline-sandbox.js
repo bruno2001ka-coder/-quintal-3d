@@ -28,6 +28,12 @@ assert.match(html, /const demos=\[\{plot:casaNovaPlots\[0\],prog:28\},\{plot:cas
   'a vitrine offline deve mostrar três fases diferentes na Casa Nova');
 assert.match(html, /player\.position\.set\(CN\.x,0,CN\.z\+5\.2\)/,
   'o sandbox não deve nascer novamente na casa antiga');
+assert.match(html, /const CASA_NOVA_AREA=\{x:69,z:60,w:9,d:8\}/,
+  'a Casa Nova deve ter uma área reservada antes da geração dos prédios');
+assert.match(html, /CASA_NOVA_AREA\.x-5<bx\[1\][\s\S]*CASA_NOVA_AREA\.z\+5>bz\[0\]/,
+  'o gerador de prédios não pode criar collider sobre a Casa Nova');
+assert.match(html, /const vao=2;[\s\S]*slab\(\(W-vao\)\/2[\s\S]*col\(CN\.x-W\/2,CN\.x-vao\/2/,
+  'a frente da Casa Nova deve ter vão visual e collider dividido');
 assert.match(html, /fazPlots\.forEach\(p=>\{p\.locked=false;p\.group\.visible=true\}\)/,
   'a fazenda deve ficar visível no sandbox para testar seus canteiros');
 assert.match(html, /modoOfflineDev=true;mpReconnecting=false/,
