@@ -26,11 +26,11 @@ assert.equal((client.match(/PLANTA_CRESCIMENTO_MULT\*luz\*aguaF/g) || []).length
   'o catch-up e o loop local devem usar o mesmo multiplicador');
 assert.doesNotMatch(client, /dt\*\.022\*\(\.6\+\(100-s\.t\.resistencia\)/,
   'o cliente não deve manter a drenagem que congelava a planta');
-assert.match(client, /const cal=new THREE\.Mesh\(new THREE\.IcosahedronGeometry\(\.042\*c\.s/,
+assert.match(client, /const cal=new THREE\.Mesh\(new THREE\.IcosahedronGeometry\(\.072\*c\.s/,
   'o cálice do bud deve permanecer compacto');
-assert.match(client, /const sl=new THREE\.Mesh\(leafletGeo\(\.075\*c\.s,\.015\*c\.s\)/,
+assert.match(client, /const sl=new THREE\.Mesh\(leafletGeo\(\.105\*c\.s,\.024\*c\.s\)/,
   'a sugar leaf deve permanecer compacta');
-assert.match(client, /ud\.buds\.scale\.setScalar\(\.24\+/,
+assert.match(client, /ud\.buds\.scale\.setScalar\(\.34\+/,
   'a escala dos buds deve ter limite compacto');
 assert.match(client, /const H=1\.38/,
   'a planta adulta deve permanecer compacta no lote');

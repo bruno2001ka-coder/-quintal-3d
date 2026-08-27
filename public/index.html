@@ -1720,7 +1720,7 @@ function makeFan(mat,scale,folhas=7,sombras=true){
  const fan=new THREE.Group(),N=folhas,mid=(N-1)/2;
  for(let f=0;f<N;f++){
   const t=1-Math.abs(f-mid)/(mid+.55);
-  const len=(.13+t*.34)*scale, wid=(.022+t*.052)*scale;
+  const len=(.16+t*.38)*scale, wid=(.032+t*.075)*scale;
   const lf=new THREE.Mesh(leafletGeo(len,wid),mat);
   lf.rotation.z=(f-mid)*0.36;
   lf.rotation.x=-1.16-(1-t)*0.30;   // folíolos externos caem mais
@@ -1733,7 +1733,7 @@ function makeFan(mat,scale,folhas=7,sombras=true){
 }
 function buildPlantProcedural(s){
  const g=new THREE.Group();
- const lod=qualidade==='alto'?{nodes:5,folhas:7,sombras:true,camadas:4,calices:5,sparks:6}:qualidade==='medio'?{nodes:3,folhas:5,sombras:false,camadas:3,calices:3,sparks:3}:{nodes:2,folhas:3,sombras:false,camadas:2,calices:2,sparks:1};
+ const lod=qualidade==='alto'?{nodes:5,folhas:7,sombras:true,camadas:4,calices:5,sparks:6}:qualidade==='medio'?{nodes:4,folhas:5,sombras:false,camadas:3,calices:3,sparks:3}:{nodes:4,folhas:5,sombras:false,camadas:3,calices:3,sparks:1};
  // folha: textura de nervura + leve brilho de cutícula. emissive baixinho na
  // própria cor finge a translucidez da folha fina no contraluz.
  const leafM=new THREE.MeshStandardMaterial({color:s.cor,map:leafTex(),
@@ -1742,14 +1742,14 @@ function buildPlantProcedural(s){
  const stemM=new THREE.MeshStandardMaterial({color:0x5c7a38,roughness:.92});
  const H=1.38;
  // caule principal, levemente cônico
- const st=new THREE.Mesh(new THREE.CylinderGeometry(.022,.052,H,8),stemM);
+ const st=new THREE.Mesh(new THREE.CylinderGeometry(.032,.068,H,8),stemM);
  st.geometry.translate(0,H/2,0);st.castShadow=lod.sombras;g.add(st);
  // nós com pares de folhas opostas (como planta de verdade), alternando 90°
  const NODES=lod.nodes;const fans=[];
  for(let n=0;n<NODES;n++){
   const t=n/(NODES-1);
   const y=.16+t*(H-.28);
-  const esc=1.15-t*.55;                     // folhas menores no topo
+  const esc=1.22-t*.38;                     // mantém a silhueta compacta sem deixar a planta esquelética
   const giro=n*1.57+ (n%2?0.25:0);          // filotaxia alternada
   for(let side=0;side<2;side++){
    const a=giro+side*Math.PI;
@@ -1767,7 +1767,7 @@ function buildPlantProcedural(s){
   if(n>0&&n<4){
    const a=giro+.8;
    const bl=.34-t*.16;
-   const br=new THREE.Mesh(new THREE.CylinderGeometry(.011,.019,bl,5),stemM);
+   const br=new THREE.Mesh(new THREE.CylinderGeometry(.014,.025,bl,5),stemM);
    br.geometry.translate(0,bl/2,0);
    br.position.set(Math.cos(a)*.04,y,Math.sin(a)*.04);
    br.rotation.z=-Math.cos(a)*1.0;br.rotation.x=Math.sin(a)*1.0;
@@ -1787,9 +1787,9 @@ function buildPlantProcedural(s){
  const sparkM=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.7});
  const sparkGeo=new THREE.SphereGeometry(.009,4,3);
  const buds=new THREE.Group();
- const colas=[{x:0,y:H-.06,z:0,s:.70,alt:.27},
-              {x:.20,y:H*.58,z:.08,s:.38,alt:.17},
-              {x:-.18,y:H*.54,z:-.09,s:.36,alt:.15}];
+ const colas=[{x:0,y:H-.06,z:0,s:.90,alt:.31},
+              {x:.23,y:H*.58,z:.08,s:.46,alt:.21},
+              {x:-.21,y:H*.54,z:-.09,s:.44,alt:.19}];
  colas.forEach(c=>{
   const cola=new THREE.Group();
    const camadas=Math.max(2,Math.round(lod.camadas+s.t.rendimento/100*(lod.camadas===4?4:2)));
@@ -1801,19 +1801,19 @@ function buildPlantProcedural(s){
    for(let i=0;i<nCal;i++){
     const a=(i/nCal)*6.283+L*.7;
     // cálice: esfera achatada, agrupada
-    const cal=new THREE.Mesh(new THREE.IcosahedronGeometry(.042*c.s*(1-ct*.35),0),bm);
+    const cal=new THREE.Mesh(new THREE.IcosahedronGeometry(.072*c.s*(1-ct*.35),0),bm);
     cal.scale.set(1,1.35,1);
     cal.position.set(Math.cos(a)*raio,yy,Math.sin(a)*raio);
     cal.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));
     cal.castShadow=lod.sombras;cola.add(cal);
     // pistilos saindo do cálice
     for(let pz=0;pz<1;pz++){
-     const ph=new THREE.Mesh(new THREE.CylinderGeometry(.0022,.0042,.058*c.s,3),pistilM);
+     const ph=new THREE.Mesh(new THREE.CylinderGeometry(.0025,.005,.074*c.s,3),pistilM);
      ph.position.copy(cal.position);ph.position.y+=.03*c.s;
      ph.rotation.set(rnd(-.9,.9),rnd(0,6.283),rnd(-.9,.9));cola.add(ph)}
     // sugar leaf pequena espetando pra fora
-    if(i%2===0&&qualidade!=='baixo'){
-     const sl=new THREE.Mesh(leafletGeo(.075*c.s,.015*c.s),sugarM);
+    if(i%2===0){
+     const sl=new THREE.Mesh(leafletGeo(.105*c.s,.024*c.s),sugarM);
      sl.position.copy(cal.position);
      sl.rotation.set(-1.0+rnd(-.4,.4),a,rnd(-.5,.5));cola.add(sl)}
    }
@@ -1868,7 +1868,7 @@ function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
   return;
  }
  if(ud.fans){const n=e===0?2:e===1?4:e===2?8:ud.fans.length;ud.fans.forEach((fan,i)=>fan.visible=i<n)}
- if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.24+Math.min(1,Math.max(0,(p-62)/38))*(.40+(Number(rendimento)||0)/100*.22))}
+ if(ud.buds){ud.buds.visible=e>=2;if(e>=2)ud.buds.scale.setScalar(.34+Math.min(1,Math.max(0,(p-62)/38))*(.50+(Number(rendimento)||0)/100*.20))}
 }
 function plantSeed(plot,e){
  const g=buildPlant(e.s);
