@@ -1,0 +1,16 @@
+node_modules/
+.git/
+.github/
+.env
+.env.*
+!.env.example
+.quintal-session-secret
+*.db
+*.db-shm
+*.db-wal
+testes/
+docs/
+check-client-syntax.js
+render.yaml
+npm-debug.log*
+.DS_Store
