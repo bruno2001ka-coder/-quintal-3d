@@ -89,6 +89,7 @@ const TIPO_PLOT = [
 // canteiros. O limite de seis é da fazenda, não do servidor inteiro.
 const FARM_MAX_PLAYERS = 6;
 const FARM_PLOTS_PER_PLAYER = 12;
+const FARM_LOT_PRICES = Object.freeze([26000, 28000, 30000, 32000, 34000, 36000]);
 const FARM_SLOT_SPOTS = [
   [-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]
 ];
@@ -571,6 +572,7 @@ function farmPlotPublic(p, includePlant = true) {
 }
 function farmSlotPublic(slot, includePlots = false) {
   return { slotIndex: slot.slotIndex, x: slot.x, z: slot.z,
+    preco: FARM_LOT_PRICES[slot.slotIndex], disponivel: !slot.ownerKey,
     portaoId: slot.portaoId, portaoAberto: !!slot.portaoAberto,
     donoNome: slot.ownerName || null, donoId: slot.ownerKey || null,
     plots: includePlots ? slot.plots.map(p => farmPlotPublic(p, true)) : [] };
@@ -698,12 +700,11 @@ function salvarFarmJobs() {
 function farmSlotDoJogador(j) {
   if (!j || !j.chave || !farmSlotDe.has(j.chave)) return null;
   const slot = farmSlots[farmSlotDe.get(j.chave)];
-  const c = j.carteiraPronta ? carteiras.get(j.chave) : null;
-  if (!slot || !c || c.nivel < 10 || !(c.imoveis || []).includes('fazenda')) return null;
+  if (!slot || !slot.ownerKey || slot.ownerKey !== j.chave) return null;
   return slot;
 }
 function atribuirFarmSlot(j, c) {
-  if (!j || !j.chave || !c || Number(c.nivel) < 10 || !(c.imoveis || []).includes('fazenda')) return null;
+  if (!j || !j.chave || !c || Number(c.nivel) < 10) return null;
   if (farmSlotDe.has(j.chave)) {
     const slot = farmSlots[farmSlotDe.get(j.chave)];
     if (slot) { slot.ownerName = j.nome; slot.updatedAt = agora(); }
@@ -724,14 +725,14 @@ function farmSetorEm(x, z) {
 }
 function farmPlotDoJogador(j, id) {
   const slot = farmSlotDoJogador(j);
-  if (!slot) { enviar(j, { t:'recusado', motivo:'fazenda bloqueada — nível 10 e fazenda comprada' }); return null; }
+  if (!slot) { enviar(j, { t:'recusado', motivo:'compre um lote da fazenda a partir do nível 10' }); return null; }
   const plot = slot.plots.find(p => p.id === String(id || '').slice(0, 32));
   if (!plot) { enviar(j, { t:'recusado', motivo:'canteiro da fazenda não pertence ao jogador' }); metricas.rejeitadas++; return null; }
   return plot;
 }
 function farmLocalPlotDoJogador(j, index) {
   const slot = farmSlotDoJogador(j);
-  if (!slot) { enviar(j, { t:'recusado', motivo:'fazenda bloqueada — nível 10 e fazenda comprada' }); return null; }
+  if (!slot) { enviar(j, { t:'recusado', motivo:'compre um lote da fazenda a partir do nível 10' }); return null; }
   const i = num(index, 0, FARM_PLOTS_PER_PLAYER - 1, -1) | 0;
   const plot = slot.plots[i];
   if (!plot) { metricas.rejeitadas++; return null; }
@@ -972,7 +973,6 @@ const CAT_IMOVEIS = Object.freeze(Object.assign(Object.create(null), {
   predio1: { custo:4200, nivel:2, renda:110, x:-.6, z:19.6 },
   predio2: { custo:6800, nivel:4, renda:180, x:14.4, z:19.6 },
   predio3: { custo:11000, nivel:6, renda:290, x:29.4, z:19.6 },
-  fazenda: { custo:26000, nivel:10, renda:0, x:0, z:168 }
 }));
 const CAT_ADUBO = Object.freeze(Object.assign(Object.create(null), { organico:60, crescimento:110, floracao:180 }));
 const CAT_ARMA = Object.freeze(Object.assign(Object.create(null), { punho:0, pistola:450, smg:1500, rifle:3600 }));
@@ -2151,7 +2151,11 @@ async function ativarSessao(j, chave, dados = {}) {
     if (salva) carteiras.set(k, salva);
   }
   const c = sincronizarEquipamento(j);
-  const farmSlot = atribuirFarmSlot(j, c);
+  let farmSlot = farmSlotDoJogador(j);
+  // Compatibilidade com contas antigas que compraram o imóvel global Fazenda:
+  // migra uma única vez para um setor individual sem cobrar novamente. Contas
+  // novas, mesmo no nível 12, precisam comprar um lote explicitamente.
+  if (!farmSlot && c.imoveis && c.imoveis.includes('fazenda')) farmSlot = atribuirFarmSlot(j, c);
   const retomada = consumirPosicaoRetomada(j.chave) || posicaoCarteira(c);
   const idx = atribuirLote(j.chave, j.nome);
   const loteInicial = idx !== null ? lotes[idx] : null;
@@ -2738,15 +2742,45 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'comprar_farm_lote': {
+        if (!exigirJogadorVivo(j)) return;
+        const c = sincronizarEquipamento(j);
+        const slotIndex = num(m.slotIndex, 0, FARM_MAX_PLAYERS - 1, -1) | 0;
+        const slot = farmSlots[slotIndex];
+        if (!slot) { enviar(j, { t:'recusado', motivo:'lote da fazenda inválido' }); metricas.rejeitadas++; return; }
+        if (Number(c.nivel) < 10) {
+          enviar(j, { t:'recusado', motivo:'o lote da fazenda libera no nível 10' }); metricas.rejeitadas++; return;
+        }
+        if (farmSlotDoJogador(j)) {
+          enviar(j, { t:'recusado', motivo:'você já possui um lote da fazenda' }); metricas.rejeitadas++; return;
+        }
+        if (slot.ownerKey) {
+          enviar(j, { t:'recusado', motivo:'este lote da fazenda já foi vendido' }); metricas.rejeitadas++; return;
+        }
+        if (!exigirDistancia(j, slot.x, slot.z - 14, 4.5, 'longe da porteira do lote')) return;
+        const custo = FARM_LOT_PRICES[slotIndex];
+        if (!Number.isFinite(custo) || c.cash < custo) {
+          enviar(j, { t:'recusado', motivo:'sem dinheiro para este lote' }); metricas.rejeitadas++; return;
+        }
+        c.cash -= custo;
+        slot.ownerKey = j.chave; slot.ownerName = j.nome;
+        slot.unlockedAt = agora(); slot.updatedAt = slot.unlockedAt;
+        slot.plots.forEach(p => { p.ownerKey = j.chave; });
+        farmSlotDe.set(j.chave, slot.slotIndex);
+        const ep = entidades.get(slot.portaoId); if (ep) ep.dono = j.chave;
+        salvarFarmState();
+        farmEnviarSlots();
+        enviar(j, { t:'farm_lote_comprado', slot:farmSlotPublic(slot, true), valor:custo });
+        enviarEstado(j);
+        break;
+      }
+
       case 'comprar_imovel': {
         if (!exigirJogadorVivo(j)) return;
         const c = sincronizarEquipamento(j);
         const k = str(m.k, 16);
         const def = CAT_IMOVEIS[k];
         if (!def || c.imoveis.includes(k)) { metricas.rejeitadas++; return; }
-        if (k === 'fazenda' && !farmSlotDe.has(j.chave) && !farmSlots.some(s => !s.ownerKey)) {
-          enviar(j, { t:'recusado', motivo:'a fazenda atingiu o limite de seis jogadores' }); metricas.rejeitadas++; return;
-        }
         if (c.nivel < def.nivel) {
           enviar(j, { t: 'recusado', motivo: 'nível insuficiente' }); metricas.rejeitadas++; return;
         }
@@ -2756,9 +2790,7 @@ wss.on('connection', (ws, req) => {
         }
         c.cash -= def.custo;
         c.imoveis.push(k);
-        if (k === 'fazenda') atribuirFarmSlot(j, c);
         enviar(j, { t: 'imovel_comprado', k });
-        if (k === 'fazenda') farmEnviarSlots();
         enviarEstado(j);
         break;
       }
@@ -2797,8 +2829,8 @@ wss.on('connection', (ws, req) => {
         if (!def) { enviar(j, { t:'recusado', motivo:'cargo inválido' });
           metricas.rejeitadas++; return; }
         const c = carteiraDe(j);
-        if (cargo === 'caseiro' && !c.imoveis.includes('fazenda')) {
-          enviar(j, { t:'recusado', motivo:'compre a fazenda primeiro' }); return;
+        if (cargo === 'caseiro' && !farmSlotDoJogador(j)) {
+          enviar(j, { t:'recusado', motivo:'compre um lote da fazenda primeiro' }); return;
         }
         const meus = funcsDoJogador(chave);
         if (meus.some(id => {

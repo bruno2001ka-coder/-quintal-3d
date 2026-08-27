@@ -622,8 +622,10 @@ const col=(a,b,c,d)=>{const r={minX:a,maxX:b,minZ:c,maxZ:d,active:true};collider
 const Q={x0:-25,x1:9,z0:-13,z1:0};          // fundos — esticado a oeste pra bater ~500m² de lote
 const C={x0:3.4,x1:9,z0:0,z1:10.5};        // corredor
 const CITY={x0:-62,x1:76,z0:11,z1:150};
-const FAZ={x0:-46,x1:46,z0:172,z1:268};   // fazenda, liberada depois
+const FAZ={x0:-46,x1:46,z0:172,z1:268};   // área pública de circulação
 const FARM_GATE_W=10;
+const FARM_LOT_PRICES=[26000,28000,30000,32000,34000,36000];
+const FARM_LOT_CATALOG=FARM_LOT_PRICES.map((custo,slotIndex)=>({slotIndex,nome:`Lote ${slotIndex+1} da fazenda`,custo,nivel:10}));
 // Faixa de recuperação do caminho público. A estrada visual tem 11 m,
 // mas o ombro navegável é mais largo para quem chega desalinhado não ficar
 // preso ao cruzar a transição cidade -> fazenda fora do vão central.
@@ -1497,8 +1499,7 @@ const IMOVEIS=[
  {k:'casanova',nome:'Casa Nova (sítio simples)',x:69,z:70.9,custo:1800,nivel:1,renda:60},
  {k:'predio1',nome:'Bloco A do condomínio',x:C.x0-4, z:C.z1+16,custo:4200, nivel:2,renda:110},
  {k:'predio2',nome:'Bloco B do condomínio',x:C.x0+11,z:C.z1+16,custo:6800, nivel:4,renda:180},
- {k:'predio3',nome:'Bloco C do condomínio',x:C.x0+26,z:C.z1+16,custo:11000,nivel:6,renda:290},
- {k:'fazenda',nome:'Fazenda na saída da cidade',x:0,z:FAZ.z0-4,custo:26000,nivel:10,renda:0}];
+ {k:'predio3',nome:'Bloco C do condomínio',x:C.x0+26,z:C.z1+16,custo:11000,nivel:6,renda:290}];
 IMOVEIS.forEach(im=>{
  const g=new THREE.Group();
  // portão de acesso do imóvel
@@ -2427,7 +2428,6 @@ function aplicarEstado(d){
   if(d.nivel!==undefined)G.nivel=Math.max(1,Math.min(12,Number(d.nivel)||1));
   if(d.xp!==undefined)G.xp=Math.max(0,Number(d.xp)||0);
   if(d.imoveis)IMOVEIS.forEach(im=>{im.comprado=d.imoveis.includes(im.k);if(im.ring)im.ring.material.color.setHex(im.comprado?0x8fe063:0xe8d264);
-   if(im.comprado&&im.k==='fazenda'){fazPlots.forEach(p=>{p.locked=false;p.group.visible=!mpConnected});if(fazPortao)fazPortao.visible=true}
    if(im.comprado&&im.k==='casanova'){casaNovaPlots.forEach(p=>{p.locked=false;p.group.visible=true})}});
   if(d.territorios)TERR.forEach(t=>{if(d.territorios[t.nome]){t.dono='seu';t.donoNome=null;t.ring.material.color.setHex(0x8fe063);t.disc.material.color.setHex(0x8fe063)}});
   if(d.funcs){G.func={};d.funcs.forEach(f=>{if(f&&f.cargo)G.func[f.cargo]=f})}
@@ -2576,10 +2576,22 @@ function renderBanca(){
    bt.textContent=im.comprado?'SEU':(trava?'NÍVEL '+im.nivel:'R$ '+im.custo);
    bt.disabled=im.comprado||trava||G.cash<im.custo;
    bt.onclick=()=>comprarImovel(im);
-   r.appendChild(bt);b.appendChild(r)})}
+   r.appendChild(bt);b.appendChild(r)})
+  b.innerHTML+='<div class="sub" style="color:#8fe063;margin-top:10px">LOTES DA FAZENDA</div><div class="sub">A fazenda é pública para caminhar. No nível 10, compre um dos seis lotes para plantar e contratar o caseiro.</div>';
+  const jaTemLote=Number.isInteger(meuFarmSlotIndex);
+  FARM_LOT_CATALOG.forEach(l=>{
+   const slot=farmSlotsOnline[l.slotIndex],meu=slot&&slot.slotIndex===meuFarmSlotIndex,vendido=!!(slot&&slot.donoId),trava=G.nivel<l.nivel;
+   const r=document.createElement('div');r.className='row';
+   r.innerHTML=`<div class="sw" style="background:${meu?'#8fe063':(vendido?'#4a4a4a':(trava?'#4a3c3c':'#3c443c'))}"></div><div class="info">${l.nome}<small>${meu?'seu lote':(vendido?'já vendido':(trava?'libera no nível '+l.nivel:'12 canteiros · acesso ao galpão'))}</small></div>`;
+   const bt=document.createElement('button');
+   bt.textContent=meu?'SEU LOTE':(vendido?'VENDIDO':(trava?'NÍVEL '+l.nivel:(jaTemLote?'JÁ POSSUI LOTE':'R$ '+l.custo)));
+   bt.disabled=meu||vendido||trava||jaTemLote||G.cash<l.custo;
+   bt.onclick=()=>comprarFarmLote(l);
+   r.appendChild(bt);b.appendChild(r);
+  })}
  else if(bancaTab==='proc'){
   b.innerHTML+='<h2 class="mt">GALPÃO · 6 MESAS</h2><div class="sub">As mesas ficam dentro do galpão da fazenda. Cada etapa é controlada pelo servidor e pode formar fila.</div>';
-  if(!farmUnlocked){b.innerHTML+='<div class="sub">A fazenda é liberada no nível 10 e precisa ser comprada.</div>'}
+  if(!farmUnlocked){b.innerHTML+='<div class="sub">A área é pública. Compre um dos seis lotes no nível 10 para liberar seus 12 canteiros e o acesso produtivo.</div>'}
   const ops=[['secagem','sec','SECAR'],['cura','cura','CURAR'],['embalagem','embalagem','EMBALAR']];
   farmTablesOnline.forEach(table=>{
    const r=document.createElement('div');r.className='row';
@@ -3202,6 +3214,7 @@ function findFocus(){
   // A área geral é pública; a única barreira privada de cada setor é a
   // porteira frontal, cujo estado vem do servidor.
   for(const slot of farmSlotsOnline){
+   if(slot.disponivel&&Math.hypot(p.x-slot.x,p.z-(slot.z-14))<2.2)return{t:'farmLoteVenda',slot};
    if(Math.hypot(p.x-slot.x,p.z-(slot.z-14))<2.2)return{t:'farmPortao',slot};
   }
   // Fazenda: os 12 canteiros de cada setor são entidades visuais próprias.
@@ -3344,7 +3357,16 @@ function tickFuncs(dt){
    }}
   else F.L.legL.rotation.x=F.L.legR.rotation.x=0;
  }}
-// ─── IMÓVEIS ───
+ // ─── IMÓVEIS E LOTES DA FAZENDA ───
+function comprarFarmLote(l){
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ const slot=farmSlotsOnline[l.slotIndex];
+ if(!slot||!slot.disponivel){toast('este lote já foi vendido ou está indisponível');return}
+ if(G.nivel<l.nivel){toast(`o lote libera no nível ${l.nivel}`);return}
+ if(Number.isInteger(meuFarmSlotIndex)){toast('você já possui um lote da fazenda');return}
+ if(G.cash<l.custo){toast('sem dinheiro para este lote');return}
+ if(pedirAoServidor({t:'comprar_farm_lote',slotIndex:l.slotIndex}))toast(`compra do lote ${l.slotIndex+1} enviada ao servidor`);
+}
 function comprarImovel(im){
  if(mpConnected){
   pedirAoServidor({t:'comprar_imovel',k:im.k});
@@ -3355,11 +3377,7 @@ function comprarImovel(im){
  if(G.cash<im.custo){toast('sem dinheiro pra isso ainda');return}
  G.cash-=im.custo;im.comprado=true;
  im.ring.material.color.setHex(0x8fe063);
- if(im.k==='fazenda'){
-  fazPlots.forEach(p=>{p.locked=false;p.group.visible=true});
-  if(fazPortao)fazPortao.visible=false;
-  toast('FAZENDA COMPRADA — 12 canteiros liberados')}
- else if(im.k==='casanova'){
+ if(im.k==='casanova'){
   casaNovaPlots.forEach(p=>{p.locked=false;p.group.visible=true});
   toast('CASA NOVA COMPRADA — 6 canteiros liberados numa base diferente')}
  else toast(`${im.nome} comprado — +R$ ${im.renda}/dia`);
@@ -3405,6 +3423,14 @@ function doAction(){
   pedirAoServidor({t:'portao',id:lote.portaoId});
   return;
  }
+  if(focus.t==='farmLoteVenda'){
+   const slot=focus.slot,l={slotIndex:slot.slotIndex,nome:`Lote ${slot.slotIndex+1} da fazenda`,custo:slot.preco||FARM_LOT_PRICES[slot.slotIndex],nivel:10};
+   if(G.nivel<l.nivel){toast(`o lote libera no nível ${l.nivel}`);return}
+   if(Number.isInteger(meuFarmSlotIndex)){toast('você já possui um lote da fazenda');return}
+   if(G.cash<l.custo){toast(`faltam R$ ${l.custo-G.cash}`);return}
+   if(pedirAoServidor({t:'comprar_farm_lote',slotIndex:l.slotIndex}))toast('compra do lote enviada ao servidor');
+   return;
+  }
   if(focus.t==='farmPortao'){
    const slot=focus.slot;
    if(slot.slotIndex!==meuFarmSlotIndex){toast(slot.donoNome?`setor fechado — fazenda de ${slot.donoNome}`:'setor privado fechado');return}
@@ -3591,8 +3617,7 @@ function objetivoAtual(){
  }
  const vazio=plots.find(P=>!P.locked&&!P.plant);
  if(vazio)return{nome:'canteiro livre',x:vazio.x,z:vazio.z};
- const faz=IMOVEIS.find(im=>im.k==='fazenda');
- return faz&&faz.comprado?{nome:'fazenda',x:0,z:FAZ.z0+6}:{nome:'cidade',x:0,z:CITY.z0+6};
+ return {nome:'fazenda',x:0,z:FAZ.z0+6};
 }
 function atualizarRota(dt){
  rotaT-=dt;if(rotaT>0)return;rotaT=.25;
@@ -3785,9 +3810,11 @@ function applySave(d){
  for(const k in G.func){if(G.func[k])scene.remove(G.func[k].g)}G.func={};
  IMOVEIS.forEach(im=>{im.comprado=(d.imoveis||[]).includes(im.k);
   im.ring.material.color.setHex(im.comprado?0x8fe063:0xe8d264)});
- const temFaz=IMOVEIS.find(i=>i.k==='fazenda').comprado;
- fazPlots.forEach(p=>{p.locked=!temFaz;p.group.visible=temFaz});
- if(fazPortao)fazPortao.visible=!temFaz;
+ // A fazenda não é mais um imóvel global comprável. O fallback local não
+ // concede canteiros: a posse de um lote só vem do servidor online.
+ const temFaz=false;
+ fazPlots.forEach(p=>{p.locked=true;p.group.visible=false});
+ if(fazPortao)fazPortao.visible=true;
  const temCasaNova=IMOVEIS.find(i=>i.k==='casanova').comprado;
  casaNovaPlots.forEach(p=>{p.locked=!temCasaNova;p.group.visible=temCasaNova});
  (d.func||[]).forEach(k=>{const f=FUNCS.find(x=>x.k===k);
@@ -4240,6 +4267,12 @@ function tick(){
     ? `<kbd>E</kbd> ${focus.lote.portaoAberto?'fechar':'abrir'} o portão${G.admin&&meuLoteIndex!==focus.lote.index?' (admin)':''}`
     : (focus.lote.donoNome?`trancado — casa de ${focus.lote.donoNome}`:'portão trancado');
   }
+  else if(focus.t==='farmLoteVenda'){
+   const l=focus.slot,preco=l.preco||FARM_LOT_PRICES[l.slotIndex];
+   if(G.nivel<10)txt=`lote disponível no nível 10 · preço R$ ${preco}`;
+   else txt=`<kbd>E</kbd> comprar lote ${l.slotIndex+1} · R$ ${preco}`;
+   dica('farmLoteVenda','A fazenda é pública. Este preço é apenas do lote; ele libera 12 canteiros para o comprador.');
+  }
   else if(focus.t==='farmPortao'){
    const sou=focus.slot.slotIndex===meuFarmSlotIndex;
    if(sou)dica('farmPortao','Este é o portão do seu setor. O servidor controla a abertura e o acesso aos seus canteiros.');
@@ -4350,7 +4383,7 @@ const FARM_BARN={x:0,z:252,w:26,d:12,doorW:3.2};
 const FARM_SLOT_SPOTS=[[-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]];
 const FARM_PLOT_OFFSETS=[[-7,-10],[-2.3,-10],[2.4,-10],[-7,-4],[-2.3,-4],[2.4,-4],[-7,2],[-2.3,2],[2.4,2],[-7,8],[-2.3,8],[2.4,8]];
 const FARM_TABLE_SPOTS=[[-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]];
-const farmSlotsOnline=FARM_SLOT_SPOTS.map(([x,z],slotIndex)=>({slotIndex,x,z,portaoId:null,portaoAberto:false,donoNome:null,donoId:null,plots:FARM_PLOT_OFFSETS.map(([dx,dz],localIndex)=>({id:`farm_${slotIndex}_${localIndex}`,x:x+dx,z:z+dz,localIndex,dados:null,mesh:null,meshEstagio:-1,meshSeedId:null,group:null,ring:null}))}));
+const farmSlotsOnline=FARM_SLOT_SPOTS.map(([x,z],slotIndex)=>({slotIndex,x,z,preco:FARM_LOT_PRICES[slotIndex],disponivel:true,portaoId:null,portaoAberto:false,donoNome:null,donoId:null,plots:FARM_PLOT_OFFSETS.map(([dx,dz],localIndex)=>({id:`farm_${slotIndex}_${localIndex}`,x:x+dx,z:z+dz,localIndex,dados:null,mesh:null,meshEstagio:-1,meshSeedId:null,group:null,ring:null}))}));
 const farmTablesOnline=FARM_TABLE_SPOTS.map(([dx,dz],stationId)=>({stationId,x:FARM_BARN.x+dx,z:FARM_BARN.z+dz,status:'idle',operation:null,ownerKey:null,quantity:0,completesAt:0,queueLength:0}));
 let meuFarmSlotIndex=null,farmUnlocked=false;
 const farmSectorCols=[];
@@ -4388,12 +4421,12 @@ function montarFarmSetor(slot){
  slot.group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});scene.add(slot.group);slot.montado=true;farmAtualizarPortao(slot);farmAtualizarNome(slot);
 }
 function farmAtualizarPortao(slot){const aberto=!!slot.portaoAberto;if(slot.gateCol)slot.gateCol.active=!aberto;if(slot.gateLeaf){slot.gateLeaf.visible=true;slot.gateLeaf.rotation.y=aberto?-1.25:0}}
-function farmAtualizarNome(slot){if(slot.sign){const meu=meuFarmSlotIndex===slot.slotIndex;slot.sign.material.map=T(placaLote(meu?'SEU SETOR':(slot.donoNome||'SETOR '+(slot.slotIndex+1)),meu?'#8fe063':(slot.donoNome?'#5aa8e0':'#9aa0a6')));slot.sign.material.needsUpdate=true}}
+function farmAtualizarNome(slot){if(slot.sign){const meu=meuFarmSlotIndex===slot.slotIndex;const nome=meu?'SEU LOTE':(slot.donoNome||`LOTE ${slot.slotIndex+1} · R$${slot.preco||FARM_LOT_PRICES[slot.slotIndex]}`);slot.sign.material.map=T(placaLote(nome,meu?'#8fe063':(slot.donoNome?'#5aa8e0':'#e8d264')));slot.sign.material.needsUpdate=true}}
 function farmAplicarPlot(slotIndex,localIndex,plot){
  const slot=farmSlotsOnline[slotIndex];if(!slot||!slot.plots[localIndex])return;const P=slot.plots[localIndex];P.id=plot&&plot.id||P.id;P.dados=plot&&plot.plant||null;if(slot.montado)farmPlotVisual(slot,P);
 }
 function aplicarFarmSlotsMeta(slots){
- (slots||[]).forEach(s=>{const slot=farmSlotsOnline[s.slotIndex];if(!slot)return;slot.portaoId=s.portaoId||slot.portaoId;slot.portaoAberto=!!s.portaoAberto;slot.donoNome=s.donoNome||null;slot.donoId=s.donoId||null;montarFarmSetor(slot);farmAtualizarPortao(slot);farmAtualizarNome(slot);});
+ (slots||[]).forEach(s=>{const slot=farmSlotsOnline[s.slotIndex];if(!slot)return;slot.preco=Number(s.preco)||FARM_LOT_PRICES[s.slotIndex];slot.disponivel=!!s.disponivel;slot.portaoId=s.portaoId||slot.portaoId;slot.portaoAberto=!!s.portaoAberto;slot.donoNome=s.donoNome||null;slot.donoId=s.donoId||null;montarFarmSetor(slot);farmAtualizarPortao(slot);farmAtualizarNome(slot);});
 }
 function atualizarFarmMesaVisual(t){
  const ref=farmTableVisuals[t.stationId];if(!ref)return;
@@ -5443,6 +5476,9 @@ function mpConnect(){
     const im=IMOVEIS.find(x=>x.k===msg.k);if(im){im.comprado=true;im.ring.material.color.setHex(0x8fe063);renderBanca();updHUD()}
    } else if(msg.t==='territorio_estado'){
     const t=TERR.find(x=>x.nome===msg.nome);if(t){t.dono='jogador';t.donoNome=msg.dono;t.ring.material.color.setHex(msg.donoChave===meuId?0x8fe063:0x5aa8e0);t.disc.material.color.setHex(msg.donoChave===meuId?0x8fe063:0x5aa8e0)}
+   } else if(msg.t==='farm_lote_comprado'){
+    const S=msg.slot,slot=S&&farmSlotsOnline[S.slotIndex];
+    if(slot){slot.preco=Number(S.preco)||FARM_LOT_PRICES[S.slotIndex];slot.disponivel=false;slot.portaoId=S.portaoId||slot.portaoId;slot.portaoAberto=!!S.portaoAberto;slot.donoNome=S.donoNome||'você';slot.donoId=S.donoId||null;meuFarmSlotIndex=slot.slotIndex;farmUnlocked=true;montarFarmSetor(slot);(S.plots||[]).forEach((P,i)=>farmAplicarPlot(slot.slotIndex,i,P));farmAtualizarPortao(slot);farmAtualizarNome(slot);blip(560,.2,'triangle',.08);toast(`Lote ${slot.slotIndex+1} comprado por R$ ${msg.valor}`);renderBanca();updHUD()}
    } else if(msg.t==='portao_estado'){
     if(Number.isInteger(msg.farmSlotIndex)){
      const slot=farmSlotsOnline[msg.farmSlotIndex];

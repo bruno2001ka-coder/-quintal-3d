@@ -146,6 +146,16 @@ assert.match(html, /const FARM_GATE_W=10/,
   'a abertura visual da porteira externa deve ter largura explícita');
 assert.match(html, /const FARM_APPROACH_W=16/,
   'a estrada da fazenda deve ter uma faixa de recuperação navegável');
+assert.match(html, /const FARM_LOT_PRICES=\[26000,28000,30000,32000,34000,36000\]/,
+  'o cliente deve exibir preços individuais para os seis lotes');
+assert.match(html, /const FARM_LOT_CATALOG=FARM_LOT_PRICES\.map/,
+  'o cliente deve ter catálogo visual dos lotes da fazenda');
+assert.match(html, /focus\.t==='farmLoteVenda'/,
+  'a entrada de lote disponível deve oferecer compra individual');
+assert.match(html, /pedirAoServidor\(\{t:'comprar_farm_lote',slotIndex:l\.slotIndex\}\)/,
+  'a compra do lote deve ser enviada ao servidor sem desconto local');
+assert.doesNotMatch(html, /nome:'Fazenda na saída da cidade'/,
+  'o cliente não deve mostrar a Fazenda como imóvel global comprável');
 assert.match(html, /if\(farmGateCol\)farmGateCol\.active=false/,
   'o portão externo da fazenda deve ser público para qualquer jogador');
 assert.match(html, /focus\.t==='farmPortao'/,
@@ -166,6 +176,8 @@ assert.match(html, /col\(FAZ\.x0, -FARM_GATE_W\/2, FAZ\.z0-\.3/,
   'o lado esquerdo da porteira externa deve continuar bloqueando fora do vão');
 assert.match(html, /Number\.isInteger\(msg\.farmSlotIndex\)/,
   'o cliente deve aplicar eventos de abertura dos setores sem confundir com portões urbanos');
+assert.match(html, /msg\.t==='farm_lote_comprado'/,
+  'o cliente deve aplicar a confirmação authoritative da compra do lote');
 assert.match(html, /col\(FARM_GATE_W\/2, FAZ\.x1, FAZ\.z0-\.3/,
   'o lado direito da porteira externa deve continuar bloqueando fora do vão');
 assert.match(html, /setModoMultiplayerVisual\(true\)/,
