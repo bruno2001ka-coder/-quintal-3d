@@ -1973,7 +1973,10 @@ function buildPlantArt(s){
  const mat=new THREE.SpriteMaterial({map:texturas[0]||null,transparent:true,
   depthWrite:false,depthTest:true,alphaTest:.035,color:0xffffff});
  const sp=new THREE.Sprite(mat);sp.center.set(.5,0);sp.scale.set(plane,plane,1);
- sp.position.set(0,0,0);g.add(sp);
+ sp.position.set(0,0,0);sp.visible=false;g.add(sp);
+ // Fallback de segurança: asset 404, cache antigo, WebView ou rede lenta
+ // nunca podem transformar uma planta authoritative em um canteiro vazio.
+ const fallback=buildPlantProcedural(s);fallback.visible=true;fallback.scale.setScalar(.82);g.add(fallback);
  // O código antigo usa leafM para refletir saúde. O proxy mantém a mesma
  // resposta de cor sem criar materiais ou geometrias por estágio.
  const leafM={color:{setHSL:(h,ss,l)=>mat.color.setHSL(h,Math.min(1,ss*.45+.12),Math.min(.92,l*.9+.1))}};
@@ -1981,7 +1984,7 @@ function buildPlantArt(s){
  drop.position.y=1.48;drop.visible=false;g.add(drop);
  const bug=new THREE.Mesh(new THREE.SphereGeometry(.085,6,4),new THREE.MeshBasicMaterial({color:0xff6a3d}));
  bug.position.y=1.48;bug.visible=false;g.add(bug);
- g.userData={art:sp,stageSprite:sp,artMats:[mat],artTextures:texturas,artPlane:plane,leafM,buds:null,drop,bug,fans:[]};
+ g.userData={art:sp,stageSprite:sp,artFallback:fallback,artMats:[mat],artTextures:texturas,artPlane:plane,leafM,buds:null,drop,bug,fans:[]};
  return g;
 }
 function buildPlant(s){
@@ -2000,7 +2003,13 @@ function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
   const sp=ud.stageSprite||ud.art;
   const mapa=(ud.artTextures||plantArtTextures)[e]||null;
   if(sp.material.map!==mapa){sp.material.map=mapa;sp.material.needsUpdate=true}
-  sp.visible=true;
+  const img=mapa&&mapa.image;
+  const carregada=!!(img&&img.complete&&(img.naturalWidth||img.width)>0);
+  sp.visible=carregada;
+  if(ud.artFallback){
+   ud.artFallback.visible=!carregada;
+   if(!carregada){ud.artFallback.scale.setScalar(.82);aplicarFormaPlanta(ud.artFallback,e,p,rendimento)}
+  }
   const fase=e===4?1:clamp((p-e*25)/25,0,1);const f=.94+fase*.06;
   sp.scale.set(ud.artPlane*f,ud.artPlane*f,1);
   return;
@@ -2026,6 +2035,7 @@ function criarPlantasDemoOffline(){
   aplicarFormaPlanta(pl.mesh,pl.estagio,pl.prog,pl.s.t.rendimento);
  }
 }
+
 
 /* ═════════ SECAGEM / CURA ═════════ */
 const DRY={x:1.4,z:-11.4};

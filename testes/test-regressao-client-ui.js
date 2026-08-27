@@ -236,12 +236,14 @@ for(const [slug,ext] of Object.entries(stagePackages)){
   assert.match(html,new RegExp(`${dir}/${slug}/${stage}\\.${ext}`),`arte de estágio não referenciada: ${slug}/${stage}.${ext}`);
  }
 }
-assert.match(html,/g\.userData=\{art:sp,stageSprite:sp,artMats:\[mat\]/,
- 'cada planta com arte deve manter um único sprite compartilhado');
+assert.match(html,/g\.userData=\{art:sp,stageSprite:sp,artFallback:fallback,artMats:\[mat\]/,
+ 'cada planta com arte deve manter um sprite e um fallback procedural compartilhados');
 assert.match(html,/const mapa=\(ud\.artTextures\|\|plantArtTextures\)\[e\]\|\|null/,
  'o estágio authoritative deve trocar somente o mapa do pacote da própria genética');
-assert.match(html,/sp\.visible=true/,
- 'o sprite único deve permanecer visível após aplicar o estágio');
+assert.match(html,/sp\.visible=carregada/,
+ 'o sprite único deve permanecer visível somente quando a textura estiver carregada');
+assert.match(html,/ud\.artFallback\.visible=!carregada/,
+ 'o fallback deve aparecer quando a textura estiver indisponível');
 assert.doesNotMatch(html,/ud\.art\.forEach\(\(sp,i\)=>\{sp\.visible=i===e;\}\)/,
  'a planta não deve manter cinco sprites por instância');
 

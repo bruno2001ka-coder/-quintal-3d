@@ -52,8 +52,12 @@ assert.equal(client.includes('plantas-estagios-real/blueberry-auto/stage-1-broto
   'o pacote de arte da planta deve apontar para um asset existente');
 assert.match(client, /const mapa=\(ud\.artTextures\|\|plantArtTextures\)\[e\]\|\|null/,
   'a planta deve trocar o mapa do pacote da própria genética conforme o estágio authoritative');
-assert.match(client, /sp\.visible=true/,
-  'o sprite único deve permanecer visível conforme o estágio');
+assert.match(client, /sp\.visible=carregada/,
+  'o sprite só deve aparecer quando a textura estiver realmente carregada');
+assert.match(client, /artFallback:fallback/,
+  'a planta com arte deve ter fallback visual procedural');
+assert.match(client, /ud\.artFallback\.visible=!carregada/,
+  'o fallback deve aparecer enquanto a textura estiver indisponível');
 assert.doesNotMatch(client, /ud\.art\.forEach\(\(sp,i\)=>\{sp\.visible=i===e;\}\)/,
   'a planta não deve criar cinco sprites ocultos por instância');
 
