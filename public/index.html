@@ -276,7 +276,7 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
 <div id="hud">
   <div id="cashQuick">R$ <b id="cashQuickValue">0</b></div>
   <div class="panel" id="stats"><span class="cash">R$ <b id="cash">0</b></span><br>
-    plantas <b id="alive">0</b> · lotes <b id="lotes">0</b> · pontos <b id="terr">0</b>/10<b id="cliCount" style="color:#e8d264"></b><br>nível <b id="lvl">1</b></div>
+    plantas <b id="alive">0</b> · lotes <b id="lotes">0</b> · pontos <b id="terr">0</b>/3<b id="cliCount" style="color:#e8d264"></b><br>nível <b id="lvl">1</b></div>
   <div class="panel" id="daybox">dia <b id="day">1</b><br><span class="h" id="hour">06:00</span><br><span id="wx" style="opacity:.6"></span></div>
   <div class="panel" id="stock"><span class="ttl">PRODUÇÃO DO LOTE</span><div id="stockList">sem produção</div></div>
   <div class="panel" id="zone"></div>
@@ -1526,19 +1526,12 @@ IMOVEIS.forEach(im=>{
 /* ═════════ TERRITÓRIOS ═════════ */
 // CORRIGIDO — 9 dos 10 lotes estavam sobrepostos a territórios inimigos;
 // o lote 2 e a Praça da Torre tinham coordenadas IDÊNTICAS. Os bots
-// nasciam dentro do quintal do jogador. Territórios foram movidos pras
-// ruas, com folga de 3m dos lotes — conferido por cálculo, 0 conflitos.
+// Três pontos ativos no mapa. O servidor mantém a mesma ordem, coordenada,
+// demanda e renda; isso evita que o HUD aponte para uma biqueira inexistente.
 const TERR=[
  {nome:'Beco do Mercado', x:-52, z:47,raio:6,dono:'rival',demanda:1.0, renda:26},
- {nome:'Praça da Torre', x:54, z:137,raio:6,dono:'rival',demanda:1.25, renda:38},
- {nome:'Vila Alta', x:64, z:47,raio:6,dono:'rival',demanda:1.15, renda:34},
- {nome:'Fundão', x:-16, z:111,raio:7,dono:'rival',demanda:1.45, renda:52},
- {nome:'Zona Nova', x:20, z:79,raio:7,dono:'rival',demanda:1.6, renda:60},
- {nome:'Alto da Torre', x:22, z:117,raio:7,dono:'rival',demanda:1.5, renda:56},
- {nome:'Boca do Rio', x:-16, z:47,raio:7,dono:'rival',demanda:1.8, renda:78},
- {nome:'Jardim Alvorada', x:56, z:79,raio:8,dono:'rival',demanda:1.9, renda:84},
- {nome:'Beira-Linha', x:20, z:47,raio:8,dono:'rival',demanda:2.1, renda:96},
- {nome:'Saída da BR', x:-16, z:79,raio:8,dono:'rival',demanda:2.4, renda:120}];
+ {nome:'Vila Alta', x:64, z:47,raio:6,dono:'rival',demanda:1.25, renda:38},
+ {nome:'Zona Nova', x:20, z:79,raio:7,dono:'rival',demanda:1.5, renda:52}];
 TERR.forEach(t=>{
  const g=new THREE.Group();
  const ring=new THREE.Mesh(new THREE.RingGeometry(t.raio-.35,t.raio,44),
@@ -1547,21 +1540,24 @@ TERR.forEach(t=>{
  const disc=new THREE.Mesh(new THREE.CircleGeometry(t.raio,44),
   new THREE.MeshBasicMaterial({color:0xe0503c,transparent:true,opacity:.055}));
  disc.rotation.x=-Math.PI/2;disc.position.y=.04;g.add(disc);
- // banca do ponto
- const b=new THREE.Group();
- const wm=new THREE.MeshStandardMaterial({color:0x4d4038,roughness:.9});
- const tb=new THREE.Mesh(new THREE.BoxGeometry(2,.1,.9),wm);tb.position.y=.95;b.add(tb);
- [[-.85,-.35],[.85,-.35],[-.85,.35],[.85,.35]].forEach(p=>{
-  const l=new THREE.Mesh(new THREE.BoxGeometry(.1,.95,.1),wm);l.position.set(p[0],.47,p[1]);b.add(l)});
- const tol=new THREE.Mesh(new THREE.BoxGeometry(2.3,.08,1.2),
-  new THREE.MeshStandardMaterial({color:0x2f5d8c,roughness:.8}));
- tol.position.y=1.9;b.add(tol);
- [[-1,-.5],[1,-.5],[-1,.5],[1,.5]].forEach(p=>{
-  const l=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,1.9,6),
-   new THREE.MeshStandardMaterial({color:0x6b6660,roughness:.6,metalness:.4}));
-  l.position.set(p[0],.95,p[1]);b.add(l)});
- b.traverse(o=>{if(o.isMesh)o.castShadow=true});
- b.position.set(0,0,0);g.add(b);
+  // Biqueira: quiosque fixo de alvenaria e metal, sem lona. A fachada,
+  // balcão, prateleira e placa deixam claro que é um ponto permanente de
+  // venda; a economia e a posse continuam authoritative no servidor.
+  const b=new THREE.Group();
+  const paredePonto=new THREE.MeshStandardMaterial({color:0x6f665a,roughness:.92});
+  const metalPonto=new THREE.MeshStandardMaterial({color:0x30363a,roughness:.45,metalness:.65});
+  const madeiraPonto=new THREE.MeshStandardMaterial({color:0x62452e,roughness:.9});
+  const ledPonto=new THREE.MeshStandardMaterial({color:0xe8d264,emissive:0x8a6614,emissiveIntensity:.8});
+  const fundo=new THREE.Mesh(new THREE.BoxGeometry(3.4,2.45,.24),paredePonto);fundo.position.set(0,1.23,-1.08);b.add(fundo);
+  [-1.58,1.58].forEach(x=>{const p=new THREE.Mesh(new THREE.BoxGeometry(.24,2.45,2.2),paredePonto);p.position.set(x,1.23,0);b.add(p)});
+  const cobertura=new THREE.Mesh(new THREE.BoxGeometry(3.85,.22,2.55),metalPonto);cobertura.position.set(0,2.55,0);cobertura.rotation.z=.035;b.add(cobertura);
+  const balc=new THREE.Mesh(new THREE.BoxGeometry(3.05,.14,.72),madeiraPonto);balc.position.set(0,.94,.48);b.add(balc);
+  [-1.32,1.32].forEach(x=>{const p=new THREE.Mesh(new THREE.BoxGeometry(.12,.92,.12),metalPonto);p.position.set(x,.47,.48);b.add(p)});
+  const prateleira=new THREE.Mesh(new THREE.BoxGeometry(2.2,.08,.35),madeiraPonto);prateleira.position.set(0,1.58,-.72);b.add(prateleira);
+  const luzPonto=new THREE.Mesh(new THREE.BoxGeometry(2.35,.07,.12),ledPonto);luzPonto.position.set(0,2.18,.26);b.add(luzPonto);
+  const placaPonto=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('PONTO DE VENDA','#e8d264')),transparent:true,depthTest:false}));placaPonto.scale.set(2.9,.48,1);placaPonto.position.set(0,3.0,.05);b.add(placaPonto);
+  b.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
+  b.position.set(0,0,0);g.add(b);
  g.position.set(t.x,0,t.z);scene.add(g);
  col(t.x-1.05,t.x+1.05,t.z-.5,t.z+.5);
  contact(t.x,t.z,1.6,.4);
@@ -2516,29 +2512,35 @@ function linhasProducao(lotes,limite=6){
  }).join('');
 }
 function posBancadaOnline(lote){return lote&&lote.bancadaPos||{x:lote.x+6.8,z:lote.z+3.6}}
+function posEstacoesOnline(lote){
+ if(!lote)return {};
+ const e=lote.estacoes;
+ return e||{secagem:{x:lote.x+6.8,z:lote.z+3.6},cura:{x:lote.x+3.8,z:lote.z+3.6},embalagem:{x:lote.x+.8,z:lote.z+3.6}};
+}
 function atualizarMarcadoresBancada(lote){
  if(!lote||!lote.montado)return;
  const itens=lote.index===meuLoteIndex?G.lotes.filter(l=>l&&ESTAGIO_UI[l.stage]):[];
+ const porEtapa={secagem:itens.filter(l=>l.stage==='sec'),cura:itens.filter(l=>l.stage==='cura'),embalagem:itens.filter(l=>l.stage==='embalagem'||l.stage==='pronto')};
+ const etapas=['secagem','cura','embalagem'];
  if(lote.producaoMarkers)lote.producaoMarkers.forEach((sp,i)=>{
-  const l=itens[i];
-  if(!l){sp.visible=false;return}
+  const etapa=etapas[i],l=porEtapa[etapa]&&porEtapa[etapa][0];
+  if(!l){sp.visible=true;sp.material.map=T(placaLote(etapa.toUpperCase(),'#6f806b'));sp.material.needsUpdate=true;return}
   const e=ESTAGIO_UI[l.stage],qtd=Math.max(0,Math.floor(Number(l.qtd)||0));
-  const old=sp.material.map;
-  sp.material.map=T(placaLote(`${e[0]} ${qtd} un`,e[1]));sp.material.needsUpdate=true;
-  if(old&&old.dispose)old.dispose();
-  sp.visible=true;
+  const titulo=etapa==='embalagem'&&l.stage==='pronto'?'PRONTO':e[0];
+  const old=sp.material.map;sp.material.map=T(placaLote(`${titulo} ${qtd} un`,e[1]));sp.material.needsUpdate=true;
+  if(old&&old.dispose)old.dispose();sp.visible=true;
  });
  const potes=lote.curaPotes||[];
- const emCura=itens.filter(l=>l.stage==='cura'||l.stage==='pronto').slice(0,potes.length);
+ const emCura=porEtapa.cura.slice(0,potes.length);
  potes.forEach((slot,i)=>{
   const l=emCura[i];
   if(!l){slot.g.visible=false;return}
-  const pronto=l.stage==='pronto';
-  slot.fill.material.color.setHex(l.s&&l.s.cor||0x936ec1);
-  slot.fill.material.color.multiplyScalar(pronto?1.12:.88);
-  slot.cap.material.color.setHex(pronto?0xe8d264:0xb98ee6);
-  slot.g.visible=true;
+  slot.fill.material.color.setHex(l.s&&l.s.cor||0x936ec1);slot.fill.material.color.multiplyScalar(.88);
+  slot.cap.material.color.setHex(0xb98ee6);slot.g.visible=true;
  });
+ const caixas=lote.embalagemCaixas||[];
+ const embal=porEtapa.embalagem[0];
+ caixas.forEach((caixa,i)=>{caixa.visible=!!embal&&i<Math.min(4,Math.ceil((Number(embal.qtd)||0)/Math.max(1,Math.ceil((Number(embal.qtd)||0)/4))))});
 }
 let bancaTab='sem',crossPick=[];
 function renderBanca(){
@@ -3357,23 +3359,23 @@ function findFocus(){
   for(const P of lote.plots){
    if(Math.hypot(p.x-P.x,p.z-P.z)<1.15)return{t:'plotOnline',P,lote};
   }}
- // Cada lote tem sua própria bancada de secagem/cura. No online ela é a
- // única estação válida na interface do dono; a estação pública fica apenas
- // para o modo offline, evitando a sensação de que tudo acontece num ponto.
+ // Cada lote tem três estações físicas e cada uma aceita apenas a etapa
+ // correspondente. O balcão público continua reservado ao sandbox.
  const clientePerto=mpConnected&&[...mpClientes.values()].some(c=>
   c.fase==='atendendo'&&!c.done&&Math.hypot(p.x-c.g.position.x,p.z-c.g.position.z)<2.6);
  if(mpConnected&&meuLoteIndex!==null&&!clientePerto){
-  const meu=lotesOnline[meuLoteIndex];
-  if(meu){
-   const b=meu.bancadaPos||{x:meu.x+6.8,z:meu.z+3.6};
-   if(Math.hypot(p.x-b.x,p.z-b.z)<2.5)return{t:'estacao',lote:meu,online:true};
+  const meu=lotesOnline[meuLoteIndex],es=posEstacoesOnline(meu);
+  if(meu)for(const nome of ['secagem','cura','embalagem']){
+   const e=es[nome];if(e&&Math.hypot(p.x-e.x,p.z-e.z)<2.5)return{t:'estacao',lote:meu,online:true,station:nome};
   }
  }
  for(const im of IMOVEIS){
   if(!im.comprado&&Math.hypot(p.x-im.x,p.z-(im.z-6.9))<2.6)return{t:'imovel',im}}
  const t=TERR.find(t=>t.dono==='seu'&&Math.hypot(p.x-t.x,p.z-t.z)<2.4);
  if(t)return{t:'ponto',terr:t};
- const tj=TERR.find(t=>t.dono==='jogador'&&Math.hypot(p.x-t.x,p.z-t.z)<2.4);
+ // Um ponto rival também é interativo antes da captura. Antes só o estado
+ // dono==='jogador' gerava foco, então a biqueira rival parecia decorativa.
+ const tj=TERR.find(t=>(t.dono==='jogador'||t.dono==='rival')&&Math.hypot(p.x-t.x,p.z-t.z)<2.4);
  if(tj)return{t:'invadir',terr:tj};
  for(const [id,c] of mpClientes){
   if(c.fase==='atendendo'&&!c.done&&Math.hypot(p.x-c.g.position.x,p.z-c.g.position.z)<2.6)
@@ -3603,33 +3605,29 @@ function doAction(){
  }
  if(focus.t==='venda'||focus.t==='vendaOnline'){renderVenda(focus.cli);$('venda').classList.add('on');return}
  if(focus.t==='ponto'){renderPonto(focus.terr);$('ponto').classList.add('on');return}
- if(focus.t==='invadir'){
-  const t=focus.terr;
-  if(mpConnected){claimTerritoryOnline(t);return}
-  toast(`você tomou ${t.nome} de ${t.donoNome}`);
+  if(focus.t==='invadir'){
+   const t=focus.terr;
+   if(mpConnected){claimTerritoryOnline(t);return}
+   toast(`você tomou ${t.nome} de ${t.donoNome||'dos rivais'}`);
   t.dono='seu';t.donoNome=null;ganharXP(120);
   t.ring.material.color.setHex(0x8fe063);t.disc.material.color.setHex(0x8fe063);
   blip(520,.18,'triangle',.08);updHUD();return}
  if(focus.t==='balcao'){toast('sem cliente agora');return}
  if(focus.t==='estacao'){
-  const s=G.lotes.find(l=>l.stage==='sec'&&l.t<=0);
-  if(s){
-   if(offlineAtivo()){s.stage='cura';s.t=10;toast('secagem concluída no sandbox — agora está curando');renderBanca();renderStock();}
-   else pedirAoServidor({t:'lote_estagio',id:s.id});
-   blip(420,.14,'sine',.06);return}
-  const c=G.lotes.find(l=>l.stage==='cura'&&l.t<=0);
-  if(c){
-   if(offlineAtivo()){c.stage='embalagem';c.t=8;toast('cura concluída no sandbox — agora está embalando');renderBanca();renderStock();}
-   else pedirAoServidor({t:'lote_estagio',id:c.id});
-   blip(660,.15,'triangle',.07);return}
-  const e=G.lotes.find(l=>l.stage==='embalagem'&&l.t<=0);
-  if(e){
-   if(offlineAtivo()){e.stage='pronto';e.t=0;toast('embalagem concluída no sandbox — produto pronto');renderBanca();renderStock();}
-   else pedirAoServidor({t:'lote_estagio',id:e.id});
-   blip(820,.15,'triangle',.07);return}
-  const pend=G.lotes.find(l=>l.stage!=='pronto');
-  const nomes={sec:'secando',cura:'curando',embalagem:'embalando'};
-  toast(pend?`ainda falta (${nomes[pend.stage]||pend.stage} ${Math.ceil(pend.t)}s)`:'nada na bancada');return}
+   const etapa=focus.station||'secagem',stage=etapa==='secagem'?'sec':etapa==='cura'?'cura':'embalagem';
+   const l=G.lotes.find(v=>v.stage===stage&&v.t<=0);
+   if(l){
+    if(offlineAtivo()){
+     if(stage==='sec'){l.stage='cura';l.t=10;toast('secagem concluída no sandbox — leve para a estação de cura')}
+     else if(stage==='cura'){l.stage='embalagem';l.t=8;toast('cura concluída no sandbox — leve para a estação de embalagem')}
+     else {l.stage='pronto';l.t=0;toast('embalagem concluída no sandbox — produto pronto')}
+     renderBanca();renderStock();
+    } else pedirAoServidor({t:'lote_estagio',id:l.id});
+    blip(stage==='sec'?420:stage==='cura'?660:820,.15,'triangle',.07);return;
+   }
+   const pend=G.lotes.find(v=>v.stage===stage);
+   const nomes={sec:'secando',cura:'curando',embalagem:'embalando'};
+   toast(pend?`${etapa.toUpperCase()} · ${nomes[stage]} · ${Math.ceil(pend.t)}s`:`nenhum lote pronto para ${etapa}`);return}
  const p=focus.plot,pl=p.plant;
  if(mpConnected&&!p.online){
   toast('este canteiro ainda não está disponível no online');
@@ -3811,14 +3809,16 @@ function drawWorldMap(){
  mapCtx.lineTo(sx(0),sz(CITY.z1));mapCtx.lineTo(sx(0),sz(FAZ.z0));mapCtx.stroke();
  mapCtx.strokeStyle='rgba(210,205,170,.4)';mapCtx.lineWidth=2;mapCtx.setLineDash([7,7]);
  mapCtx.beginPath();mapCtx.moveTo(sx(Q.x0),sz(Q.z1-1));mapCtx.lineTo(sx(C.x1),sz(C.z1-1));mapCtx.stroke();mapCtx.setLineDash([]);
- // dez lotes multiplayer
+ // As dez casas continuam desenhadas mesmo fora do streaming 3D. Assim o
+ // mapa mostra onde cada jogador tem casa, sem obrigar o celular a montar tudo.
  for(let i=0;i<LOTE_SPOTS.length;i++){
-  const [x,z]=LOTE_SPOTS[i],own=Number.isInteger(meuLoteIndex)&&i===meuLoteIndex;
-  mapCtx.fillStyle=own?'rgba(143,224,99,.42)':'rgba(18,28,20,.72)';
-  mapCtx.strokeStyle=own?'#8fe063':'rgba(232,210,100,.65)';mapCtx.lineWidth=own?3:1;
+  const [x,z]=LOTE_SPOTS[i],lote=lotesOnline[i],own=Number.isInteger(meuLoteIndex)&&i===meuLoteIndex,ocupada=!!(lote&&lote.donoNome);
+  mapCtx.fillStyle=own?'rgba(143,224,99,.42)':ocupada?'rgba(90,168,224,.32)':'rgba(18,28,20,.72)';
+  mapCtx.strokeStyle=own?'#8fe063':ocupada?'#5aa8e0':'rgba(232,210,100,.65)';mapCtx.lineWidth=own?3:1;
   mapCtx.fillRect(sx(x-10),sz(z-8),rw(20),rh(16));mapCtx.strokeRect(sx(x-10),sz(z-8),rw(20),rh(16));
-  mapCtx.fillStyle=own?'#dff5cd':'#d8cfae';mapCtx.font=own?'700 11px ui-monospace':'9px ui-monospace';mapCtx.textAlign='center';
-  mapCtx.fillText(own?'SEU LOTE':String(i+1),sx(x),sz(z)+4);
+  mapCtx.fillStyle=own?'#dff5cd':ocupada?'#bfe0f2':'#d8cfae';mapCtx.font=own?'700 11px ui-monospace':'9px ui-monospace';mapCtx.textAlign='center';
+  const titulo=own?'SUA CASA':ocupada?String(lote.donoNome).slice(0,10):`CASA ${i+1}`;
+  mapCtx.fillText(titulo,sx(x),sz(z)+4);
  }
  const alvo=G.running?objetivoAtual():null;
  if(alvo){mapCtx.fillStyle='#e8d264';mapCtx.beginPath();mapCtx.arc(sx(alvo.x),sz(alvo.z),7,0,7);mapCtx.fill()}
@@ -4507,7 +4507,7 @@ function tick(){
    const t=focus.mesa,op=t.status==='working'?(t.operation||'operando').toUpperCase():t.status==='queued'?`fila ${t.queueLength||0}`:'livre';
    txt=`<kbd>E</kbd> GALPÃO · mesa ${Number(t.stationId)+1} · ${op}`;
   }
-  else if(focus.t==='invadir')txt=`<kbd>E</kbd> tomar ${focus.terr.nome} de ${focus.terr.donoNome}`;
+  else if(focus.t==='invadir')txt=`<kbd>E</kbd> tomar ${focus.terr.nome} dos rivais`;
   else if(focus.t==='imovel')txt=G.nivel<focus.im.nivel
    ?`${focus.im.nome} · trava no nível ${focus.im.nivel}`
    :`<kbd>E</kbd> comprar ${focus.im.nome} · R$ ${focus.im.custo}`;
@@ -4522,12 +4522,10 @@ function tick(){
   else if(focus.t==='ponto')txt=`<kbd>E</kbd> abastecer ${focus.terr.nome} · demanda ${Math.round(focus.terr.demanda*100)}%`;
   else if(focus.t==='balcao')txt='balcão — esperando cliente';
    else if(focus.t==='estacao'){
-    const s=G.lotes.find(l=>l.stage==='sec'&&l.t<=0),c=G.lotes.find(l=>l.stage==='cura'&&l.t<=0),
-          e=G.lotes.find(l=>l.stage!=='pronto'),local=focus.online?' do seu lote':'';
-    txt=s?`<kbd>E</kbd> passar ${s.s.nome} pros potes${local}`
-      :c?`<kbd>E</kbd> embalar ${c.s.nome}${local}`
-      :e?`${e.stage==='sec'?'secando':'curando'}${local} · ${Math.ceil(e.t)}s`
-      :`bancada${local} — ${G.lotes.length}/${G.rackMax}`}
+    const etapa=focus.station||'secagem',stage=etapa==='secagem'?'sec':etapa==='cura'?'cura':'embalagem';
+    const l=G.lotes.find(v=>v.stage===stage),local=focus.online?' do seu lote':'';
+    const nome=etapa==='secagem'?'passar para cura':etapa==='cura'?'passar para embalagem':'finalizar produto';
+    txt=l?(l.t<=0?`<kbd>E</kbd> ${nome} · ${l.s.nome}${local}`:`${etapa.toUpperCase()} · ${Math.ceil(l.t)}s${local}`):`${etapa.toUpperCase()} · livre${local}`}
   else{const p=focus.plot,pl=p.plant;
    const onde=p.tipo==='grow'?'grow room':p.tipo==='estufa'?'lona':'sol';
    if(!pl){const e=G.bank[G.sel];
@@ -4887,48 +4885,46 @@ function montarLote(lote){
   addColLocal(gx+1.4/2,gx+gw/2,gz+gd/2-.15,gz+gd/2+.15);
  })();
 
- // Bancada de secagem e cura — o estoque já é por jogador desde a Etapa B
+ // Três estações domésticas: os offsets são iguais aos enviados pelo
+ // servidor em lote.estacoes. Cada etapa tem bancada e placa próprios.
  (function(){
-  const bx=6.8, bz=3.6;
   const mad=new THREE.MeshStandardMaterial({color:0x7a6144,roughness:.92});
-  const tampo=new THREE.Mesh(new THREE.BoxGeometry(2.6,.1,1),mad);
-  tampo.position.set(bx,.92,bz);tampo.castShadow=true;g.add(tampo);
-  [[-1.15,-.4],[1.15,-.4],[-1.15,.4],[1.15,.4]].forEach(pp=>{
-   const pe=new THREE.Mesh(new THREE.BoxGeometry(.1,.9,.1),mad);
-   pe.position.set(bx+pp[0],.45,bz+pp[1]);g.add(pe)});
-  // arame de secagem
-  const post=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.6});
-  [-1.4,1.4].forEach(dx=>{
-   const p2=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,2.1,6),post);
-   p2.position.set(bx+dx,1.05,bz-1.3);p2.castShadow=true;g.add(p2)});
-  const arame=new THREE.Mesh(new THREE.BoxGeometry(2.8,.02,.02),post);
-  arame.position.set(bx,2.05,bz-1.3);g.add(arame);
-  lote.bancadaPos={x:LX+bx,z:LZ+bz};
-  // Marcadores são a representação da produção do dono desta casa. Não
-  // reutilizam os slots da estação global e ficam ocultos para outros lotes.
-  lote.producaoMarkers=[];
-  for(let mi=0;mi<3;mi++){
-   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('PRODUÇÃO','#8fe063')),transparent:true,depthTest:false}));
-   sp.scale.set(1.7,.32,1);sp.position.set(bx,1.35+mi*.38,bz+.58);sp.visible=false;g.add(sp);lote.producaoMarkers.push(sp);
+  const metal=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.6});
+  const curaMat=new THREE.MeshStandardMaterial({color:0x936ec1,roughness:.82});
+  const embalagemMat=new THREE.MeshStandardMaterial({color:0x9a713c,roughness:.86});
+  const estacoes={secagem:{x:6.8,z:3.6},cura:{x:3.8,z:3.6},embalagem:{x:.8,z:3.6}};
+  lote.estacoes={};
+  Object.keys(estacoes).forEach(nome=>{const e=estacoes[nome];lote.estacoes[nome]={x:LX+e.x,z:LZ+e.z};});
+  lote.bancadaPos=lote.estacoes.secagem;
+  function bancada(e){
+   const tampo=new THREE.Mesh(new THREE.BoxGeometry(2.25,.1,.95),mad);
+   tampo.position.set(e.x,.92,e.z);tampo.castShadow=true;g.add(tampo);
+   [[-1,-.36],[1,-.36],[-1,.36],[1,.36]].forEach(pp=>{const pe=new THREE.Mesh(new THREE.BoxGeometry(.1,.9,.1),mad);pe.position.set(e.x+pp[0],.45,e.z+pp[1]);g.add(pe)});
   }
-  // A bancada individual também precisa mostrar fisicamente os potes da cura.
-  // O estado/quantidade continua vindo de G.lotes, o cliente só espelha.
+  bancada(estacoes.secagem);bancada(estacoes.cura);bancada(estacoes.embalagem);
+  // Varal de secagem: fios e quatro ganchos acima da estação da direita.
+  [-.85,-.28,.28,.85].forEach(dx=>{const gan=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.34,6),metal);gan.position.set(estacoes.secagem.x+dx,1.35,estacoes.secagem.z-.22);g.add(gan)});
+  const fio=new THREE.Mesh(new THREE.BoxGeometry(2.05,.025,.025),metal);fio.position.set(estacoes.secagem.x,1.62,estacoes.secagem.z-.22);g.add(fio);
+  // Cura: seis potes alinhados sobre a bancada central.
   lote.curaPotes=[];
   for(let ji=0;ji<6;ji++){
-   const pote=new THREE.Group(),gx=bx-.8+(ji%3)*.8,gz=bz-.2+Math.floor(ji/3)*.4;
-   const vidro=new THREE.Mesh(new THREE.CylinderGeometry(.16,.18,.32,12),
-    new THREE.MeshStandardMaterial({color:0xd2e4e7,roughness:.15,transparent:true,opacity:.52}));
-   vidro.position.set(gx,1.12,gz);vidro.castShadow=true;
-   const recheio=new THREE.Mesh(new THREE.CylinderGeometry(.115,.13,.19,12),
-    new THREE.MeshStandardMaterial({color:0x936ec1,roughness:.82}));
-   recheio.position.set(gx,1.05,gz);recheio.castShadow=true;
-   const tampa=new THREE.Mesh(new THREE.CylinderGeometry(.17,.17,.035,12),
-    new THREE.MeshStandardMaterial({color:0xb98ee6,roughness:.42,metalness:.2}));
-   tampa.position.set(gx,1.29,gz);tampa.castShadow=true;
-   pote.add(vidro);pote.add(recheio);pote.add(tampa);pote.visible=false;g.add(pote);
-   lote.curaPotes.push({g:pote,fill:recheio,cap:tampa});
+   const pote=new THREE.Group(),gx=estacoes.cura.x-.72+(ji%3)*.72,gz=estacoes.cura.z-.18+Math.floor(ji/3)*.34;
+   const vidro=new THREE.Mesh(new THREE.CylinderGeometry(.14,.16,.30,12),new THREE.MeshStandardMaterial({color:0xd2e4e7,roughness:.15,transparent:true,opacity:.52}));vidro.position.set(gx,1.12,gz);
+   const recheio=new THREE.Mesh(new THREE.CylinderGeometry(.10,.12,.18,12),curaMat);recheio.position.set(gx,1.05,gz);
+   const tampa=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.035,12),new THREE.MeshStandardMaterial({color:0xb98ee6,roughness:.42,metalness:.2}));tampa.position.set(gx,1.29,gz);
+   pote.add(vidro);pote.add(recheio);pote.add(tampa);pote.visible=false;g.add(pote);lote.curaPotes.push({g:pote,fill:recheio,cap:tampa});
   }
-  addColLocal(bx-1.3,bx+1.3,bz-.5,bz+.5);
+  // Embalagem: caixas e fita sobre a bancada esquerda, sem reutilizar os potes.
+  lote.embalagemCaixas=[];
+  for(let ei=0;ei<4;ei++){
+   const caixa=new THREE.Mesh(new THREE.BoxGeometry(.36,.22,.28),embalagemMat);caixa.position.set(estacoes.embalagem.x-.55+(ei%2)*.7,1.10,estacoes.embalagem.z-.12+Math.floor(ei/2)*.34);caixa.visible=false;g.add(caixa);lote.embalagemCaixas.push(caixa);
+  }
+  lote.producaoMarkers=[];
+  const nomes={secagem:'SECAGEM',cura:'CURA',embalagem:'EMBALAGEM'};
+  Object.keys(estacoes).forEach(nome=>{
+   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote(nomes[nome],'#8fe063')),transparent:true,depthTest:false}));sp.scale.set(1.45,.28,1);sp.position.set(estacoes[nome].x,1.65,estacoes[nome].z+.48);sp.visible=true;g.add(sp);lote.producaoMarkers.push(sp);
+  });
+  Object.values(estacoes).forEach(e=>addColLocal(e.x-1.12,e.x+1.12,e.z-.5,e.z+.5));
  })();
 
  // placa com o nome do dono
@@ -5016,14 +5012,17 @@ function setModoMultiplayerVisual(online){
 }
 let streamT=0;
 function streamLotes(dt){
- streamT-=dt; if(streamT>0)return; streamT=.5;
- // ETAPA D — propriedades ficaram bem maiores (20x16 com estufa, grow
- // room e secagem). Raio menor pra segurar o pior caso em 2 casas.
- const PERTO=22, LONGE=34;
+ streamT-=dt; if(streamT>0)return; streamT=.25;
+ // O mapa recebe todos os nomes pelo handshake; o 3D monta só a vizinhança.
+ // Casas ocupadas entram um pouco antes para não aparecerem quando o jogador
+ // já está em cima delas. Casas livres mantêm um raio menor para o celular.
+ const PERTO_OCUPADA=52, LONGE_OCUPADA=68, PERTO_LIVRE=26;
  for(const lote of lotesOnline){
   const d=Math.hypot(player.position.x-lote.x,player.position.z-lote.z);
-  if(!lote.montado&&d<PERTO)montarLote(lote);
-  else if(lote.montado&&d>LONGE)desmontarLote(lote);
+  const ocupado=!!lote.donoNome||lote.index===meuLoteIndex;
+  const deveMontar=ocupado?d<PERTO_OCUPADA:d<PERTO_LIVRE;
+  if(!lote.montado&&deveMontar)montarLote(lote);
+  else if(lote.montado&&d>(ocupado?LONGE_OCUPADA:42)&&lote.index!==meuLoteIndex)desmontarLote(lote);
  }
 }
 // ETAPA C — o estado do portão vem do servidor e vale pra todo mundo
@@ -5335,12 +5334,12 @@ function mpAddBot(id,tipo,x,z,ry){
  if(mpBots.has(id))return;
  const h=humanoid(0x6b2f2f,0x2a2f26,pick([0xc98d63,0xa06d47,0x8a5f3c]));
  h.g.position.set(x||0,0,z||0);h.g.rotation.y=ry||0;
- // facão na mão, igual os rivais locais
- const fac=new THREE.Mesh(new THREE.BoxGeometry(.05,.5,.1),
-  new THREE.MeshStandardMaterial({color:0xb8b8bc,roughness:.35,metalness:.7}));
- fac.position.set(0,-.42,.06);fac.rotation.x=.25;h.L.armR.add(fac);
+ // Rivais usam arma curta visível; a polícia usa o mesmo modelo para
+ // preservar leitura visual. O dano e a munição continuam decididos no servidor.
+ const arma=mpArma(1);
+ if(arma){arma.position.set(0,-.42,.12);arma.rotation.x=1.35;h.L.armR.add(arma)}
  scene.add(h.g);
- mpBots.set(id,{g:h.g,L:h.L,tipo,tx:x||0,tz:z||0,tr:ry||0,walk:0,hp:60,
+ mpBots.set(id,{g:h.g,L:h.L,tipo,armaMesh:arma,tx:x||0,tz:z||0,tr:ry||0,walk:0,hp:60,
   buf:[],ultimoVisto:performance.now()});
 }
 function mpRemoveBot(id){
@@ -5379,7 +5378,7 @@ function mpTickBots(dt){
    b.L.legL.rotation.x=sw;b.L.legR.rotation.x=-sw;
    b.L.armL.rotation.x=-sw*.5;
   } else { b.L.legL.rotation.x*=.8;b.L.legR.rotation.x*=.8 }
-  b.L.armR.rotation.x=b.agro?-.9:-.25;   // facão erguido quando persegue
+  b.L.armR.rotation.x=b.agro?-.9:-.25;   // arma erguida quando persegue
  }
 }
 const AVATAR_CATALOGO={

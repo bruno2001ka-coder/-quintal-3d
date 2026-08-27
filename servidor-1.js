@@ -987,8 +987,8 @@ function exigirDistancia(j, x, z, raio, motivo = 'longe demais') {
    confere o tempo mínimo — assim ninguém fabrica produto vendável. */
 
 const CASH_INICIAL = 350;
-const TEMPO_SEC  = 55;   // segundos mínimos de secagem
-const TEMPO_CURA = 70;   // segundos mínimos de cura
+const TEMPO_SEC  = num(process.env.HOUSE_SEC_S, .1, 3600, 55);   // segundos mínimos de secagem
+const TEMPO_CURA = num(process.env.HOUSE_CURA_S, .1, 3600, 70);   // segundos mínimos de cura
 // Travas da colheita local (canteiros ainda não simulados aqui)
 const MAX_CANTEIROS_LOCAIS = 14;   // estufa 4 + grow 6 + sol extra 4
 const LOCAL_COLHEITA_MS    = 30000;
@@ -1379,17 +1379,12 @@ function temVisao(ax, az, bx, bz) {
 // Espelha o cliente. Movidos pras ruas: antes 9 de 10 lotes de jogador
 // tinham território inimigo em cima, e os bots patrulhavam dentro da
 // propriedade. Verificado por cálculo: 0 conflitos.
+// Três pontos rivais ativos no mundo. A distribuição 2/2/1 deixa o mapa
+// com conflito suficiente sem transformar cada rua em uma fila de bots.
 const TERRITORIOS = [
   { nome:'Beco do Mercado', x:-52, z:47, raio:6, demanda:1.0, renda:26 },
-  { nome:'Praça da Torre', x:54, z:137, raio:6, demanda:1.25, renda:38 },
-  { nome:'Vila Alta', x:64, z:47, raio:6, demanda:1.15, renda:34 },
-  { nome:'Fundão', x:-16, z:111, raio:7, demanda:1.45, renda:52 },
-  { nome:'Zona Nova', x:20, z:79, raio:7, demanda:1.6, renda:60 },
-  { nome:'Alto da Torre', x:22, z:117, raio:7, demanda:1.5, renda:56 },
-  { nome:'Boca do Rio', x:-16, z:47, raio:7, demanda:1.8, renda:78 },
-  { nome:'Jardim Alvorada', x:56, z:79, raio:8, demanda:1.9, renda:84 },
-  { nome:'Beira-Linha', x:20, z:47, raio:8, demanda:2.1, renda:96 },
-  { nome:'Saída da BR', x:-16, z:79, raio:8, demanda:2.4, renda:120 }
+  { nome:'Vila Alta', x:64, z:47, raio:6, demanda:1.25, renda:38 },
+  { nome:'Zona Nova', x:20, z:79, raio:7, demanda:1.5, renda:52 }
 ];
 function aplicarTerritoriosPersistidos(rows) {
   const escolhido = new Map();
@@ -1456,10 +1451,21 @@ const ESTACOES_PUBLICAS = {
   balcao: { x: 4.9, z: 7.3, raio: 3.2 },
   secagem: { x: 1.4, z: -11.4, raio: 3.2 }
 };
-function estacaoSecagemValida(j) {
-  const lote = loteDoJogador(j);
-  if (!lote || lote.donoChave !== j.chave) return false;
-  return Math.hypot(j.x - (lote.x + 6.8), j.z - (lote.z + 3.6)) <= 3.2;
+// Produção doméstica: três estações físicas, uma por etapa. Os mesmos
+// offsets são usados pelo cliente para que a interação nunca fique em um
+// ponto visual diferente do ponto validado pelo servidor.
+const ESTACOES_CASA_REL = Object.freeze({
+  secagem: { x: 6.8, z: 3.6, raio: 2.35 },
+  cura: { x: 3.8, z: 3.6, raio: 2.35 },
+  embalagem: { x: .8, z: 3.6, raio: 2.35 }
+});
+function posEstacaoCasa(lote, nome) {
+  const e = ESTACOES_CASA_REL[nome];
+  return e && lote ? { x:lote.x+e.x, z:lote.z+e.z, raio:e.raio } : null;
+}
+function estacaoCasaValida(j, nome) {
+  const lote = loteDoJogador(j), p = posEstacaoCasa(lote, nome);
+  return !!(lote && lote.donoChave === j.chave && p && Math.hypot(j.x-p.x,j.z-p.z) <= p.raio);
 }
 function encontrarPontoVenda(j) {
   let melhor = null, distancia = Infinity;
@@ -1762,12 +1768,13 @@ const RAIO_BOT = .38;
 /* polícia — agora vive AQUI, não mais no cliente */
 const PM_VEL = 2.9, PM_VIDA = 90, PM_AGRO = 26, PM_ALCANCE = 22;
 const PM_DANO = 11, PM_CADENCIA_MS = 1400;
+const RIVAL_DANO = 8, RIVAL_CADENCIA_MS = 1800, RIVAL_ALCANCE = 16;
+const RIVAL_SPAWN_COUNTS = Object.freeze([2, 2, 1]);
 
 function nascerBots() {
   bots.length = 0;
   TERRITORIOS.forEach((t, ti) => {
-    // eram 2 a 4 por ponto = 29 bots no mapa. Demais: viravam fila.
-    const n = 1 + (ti % 2);          // 1 a 2 rivais por ponto
+    const n = RIVAL_SPAWN_COUNTS[ti] || 0; // total fixo: 5 bots em 3 pontos
     for (let k = 0; k < n; k++) {
       const a = (k / n) * Math.PI * 2;
       let bx = t.x + Math.cos(a) * 4, bz = t.z + Math.sin(a) * 4;
@@ -1828,7 +1835,21 @@ function tiroPM(b) {
     if (!temVisao(b.x, b.z, j.x, j.z)) continue;   // parede no caminho: não atira
     b.ultimoTiro = t;
     aplicarDanoJogador(j, PM_DANO, b.id);
-    paraInteresse({ t: 'tiro_npc', id: b.id, ax: b.x, az: b.z, bx: j.x, bz: j.z }, j.x, j.z, j.chave);
+    paraInteresse({ t: 'tiro_npc', tipo:'pm', id: b.id, ax: b.x, az: b.z, bx: j.x, bz: j.z }, j.x, j.z, j.chave);
+    return;
+  }
+}
+function tiroRival(b) {
+  const t = agora();
+  if (t - b.ultimoTiro < RIVAL_CADENCIA_MS) return;
+  for (const [, j] of jogadores) {
+    if (jogadorEmCasaSegura(j)) continue; // propriedade é zona segura
+    const d = Math.hypot(j.x - b.x, j.z - b.z);
+    if (d > RIVAL_ALCANCE) continue;
+    if (!temVisao(b.x, b.z, j.x, j.z)) continue;
+    b.ultimoTiro = t;
+    aplicarDanoJogador(j, RIVAL_DANO, b.id);
+    paraInteresse({ t:'tiro_npc', tipo:'rival', id:b.id, ax:b.x, az:b.z, bx:j.x, bz:j.z }, j.x, j.z, j.chave);
     return;
   }
 }
@@ -2111,9 +2132,11 @@ function paraInteresse(obj, x, z, donoChave = null, exceto = null) {
   }
 }
 function resumoLote(l, incluirPlots = false) {
+  const estacoes = Object.fromEntries(Object.keys(ESTACOES_CASA_REL).map(nome => [nome, posEstacaoCasa(l,nome)]));
   return { index: l.index, id: l.id, x: l.x, z: l.z, portaoId: l.portaoId,
     donoNome: l.donoNome, donoId: l.donoChave || null, portaoAberto: l.portaoAberto,
-    tipos: TIPO_PLOT, plots: incluirPlots ? l.plots : [] };
+    bancadaPos: estacoes.secagem, estacoes, tipos: TIPO_PLOT,
+    plots: incluirPlots ? l.plots : [] };
 }
 
 function normalizarUsuario(v) {
@@ -2720,25 +2743,24 @@ wss.on('connection', (ws, req) => {
 
       case 'lote_estagio': {
         if (!exigirJogadorVivo(j)) return;
-        // O cronômetro visual é do cliente, mas o estágio OFICIAL é daqui.
-        // Confere também se o jogador está numa estação válida.
-        if (!estacaoSecagemValida(j)) {
-          enviar(j, { t: 'recusado', motivo: 'fora da estação de secagem/cura' });
-          metricas.rejeitadas++; return;
-        }
         const c = carteiraDe(j);
         const id = num(m.id, 0, 1e9, -1);
         const lote = c.estoque.find(l => l.id === id);
         if (!lote) { metricas.rejeitadas++; return; }
+        const esperado = lote.estagio === 'sec' ? 'secagem' : lote.estagio === 'cura' ? 'cura' : lote.estagio === 'embalagem' ? 'embalagem' : null;
+        if (!esperado || !estacaoCasaValida(j, esperado)) {
+          enviar(j, { t:'recusado', motivo: esperado ? `fora da estação de ${esperado}` : 'lote já está pronto' });
+          metricas.rejeitadas++; return;
+        }
         const decorrido = (agora() - lote.desde) / 1000;
-        if (lote.estagio === 'sec') {
-          if (decorrido < TEMPO_SEC * .85) { metricas.rejeitadas++; return; }
-          lote.estagio = 'cura'; lote.desde = agora();
-        } else if (lote.estagio === 'cura') {
-          if (decorrido < TEMPO_CURA * .85) { metricas.rejeitadas++; return; }
-          lote.estagio = 'pronto'; lote.desde = agora();
-          lote.qual = Math.min(1.35, lote.qual * 1.28);
-        } else { return; }
+        const minimo = esperado === 'secagem' ? TEMPO_SEC : esperado === 'cura' ? TEMPO_CURA : FARM_STAGE_TIMES.embalagem;
+        if (decorrido < minimo * .85) { metricas.rejeitadas++; return; }
+        if (esperado === 'secagem') lote.estagio = 'cura';
+        else if (esperado === 'cura') lote.estagio = 'embalagem';
+        else lote.estagio = 'pronto';
+        lote.desde = agora();
+        if (esperado === 'cura') lote.qual = Math.min(1.35, lote.qual * 1.12);
+        if (esperado === 'embalagem') lote.qual = Math.min(1.35, lote.qual * 1.04);
         enviarEstado(j);
         break;
       }
@@ -2867,7 +2889,12 @@ wss.on('connection', (ws, req) => {
         const c = sincronizarEquipamento(j);
         c.territorios[p.nome] = true;
         darXP(j, 220);
-        paraTodos({ t: 'territorio_estado', nome:p.nome, dono:j.nome, donoChave:j.chave });
+        const territorioEvento = { t:'territorio_estado', nome:p.nome, dono:j.nome, donoChave:j.chave };
+        paraTodos(territorioEvento);
+        // Confirmação direta para o capturador: o broadcast é mantido para
+        // os demais jogadores, mas a ação do próprio cliente não depende de
+        // filtragem de AOI, backpressure ou ordem de snapshots.
+        enviar(j, territorioEvento);
         enviarEstado(j);
         break;
       }
@@ -3129,7 +3156,10 @@ setInterval(() => {
   }
   if (jogadores.size) for (const b of bots) if (b.hp > 0) {
     passoBot(b, dtTick);
-    if (b.tipo === 'pm' && b.alvo) tiroPM(b);
+    if (b.alvo) {
+      if (b.tipo === 'pm') tiroPM(b);
+      else if (b.tipo === 'rival') tiroRival(b);
+    }
   }
   for (const f of funcionarios) passoFuncionario(f, dtTick);
   farmProcessarMesas();

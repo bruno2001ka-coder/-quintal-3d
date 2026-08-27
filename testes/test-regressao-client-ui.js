@@ -92,14 +92,22 @@ assert.match(html, /msg\.t==='login_required'/,
   'o cliente deve bloquear o jogo até a conta ser reconhecida');
 assert.match(html, /lote\.curaPotes=\[\]/,
   'cada lote deve reservar seus próprios potes físicos de cura');
-assert.match(html, /const emCura=itens\.filter\(l=>l\.stage==='cura'\|\|l\.stage==='pronto'\)/,
-  'os potes da bancada devem representar cura e produto pronto');
-assert.match(html, /new THREE\.CylinderGeometry\(\.16,\.18,\.32,12\)/,
-  'a bancada individual deve criar a geometria 3D do pote');
+assert.match(html, /const porEtapa=\{secagem:itens\.filter\(l=>l\.stage==='sec'\),cura:itens\.filter\(l=>l\.stage==='cura'\),embalagem:itens\.filter\(l=>l\.stage==='embalagem'\|\|l\.stage==='pronto'\)\}/,
+  'a bancada deve separar secagem, cura e embalagem');
+assert.match(html, /new THREE\.CylinderGeometry\(\.14,\.16,\.30,12\)/,
+  'a estação de cura deve criar a geometria 3D do pote');
+assert.match(html, /lote\.embalagemCaixas=\[\]/,
+  'a estação de embalagem deve ter caixas próprias');
+assert.match(html, /const estacoes=\{secagem:\{x:6\.8,z:3\.6\},cura:\{x:3\.8,z:3\.6\},embalagem:\{x:\.8,z:3\.6\}\}/,
+  'as três estações devem ter posições distintas');
 assert.match(html, /slot\.g\.visible=true/,
   'a atualização do estoque deve tornar visível o pote da cura');
 assert.match(html, /lote\.curaPotes=null/,
  'os potes devem ser liberados quando a casa é desmontada');
+assert.match(html, /const PERTO_OCUPADA=52, LONGE_OCUPADA=68, PERTO_LIVRE=26/,
+ 'casas ocupadas devem ser pré-carregadas antes das casas livres');
+assert.match(html, /mapCtx\.fillText\(titulo,sx\(x\),sz\(z\)\+4\)/,
+ 'o mapa deve identificar casas próprias e casas de outros jogadores');
 assert.match(html, /const cargosVisiveis=\{zelador:'Zelador',colhedor:'Colhedora',caseiro:'Caseiro'\}/,
  'o funcionário deve exibir cargo legível junto do nome');
 assert.match(html, /const lbl=mpLabel\(\(F\.nome\|\|'Funcionário'\)\+' · '\+cargoNome\)/,
