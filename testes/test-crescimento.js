@@ -40,8 +40,8 @@ assert.match(client, /if\(est===4\)\{toast\(`\$\{s\.nome\} pronta pra colher`/,
   'a mensagem de colheita só pode aparecer no estágio pronto');
 assert.doesNotMatch(client, /if\(est===3\)\{toast\(`\$\{s\.nome\} pronta pra colher`/,
   'o estágio adulto ainda não pode ser tratado como pronto');
-assert.match(client, /function escalaPlantaCultivada\(prog,mesh\)\{return mesh&&mesh\.userData&&mesh\.userData\.art\?1:\.07\+clamp\(Number\(prog\)\|\|0,0,100\)\/100\*\.65\}/,
-  'a escala deve manter o modo visual por estágio e o fallback procedural compacto');
+assert.match(client, /function escalaPlantaCultivada\(prog,mesh\)\{return mesh&&mesh\.userData&&mesh\.userData\.art\?\.28\+clamp\(Number\(prog\)\|\|0,0,100\)\/100\*\.72:\.07\+clamp\(Number\(prog\)\|\|0,0,100\)\/100\*\.65\}/,
+  'a escala deve crescer continuamente também nas artes WebP e manter o fallback procedural compacto');
 assert.match(client, /const PLANT_STAGE_ART_BY_NAME=Object\.freeze\(/,
   'o cliente deve declarar pacotes de artes dos cinco estágios por genética');
 assert.match(client, /const mapa=\(ud\.artTextures\|\|plantArtTextures\)\[e\]\|\|null/,

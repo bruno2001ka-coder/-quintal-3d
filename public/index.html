@@ -1990,7 +1990,7 @@ function buildPlant(s){
 // Escala e silhueta são compartilhadas pelo cliente local e pelo espelho online.
 // O servidor continua decidindo prog/estágio; isto só impede que a planta nasça
 // com tamanho adulto e deixa os leques aparecerem progressivamente.
-function escalaPlantaCultivada(prog,mesh){return mesh&&mesh.userData&&mesh.userData.art?1:.07+clamp(Number(prog)||0,0,100)/100*.65}
+function escalaPlantaCultivada(prog,mesh){return mesh&&mesh.userData&&mesh.userData.art?.28+clamp(Number(prog)||0,0,100)/100*.72:.07+clamp(Number(prog)||0,0,100)/100*.65}
 function aplicarFormaPlanta(mesh,estagio,prog,rendimento){
  const ud=mesh&&mesh.userData||{},e=clamp(Math.floor(Number(estagio)||0),0,4),p=clamp(Number(prog)||0,0,100);
  if(ud.art){
