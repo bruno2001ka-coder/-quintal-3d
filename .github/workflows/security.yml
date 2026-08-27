@@ -46,6 +46,7 @@ jobs:
           node --check testes/test-spawn-preclick.js
           node --check testes/test-regressao-client-ui.js
           node --check testes/test-modulos-negocios-funcionarios-cruzar.js
+          node --check testes/test-fazenda-multiplayer.js
           node --check testes/test-persistencia-restart.js
           node --check testes/test-render-config.js
           node check-client-syntax.js
@@ -105,6 +106,7 @@ jobs:
           npm run test:spawn
           npm run test:client-ui
           npm run test:modulos
+          npm run test:fazenda
           TEST_PERSIST_PORT=8808 npm run test:persistencia
           npm run test:colheita
           npm run test:render-config

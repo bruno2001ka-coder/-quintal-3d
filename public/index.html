@@ -297,7 +297,7 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
 <div class="modal mapPanel" id="mapPanel"><h2>MAPA DO QUINTAL</h2><div class="mapSub">Toque em FECHAR para voltar ao jogo. O ponto verde é você; o amarelo é o próximo objetivo.</div><canvas id="worldMapC" width="720" height="520"></canvas><div id="mapLegend"><span><i class="mapDot" style="background:#8fe063"></i>você / seu lote</span><span><i class="mapDot" style="background:#e8d264"></i>objetivo</span><span><i class="mapDot" style="background:#5aa8e0"></i>jogador / polícia</span><span><i class="mapDot" style="background:#e0503c"></i>rival</span></div><button class="close" data-close>FECHAR MAPA</button></div>
 <div class="modal" id="banca">
   <div class="tabs"><button class="tab on" data-t="sem">SEMENTES</button><button class="tab" data-t="cruz">CRUZAR</button>
-    <button class="tab" data-t="melh">ESTRUTURA</button><button class="tab" data-t="adu">ADUBO</button><button class="tab" data-t="neg">NEGÓCIOS</button><button class="tab" data-t="arm">ARSENAL</button></div>
+    <button class="tab" data-t="proc">GALPÃO</button><button class="tab" data-t="melh">ESTRUTURA</button><button class="tab" data-t="adu">ADUBO</button><button class="tab" data-t="neg">NEGÓCIOS</button><button class="tab" data-t="arm">ARSENAL</button></div>
   <div id="bancaBody"></div><button class="close" data-close>FECHAR</button>
 </div>
 <div class="modal" id="venda"><h2 class="mt">CLIENTE</h2>
@@ -616,7 +616,7 @@ function atualizarMetricas(dt){atualizarVisibilidadePerf();perfT-=dt;perfFrames+
 
 /* ═════════ COLISÃO ═════════ */
 const colliders=[];
-const col=(a,b,c,d)=>colliders.push({minX:a,maxX:b,minZ:c,maxZ:d});
+const col=(a,b,c,d)=>{const r={minX:a,maxX:b,minZ:c,maxZ:d,active:true};colliders.push(r);return r};
 
 /* ═════════ MAPA ═════════ */
 const Q={x0:-25,x1:9,z0:-13,z1:0};          // fundos — esticado a oeste pra bater ~500m² de lote
@@ -1364,7 +1364,8 @@ const RUAS_Z=[15,47,79,111,143],RUAS_X=[-50,-18,22,54];
 
 /* ═════════ ESTRADA DE TERRA + FAZENDA ═════════ */
 const fazPlots=[];
-let fazPortao=null;
+let fazPortao=null,farmGateCol=null,farmBarnCols=[];
+const farmTableVisuals=[];
 (function(){
  const g=new THREE.Group();
  // estrada de terra saindo da cidade
@@ -1416,17 +1417,46 @@ let fazPortao=null;
   t.position.set(0,.5+i*.62,0);folha.add(t)}
  folha.traverse(o=>{if(o.isMesh)o.castShadow=true});
  folha.position.set(0,0,FAZ.z0);g.add(folha);fazPortao=folha;
- // galpão
- const galp=new THREE.Group();
- const par=new THREE.Mesh(new THREE.BoxGeometry(14,4,9),
-  new THREE.MeshStandardMaterial({color:0xc9c2b2,roughness:.92}));
- par.position.y=2;par.castShadow=true;par.receiveShadow=true;galp.add(par);
- const tc=cTelha();
- const tel=new THREE.Mesh(new THREE.BoxGeometry(15,.2,10),
-  new THREE.MeshStandardMaterial({map:T(tc,10,2),roughness:.75,metalness:.15}));
- tel.position.y=4.15;tel.castShadow=true;galp.add(tel);
- galp.position.set(cx-22,0,cz-28);g.add(galp);
- col(cx-29,cx-15,cz-32.5,cz-23.5);
+ // Galpão central: as mesas ficam dentro, com uma porta larga na frente.
+ const galp=new THREE.Group(), barnX=0, barnZ=252, barnW=26, barnD=12, barnH=4.5;
+ const paredeGalp=new THREE.MeshStandardMaterial({color:0xb7aa95,roughness:.9});
+ const madeiraGalp=new THREE.MeshStandardMaterial({color:0x6b4228,roughness:.94});
+ const metalGalp=new THREE.MeshStandardMaterial({color:0x4f5557,roughness:.48,metalness:.55});
+ const luzGalp=new THREE.MeshStandardMaterial({color:0xffd27b,emissive:0xff8a27,emissiveIntensity:.75});
+ const parede=(w,h,d,x,y,z)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),paredeGalp);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;galp.add(o);return o};
+ parede(barnW,.25,barnD,0,.15,0);
+ parede(.35,barnH,barnD,-barnW/2, barnH/2,0);parede(.35,barnH,barnD,barnW/2,barnH/2,0);parede(barnW,barnH,.35,0,barnH/2,-barnD/2);
+ const lado=(barnW-3.2)/2;parede(lado,barnH,.35,-(3.2/2+lado/2),barnH/2,barnD/2);parede(lado,barnH,.35,(3.2/2+lado/2),barnH/2,barnD/2);
+ const tel=new THREE.Mesh(new THREE.BoxGeometry(barnW+1,.24,barnD+1),new THREE.MeshStandardMaterial({map:T(cTelha(),12,3),roughness:.75,metalness:.15}));
+ tel.position.y=barnH+.15;tel.castShadow=true;galp.add(tel);
+ // moldura e placa da entrada
+ [-1.6,1.6].forEach(x=>{const p=new THREE.Mesh(new THREE.BoxGeometry(.18,3.4,.22),madeiraGalp);p.position.set(x,1.7,barnD/2+.1);p.castShadow=true;galp.add(p)});
+ const verga=new THREE.Mesh(new THREE.BoxGeometry(3.5,.18,.22),madeiraGalp);verga.position.set(0,3.42,barnD/2+.1);galp.add(verga);
+ const placaGalp=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('GALPÃO · PRODUÇÃO','#8fe063')),transparent:true,depthTest:false}));placaGalp.scale.set(4.4,.62,1);placaGalp.position.set(0,4.25,barnD/2+.2);galp.add(placaGalp);
+ // seis mesas em duas filas de três; cada mesa recebe o estado do servidor.
+ [[-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]].forEach(([tx,tz],i)=>{
+  const mesa=new THREE.Group();mesa.position.set(tx,0,tz);
+  const tampo=new THREE.Mesh(new THREE.BoxGeometry(5.2, .16, 1.8),madeiraGalp);tampo.position.y=1.05;tampo.castShadow=true;mesa.add(tampo);
+  [-2.2,2.2].forEach(x=>{[-.65,.65].forEach(z=>{const pe=new THREE.Mesh(new THREE.BoxGeometry(.14,.98,.14),madeiraGalp);pe.position.set(x,.5,z);pe.castShadow=true;mesa.add(pe)})});
+  const placaMesa=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('MESA '+(i+1),'#e8d264')),transparent:true,depthTest:false}));placaMesa.scale.set(1.25,.28,1);placaMesa.position.set(0,1.72,0);mesa.add(placaMesa);
+  const lamp=new THREE.Mesh(new THREE.BoxGeometry(1.1,.08,.18),luzGalp.clone());lamp.position.set(0,2.25,0);mesa.add(lamp);
+  const caixa=new THREE.Mesh(new THREE.BoxGeometry(1.15,.22,.78),new THREE.MeshStandardMaterial({color:0x8fe063,roughness:.82}));caixa.position.set(0,1.2,0);caixa.visible=false;caixa.castShadow=true;mesa.add(caixa);
+  farmTableVisuals[i]={placa:placaMesa,lamp,caixa};
+  galp.add(mesa);
+ });
+ const luzCentral=new THREE.PointLight(0xffc477,1.6,20,2);luzCentral.position.set(0,3.4,0);galp.add(luzCentral);
+ galp.position.set(barnX,0,barnZ);g.add(galp);
+ farmBarnCols.push(
+  col(barnX-barnW/2-.2,barnX-barnW/2+.2,barnZ-barnD/2,barnZ+barnD/2),
+  col(barnX+barnW/2-.2,barnX+barnW/2+.2,barnZ-barnD/2,barnZ+barnD/2),
+  col(barnX-barnW/2,barnX+barnW/2,barnZ-barnD/2-.2,barnZ-barnD/2+.2),
+  col(barnX-barnW/2,barnX-1.6,barnZ+barnD/2-.2,barnZ+barnD/2+.2),
+  col(barnX+1.6,barnX+barnW/2,barnZ+barnD/2-.2,barnZ+barnD/2+.2)
+ );
+ // perímetro da fazenda: somente a abertura central é o portão.
+ col(FAZ.x0-.3,FAZ.x0+.3,FAZ.z0,FAZ.z1);col(FAZ.x1-.3,FAZ.x1+.3,FAZ.z0,FAZ.z1);
+ col(FAZ.x0,FAZ.x1,FAZ.z1-.3,FAZ.z1+.3);
+ farmGateCol=col(-FARM_GATE_W/2,FARM_GATE_W/2,FAZ.z0-.3,FAZ.z0+.3);
  // silo
  const silo=new THREE.Mesh(new THREE.CylinderGeometry(2.4,2.4,8,16),
   new THREE.MeshStandardMaterial({color:0xb0b4b8,roughness:.5,metalness:.55}));
@@ -1459,7 +1489,7 @@ const IMOVEIS=[
  {k:'predio1',nome:'Bloco A do condomínio',x:C.x0-4, z:C.z1+16,custo:4200, nivel:2,renda:110},
  {k:'predio2',nome:'Bloco B do condomínio',x:C.x0+11,z:C.z1+16,custo:6800, nivel:4,renda:180},
  {k:'predio3',nome:'Bloco C do condomínio',x:C.x0+26,z:C.z1+16,custo:11000,nivel:6,renda:290},
- {k:'fazenda',nome:'Fazenda na saída da cidade',x:0,z:FAZ.z0-4,custo:26000,nivel:8,renda:0}];
+ {k:'fazenda',nome:'Fazenda na saída da cidade',x:0,z:FAZ.z0-4,custo:26000,nivel:10,renda:0}];
 IMOVEIS.forEach(im=>{
  const g=new THREE.Group();
  // portão de acesso do imóvel
@@ -2377,7 +2407,7 @@ function aplicarEstado(d){
  G.lotes=(d.estoque||[]).map(l=>{
   const v=antigos.get(l.id);
   return {id:l.id,s:l.s,qtd:l.qtd,stage:l.estagio,qual:l.qual,
-   t:(v&&v.stage===l.estagio)?v.t:(l.estagio==='sec'?55:l.estagio==='cura'?70:0),
+   t:(v&&v.stage===l.estagio)?v.t:(l.estagio==='sec'?55:l.estagio==='cura'?70:l.estagio==='embalagem'?35:0),
    pedindo:false};
  });
   G.rackMax=d.rackMax||6;
@@ -2388,10 +2418,11 @@ function aplicarEstado(d){
   if(d.nivel!==undefined)G.nivel=Math.max(1,Math.min(12,Number(d.nivel)||1));
   if(d.xp!==undefined)G.xp=Math.max(0,Number(d.xp)||0);
   if(d.imoveis)IMOVEIS.forEach(im=>{im.comprado=d.imoveis.includes(im.k);if(im.ring)im.ring.material.color.setHex(im.comprado?0x8fe063:0xe8d264);
-   if(im.comprado&&im.k==='fazenda'){fazPlots.forEach(p=>{p.locked=false;p.group.visible=true})}
+   if(im.comprado&&im.k==='fazenda'){fazPlots.forEach(p=>{p.locked=false;p.group.visible=!mpConnected});if(fazPortao)fazPortao.visible=true}
    if(im.comprado&&im.k==='casanova'){casaNovaPlots.forEach(p=>{p.locked=false;p.group.visible=true})}});
   if(d.territorios)TERR.forEach(t=>{if(d.territorios[t.nome]){t.dono='seu';t.donoNome=null;t.ring.material.color.setHex(0x8fe063);t.disc.material.color.setHex(0x8fe063)}});
   if(d.funcs){G.func={};d.funcs.forEach(f=>{if(f&&f.cargo)G.func[f.cargo]=f})}
+  if(d.farm)aplicarFarmState(d.farm);
   if(d.up){const anteriores=Object.assign({},G.up);G.up=Object.assign({vasos:false,led:false,rack:false,placa:false,auto:false,irrig:false},d.up);
    Object.keys(G.up).forEach(k=>{if(G.up[k]&&!anteriores[k]&&typeof aplicarVisualMelhoria==='function')aplicarVisualMelhoria(k)})}
  renderSeeds();updHUD();renderStock();
@@ -2414,7 +2445,7 @@ function renderSeeds(){const el=$('seeds');el.innerHTML='';
   d.onclick=()=>{G.sel=i;renderSeeds()};el.appendChild(d)})}
 const barsHTML=s=>'<div class="bars">'+TRAITS.map(t=>`<i><b style="width:${s.t[t.k]}%"></b></i>`).join('')+'</div>';
 const traitLine=s=>TRAITS.map(t=>`${t.n} ${s.t[t.k]}`).join(' · ');
-const ESTAGIO_UI={sec:['SECANDO','#d8a05a'],cura:['CURANDO','#b98ee6'],pronto:['PRONTO','#8fe063']};
+const ESTAGIO_UI={sec:['SECANDO','#d8a05a'],cura:['CURANDO','#b98ee6'],embalagem:['EMBALANDO','#e8d264'],pronto:['PRONTO','#8fe063']};
 function linhasProducao(lotes,limite=6){
  const itens=(Array.isArray(lotes)?lotes:[]).filter(l=>l&&ESTAGIO_UI[l.stage]);
  if(!itens.length)return '';
@@ -2537,6 +2568,24 @@ function renderBanca(){
    bt.disabled=im.comprado||trava||G.cash<im.custo;
    bt.onclick=()=>comprarImovel(im);
    r.appendChild(bt);b.appendChild(r)})}
+ else if(bancaTab==='proc'){
+  b.innerHTML+='<h2 class="mt">GALPÃO · 6 MESAS</h2><div class="sub">As mesas ficam dentro do galpão da fazenda. Cada etapa é controlada pelo servidor e pode formar fila.</div>';
+  if(!farmUnlocked){b.innerHTML+='<div class="sub">A fazenda é liberada no nível 10 e precisa ser comprada.</div>'}
+  const ops=[['secagem','sec','SECAR'],['cura','cura','CURAR'],['embalagem','embalagem','EMBALAR']];
+  farmTablesOnline.forEach(table=>{
+   const r=document.createElement('div');r.className='row';
+   const ocupado=table.status==='working';
+   const desc=ocupado?`${table.operation} · termina em ${Math.max(0,Math.ceil((table.completesAt-Date.now())/1000))}s`:table.status==='queued'?`fila ${table.queueLength}`:'livre';
+   r.innerHTML=`<div class="sw" style="background:${ocupado?'#e8d264':'#8fe063'}"></div><div class="info">MESA ${table.stationId+1}<small>${desc}</small></div>`;
+   const area=document.createElement('div');area.style.display='flex';area.style.flexWrap='wrap';area.style.gap='4px';
+   ops.forEach(([op,stage,label])=>G.lotes.filter(l=>l.stage===stage&&Number(l.qtd)>0).forEach(l=>{
+    const btn=document.createElement('button');btn.textContent=`${label} · ${l.qtd} un`;btn.disabled=!farmUnlocked;
+    btn.onclick=()=>{if(pedirAoServidor({t:'farm_job',stationId:table.stationId,operation:op,stockId:l.id})){btn.disabled=true;toast(`${label.toLowerCase()} solicitado na mesa ${table.stationId+1}`)}};area.appendChild(btn);
+   }));
+   if(!area.childElementCount){const s=document.createElement('span');s.className='sub';s.textContent='sem lote nesta etapa';area.appendChild(s)}
+   r.appendChild(area);b.appendChild(r);
+  });
+ }
  else if(bancaTab==='adu'){
   b.innerHTML+='<h2 class="mt">ADUBO</h2><div class="sub">Compra aqui e usa na planta mais perto de você. Vale uma planta por dose.</div>';
   ADUBOS.forEach(ad=>{
@@ -2643,7 +2692,7 @@ function renderPonto(t){
   r.appendChild(btn);b.appendChild(r)})}
 
 function renderStock(){const el=$('stockList');
- const temProducao=G.lotes.some(l=>Number(l.qtd)>0&&['sec','cura','pronto'].includes(l.stage));
+  const temProducao=G.lotes.some(l=>Number(l.qtd)>0&&['sec','cura','embalagem','pronto'].includes(l.stage));
  $('stock').classList.toggle('hasProduction',temProducao);
  el.innerHTML=linhasProducao(G.lotes,5)||'sem produção';
  if(Number.isInteger(meuLoteIndex))atualizarMarcadoresBancada(lotesOnline[meuLoteIndex])}
@@ -3124,6 +3173,11 @@ surface.addEventListener('lostpointercapture',pEnd);
 
 /* ═════════ FOCO / AÇÃO ═════════ */
 let focus=null;
+let farmLastAutoTable=null;
+function abrirPainelFarmMesa(mesa){
+ if(!mesa||modalOpen()||farmLastAutoTable===mesa.stationId)return;
+ farmLastAutoTable=mesa.stationId;bancaTab='proc';renderBanca();$('banca')?.classList.add('on');
+}
 function findFocus(){
  // O jogo é online-only: sem lote, estado de carteira ou conexão não há
  // foco válido. Assim o fallback nunca altera economia ou plantas locais.
@@ -3136,8 +3190,13 @@ function findFocus(){
   if(Math.hypot(p.x-lote.portaoPos.x,p.z-lote.portaoPos.z)<2.2)
    return{t:'portaoCasa',lote};
  }
- // canteiro de lote online tem prioridade quando você está bem em cima dele
- for(const lote of lotesOnline){
+  // Fazenda: os 12 canteiros de cada setor são entidades visuais próprias.
+  for(const slot of farmSlotsOnline){
+   for(const P of slot.plots){if(Math.hypot(p.x-P.x,p.z-P.z)<1.45)return{t:'farmPlotOnline',P,slot}}
+  }
+  for(const mesa of farmTablesOnline){if(Math.hypot(p.x-mesa.x,p.z-mesa.z)<3.5)return{t:'farmTable',mesa}}
+  // canteiro de lote online tem prioridade quando você está bem em cima dele
+  for(const lote of lotesOnline){
   if(Math.abs(p.x-lote.x)>LOTE_W/2+2||Math.abs(p.z-lote.z)>LOTE_D/2+2)continue;
   for(const P of lote.plots){
    if(Math.hypot(p.x-P.x,p.z-P.z)<1.15)return{t:'plotOnline',P,lote};
@@ -3332,6 +3391,8 @@ function doAction(){
   pedirAoServidor({t:'portao',id:lote.portaoId});
   return;
  }
+ if(focus.t==='farmPlotOnline'){acaoFarmPlot(focus);return}
+ if(focus.t==='farmTable'){bancaTab='proc';renderBanca();$('banca').classList.add('on');return}
  if(focus.t==='plotOnline'){acaoPlotOnline(focus);return}
  if(focus.t==='imovel'){comprarImovel(focus.im);return}
  if(focus.t==='gate'){
@@ -4139,6 +4200,7 @@ function tick(){
   gateLeaf.rotation.y+=(targetY-gateLeaf.rotation.y)*Math.min(1,dt*4)}
 
  focus=G.running?findFocus():null;
+ if(focus?.t==='farmTable')abrirPainelFarmMesa(focus.mesa);else farmLastAutoTable=null;
  const pr=$('prompt');
  if(focus&&!modalOpen()&&!aiming){
   let txt='';
@@ -4160,6 +4222,17 @@ function tick(){
     dica('plantar','Este é um <b>canteiro</b>. Compre sementes no <b>INVENTÁRIO</b> e plante aqui. A planta cresce em tempo real, mesmo com o jogo fechado.');}
    else if(d.estagio===4)txt='<kbd>E</kbd> colher · pronta';
    else txt=`<kbd>E</kbd> regar · ${STAGE[d.estagio]} ${Math.round(d.prog)}% · água ${Math.round(d.agua*100)}%`;
+  }
+  else if(focus.t==='farmPlotOnline'){
+   const meu=focus.slot.slotIndex===meuFarmSlotIndex,d=focus.P.dados;
+   if(!meu)txt=focus.slot.donoNome?`setor de ${focus.slot.donoNome} · canteiro privado`:'setor privado · acesso bloqueado';
+   else if(!d){txt='<kbd>E</kbd> plantar no canteiro da fazenda';dica('plantar','Este canteiro pertence ao seu setor da fazenda. O plantio, crescimento e colheita são salvos pelo servidor.');}
+   else if(d.estagio===4)txt='<kbd>E</kbd> colher · planta pronta';
+   else txt=`<kbd>E</kbd> regar · ${STAGE[d.estagio]||'crescendo'} ${Math.round(Number(d.prog)||0)}% · água ${Math.round((Number(d.agua)||0)*100)}%`;
+  }
+  else if(focus.t==='farmTable'){
+   const t=focus.mesa,op=t.status==='working'?(t.operation||'operando').toUpperCase():t.status==='queued'?`fila ${t.queueLength||0}`:'livre';
+   txt=`<kbd>E</kbd> GALPÃO · mesa ${Number(t.stationId)+1} · ${op}`;
   }
   else if(focus.t==='invadir')txt=`<kbd>E</kbd> tomar ${focus.terr.nome} de ${focus.terr.donoNome}`;
   else if(focus.t==='imovel')txt=G.nivel<focus.im.nivel
@@ -4236,6 +4309,75 @@ function tick(){
 const NUM_LOTES_ONLINE=10;
 const lotesOnline=[];
 let meuLoteIndex=null;
+// Fazenda multiplayer: as posições são iguais às do servidor. Cada setor
+// tem 12 canteiros privados; as mesas ficam dentro do galpão central.
+const FARM_MAX_PLAYERS=6,FARM_PLOTS_PER_PLAYER=12;
+const FARM_AREA={x0:-46,x1:46,z0:172,z1:268};
+const FARM_BARN={x:0,z:252,w:26,d:12,doorW:3.2};
+const FARM_GATE_W=10;
+const FARM_SLOT_SPOTS=[[-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]];
+const FARM_PLOT_OFFSETS=[[-7,-10],[-2.3,-10],[2.4,-10],[-7,-4],[-2.3,-4],[2.4,-4],[-7,2],[-2.3,2],[2.4,2],[-7,8],[-2.3,8],[2.4,8]];
+const FARM_TABLE_SPOTS=[[-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]];
+const farmSlotsOnline=FARM_SLOT_SPOTS.map(([x,z],slotIndex)=>({slotIndex,x,z,donoNome:null,donoId:null,plots:FARM_PLOT_OFFSETS.map(([dx,dz],localIndex)=>({id:`farm_${slotIndex}_${localIndex}`,x:x+dx,z:z+dz,localIndex,dados:null,mesh:null,meshEstagio:-1,meshSeedId:null,group:null,ring:null}))}));
+const farmTablesOnline=FARM_TABLE_SPOTS.map(([dx,dz],stationId)=>({stationId,x:FARM_BARN.x+dx,z:FARM_BARN.z+dz,status:'idle',operation:null,ownerKey:null,quantity:0,completesAt:0,queueLength:0}));
+let meuFarmSlotIndex=null,farmUnlocked=false;
+const farmSectorCols=[];
+function farmPlotVisual(slot,P){
+ const g=P.group;if(!g)return;
+ const d=P.dados;
+ if(!d){if(P.mesh){g.remove(P.mesh);P.mesh=null}P.meshEstagio=-1;P.meshSeedId=null;return}
+ const seedId=d.s&&d.s.id;
+ if(!P.mesh||P.meshEstagio!==d.estagio||P.meshSeedId!==seedId){if(P.mesh)g.remove(P.mesh);P.mesh=buildPlant(d.s);P.mesh.position.set(0,P.baseY||.15,0);g.add(P.mesh);P.meshEstagio=d.estagio;P.meshSeedId=seedId}
+ if(P.mesh){P.mesh.scale.setScalar(escalaPlantaCultivada(d.prog,P.mesh));aplicarFormaPlanta(P.mesh,d.estagio,d.prog,d.s&&d.s.t?d.s.t.rendimento:0)}
+}
+function farmSectorFence(slot){
+ const x=slot.x,z=slot.z,w=24,d=28,m=new THREE.MeshStandardMaterial({color:0x6b4228,roughness:.94});
+ const fence=(ww,dd,px,pz)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(ww,1.25,dd),m);o.position.set(px,.62,pz);o.castShadow=true;o.receiveShadow=true;slot.group.add(o)};
+ fence(.18,d,x-w/2,z);fence(.18,d,x+w/2,z);fence(w,.18,x,z+d/2);
+ fence((w-3.2)/2,.18,x-(3.2/2+(w-3.2)/4),z-d/2);fence((w-3.2)/2,.18,x+(3.2/2+(w-3.2)/4),z-d/2);
+ farmSectorCols.push(col(x-w/2-.12,x-w/2+.12,z-d/2,z+d/2),col(x+w/2-.12,x+w/2+.12,z-d/2,z+d/2),col(x-w/2,x+w/2,z+d/2-.12,z+d/2+.12),col(x-w/2,x-1.6,z-d/2-.12,z-d/2+.12),col(x+1.6,x+w/2,z-d/2-.12,z-d/2+.12));
+ slot.gateCol=col(x-1.6,x+1.6,z-d/2-.25,z-d/2+.25);farmSectorCols.push(slot.gateCol);
+ const gate=new THREE.Group();for(let i=0;i<5;i++){const b=new THREE.Mesh(new THREE.BoxGeometry(.06,1.08,.08),m);b.position.set(-1.3+i*.65,.55,0);gate.add(b)}[.16,.94].forEach(y=>{const b=new THREE.Mesh(new THREE.BoxGeometry(3.2,.07,.08),m);b.position.set(0,y,0);gate.add(b)});gate.position.set(x,0,z-d/2);gate.castShadow=true;slot.group.add(gate);slot.gateLeaf=gate;
+ const sign=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('SETOR '+(slot.slotIndex+1),'#e8d264')),transparent:true,depthTest:false}));sign.scale.set(2.8,.48,1);sign.position.set(x,2.2,z-d/2-.2);slot.group.add(sign);slot.sign=sign;
+}
+function montarFarmSetor(slot){
+ if(slot.montado)return;
+ slot.group=new THREE.Group();slot.group.name='farmSector_'+slot.slotIndex;slot.group.position.set(0,0,0);
+ farmSectorFence(slot);
+ slot.plots.forEach(P=>{
+  const pg=new THREE.Group();pg.position.set(P.x,0,P.z);slot.group.add(pg);P.group=pg;P.baseY=.15;
+  const wood=new THREE.MeshStandardMaterial({color:0x6a4c30,roughness:1});
+  [[0,-1.45,2.3,.12],[0,1.45,2.3,.12],[-1.05,0,.12,2.3],[1.05,0,.12,2.3]].forEach(b=>{const o=new THREE.Mesh(new THREE.BoxGeometry(b[2],.18,b[3]),wood);o.position.set(b[0],.09,b[1]);o.castShadow=true;pg.add(o)});
+  const soil=new THREE.Mesh(new THREE.BoxGeometry(2.1,.14,2.8),new THREE.MeshStandardMaterial({color:0x3b281c,roughness:1}));soil.position.y=.11;soil.receiveShadow=true;pg.add(soil);
+  const drip=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,2,6),new THREE.MeshStandardMaterial({color:0x22282a,roughness:.6}));drip.rotation.z=Math.PI/2;drip.position.set(0,.28,0);pg.add(drip);
+  P.ring=new THREE.Mesh(new THREE.RingGeometry(1.15,1.28,26),new THREE.MeshBasicMaterial({color:0x8fe063,transparent:true,opacity:0,side:THREE.DoubleSide}));P.ring.rotation.x=-Math.PI/2;P.ring.position.y=.22;pg.add(P.ring);
+  farmPlotVisual(slot,P);
+ });
+ slot.group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});scene.add(slot.group);slot.montado=true;farmAtualizarPortao(slot);farmAtualizarNome(slot);
+}
+function farmAtualizarPortao(slot){const aberto=farmUnlocked&&meuFarmSlotIndex===slot.slotIndex;if(slot.gateCol)slot.gateCol.active=!aberto;if(slot.gateLeaf){slot.gateLeaf.visible=true;slot.gateLeaf.rotation.y=aberto?-1.25:0}}
+function farmAtualizarNome(slot){if(slot.sign){const meu=meuFarmSlotIndex===slot.slotIndex;slot.sign.material.map=T(placaLote(meu?'SEU SETOR':(slot.donoNome||'SETOR '+(slot.slotIndex+1)),meu?'#8fe063':(slot.donoNome?'#5aa8e0':'#9aa0a6')));slot.sign.material.needsUpdate=true}}
+function farmAplicarPlot(slotIndex,localIndex,plot){
+ const slot=farmSlotsOnline[slotIndex];if(!slot||!slot.plots[localIndex])return;const P=slot.plots[localIndex];P.id=plot&&plot.id||P.id;P.dados=plot&&plot.plant||null;if(slot.montado)farmPlotVisual(slot,P);
+}
+function aplicarFarmSlotsMeta(slots){
+ (slots||[]).forEach(s=>{const slot=farmSlotsOnline[s.slotIndex];if(!slot)return;slot.donoNome=s.donoNome||null;slot.donoId=s.donoId||null;montarFarmSetor(slot);farmAtualizarNome(slot);});
+}
+function atualizarFarmMesaVisual(t){
+ const ref=farmTableVisuals[t.stationId];if(!ref)return;
+ let texto='LIVRE',cor='#8fe063',hex=0x8fe063,caixa=false;
+ if(t.status==='working'){texto=String(t.operation||'OPERANDO').toUpperCase().slice(0,12);cor='#e8d264';hex=0xe8d264;caixa=true}
+ else if(t.status==='queued'){texto=`FILA ${Math.max(0,Number(t.queueLength)||0)}`.slice(0,12);cor='#5aa8e0';hex=0x5aa8e0;caixa=true}
+ ref.placa.material.map=T(placaLote(texto,cor));ref.placa.material.needsUpdate=true;
+ ref.lamp.material.color.setHex(hex);ref.lamp.material.emissive.setHex(hex);ref.caixa.material.color.setHex(hex);ref.caixa.visible=caixa;
+}
+function aplicarFarmTabelas(tables){(tables||[]).forEach(t=>{const v=farmTablesOnline[t.stationId];if(!v)return;Object.assign(v,t);atualizarFarmMesaVisual(v)});}
+function aplicarFarmState(f){
+ if(!f)return;farmUnlocked=!!f.unlocked;meuFarmSlotIndex=f.slot&&Number.isInteger(f.slot.slotIndex)?f.slot.slotIndex:null;
+ aplicarFarmSlotsMeta(f.slots||[]);
+ if(f.slot){const slot=farmSlotsOnline[f.slot.slotIndex];if(slot){slot.donoNome=f.slot.donoNome||slot.donoNome;slot.donoId=f.slot.donoId||slot.donoId;(f.slot.plots||[]).forEach((p,i)=>farmAplicarPlot(slot.slotIndex,i,p));farmAtualizarNome(slot)}}
+ aplicarFarmTabelas(f.tables||[]);if(farmGateCol)farmGateCol.active=!farmUnlocked;if(fazPortao){fazPortao.visible=true;fazPortao.rotation.y=farmUnlocked?-1.25:0}farmSlotsOnline.forEach(farmAtualizarPortao);
+}
 
 function placaLote(texto,cor){
  const c=cv(256,64),g=c.getContext('2d');
@@ -4668,6 +4810,17 @@ function acaoPlotOnline(focus){
   }
  }catch(e){toast('não consegui falar com o servidor')}
 }
+function acaoFarmPlot(focus){
+ if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return}
+ const slot=focus.slot,P=focus.P;if(!slot||slot.slotIndex!==meuFarmSlotIndex){toast(slot&&slot.donoNome?`canteiro do setor de ${slot.donoNome}`:'setor ainda não atribuído');return}
+ const d=P.dados;
+ try{
+  if(!d){const e=G.bank[G.sel];if(!e||e.qtd<=0){toast('sem semente — abra o inventário');return}pedirAoServidor({t:'farm_plantar',plotId:P.id,seedId:e.s.id});toast(`${e.s.nome} solicitada no canteiro da fazenda`)}
+  else if(d.estagio===4){if(G.lotes.length>=G.rackMax){toast('bancada cheia');return}pedirAoServidor({t:'farm_colher',plotId:P.id})}
+  else if(d.praga||d.agua<=.88){pedirAoServidor({t:'farm_regar',plotId:P.id});G.watering=.5;splash(P.x,P.baseY,P.z);blip(240,.2,'sine',.05)}
+  else toast(`crescendo · ${Math.round(Number(d.prog)||0)}%`);
+ }catch(e){toast('não consegui falar com o servidor')}
+}
 function aplicarPlotOnline(loteIndex,plotIndex,dados){
  const lote=lotesOnline[loteIndex]; if(!lote)return;
  const P=lote.plots[plotIndex]; if(!P)return;
@@ -5032,6 +5185,7 @@ function mpConnect(){
   try{
    if(msg.t==='welcome'){
     mpId=msg.id;
+    aplicarFarmSlotsMeta(msg.farms||[]);aplicarFarmTabelas(msg.farmTables||[]);
     (msg.players||[]).forEach(p=>mpAddPlayer(p.id,p.nome,p.x,p.y,p.z,p.ry,p.avatarId));
     // estado do mundo que já existia antes de eu entrar
     (msg.territorios||[]).forEach(T=>{
@@ -5075,6 +5229,8 @@ function mpConnect(){
     if(p)toast(`${p.nome} saiu`);
     mpRemovePlayer(msg.id);
    } else if(msg.t==='snap'){
+    aplicarFarmTabelas(msg.farmTables||[]);
+    (msg.farms||[]).forEach(S=>{const slot=farmSlotsOnline[S.slotIndex];if(!slot)return;slot.donoNome=S.donoNome||null;slot.donoId=S.donoId||null;montarFarmSetor(slot);(S.plots||[]).forEach((P,i)=>farmAplicarPlot(S.slotIndex,i,P));farmAtualizarNome(slot)});
     // O servidor manda o estado completo de um lote apenas quando ele entra
     // no AOI. Guardamos o dado mesmo se a casa ainda estiver desmontada; o
     // streaming o materializa quando o jogador se aproximar.
@@ -5193,11 +5349,25 @@ function mpConnect(){
       atualizarPlacaLote(lote);
       if(msg.lote&&msg.lote.plots)
        msg.lote.plots.forEach((pl,i)=>aplicarPlotOnline(meuLoteIndex,i,pl));
+      if(msg.farm){aplicarFarmState({unlocked:true,slot:msg.farm,slots:[msg.farm],tables:msg.farmTables||[]})}
+      else {farmUnlocked=false;meuFarmSlotIndex=null;farmSlotsOnline.forEach(farmAtualizarPortao);if(fazPortao)fazPortao.rotation.y=0}
       mpReady=true;mpReentrada=false;
       if(estadoDoServidor)mostrarJogoDisponivel();
       toast(`seu lote é o nº ${meuLoteIndex+1} — vai lá plantar`);
      }
     }
+   } else if(msg.t==='farm_slots'){
+    aplicarFarmSlotsMeta(msg.slots||[]);farmSlotsOnline.forEach(farmAtualizarPortao);
+   } else if(msg.t==='farm_tables'){
+    aplicarFarmTabelas(msg.tables||[]);if($('banca')&&$('banca').classList.contains('on')&&bancaTab==='proc')renderBanca();
+   } else if(msg.t==='farm_plot_update'){
+    farmAplicarPlot(msg.slotIndex,msg.localIndex,msg.plot);
+   } else if(msg.t==='farm_plots_update'){
+    (msg.updates||[]).forEach(u=>farmAplicarPlot(msg.slotIndex,u.localIndex,u.plot));
+   } else if(msg.t==='farm_job_started'){
+    toast(`mesa ${Number(msg.stationId)+1} ocupada: ${msg.operation}`);if($('banca')&&$('banca').classList.contains('on')&&bancaTab==='proc')renderBanca();
+   } else if(msg.t==='farm_job_ok'){
+    toast(`${msg.operation} concluída na mesa ${Number(msg.stationId)+1}`);if($('banca')&&$('banca').classList.contains('on')&&bancaTab==='proc')renderBanca();
    } else if(msg.t==='lote_update'){
     const lote=lotesOnline[msg.loteIndex];
     if(lote)aplicarPlotOnline(msg.loteIndex,msg.plotIndex,msg.plot);

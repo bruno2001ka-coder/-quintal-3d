@@ -85,6 +85,25 @@ const TIPO_PLOT = [
   'estufa','estufa','estufa','estufa',
   'grow','grow','grow','grow','grow','grow'
 ];
+// Fazenda multiplayer: cada conta pode ter um setor persistente com 12
+// canteiros. O limite de seis é da fazenda, não do servidor inteiro.
+const FARM_MAX_PLAYERS = 6;
+const FARM_PLOTS_PER_PLAYER = 12;
+const FARM_SLOT_SPOTS = [
+  [-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]
+];
+const FARM_PLOT_OFFSETS = [
+  [-7,-10],[-2.3,-10],[2.4,-10],
+  [-7,-4],[-2.3,-4],[2.4,-4],
+  [-7,2],[-2.3,2],[2.4,2],
+  [-7,8],[-2.3,8],[2.4,8]
+];
+const FARM_BARN = Object.freeze({ x:0, z:252, w:26, d:12, doorW:3.2 });
+const FARM_GATE_W = 10;
+const FARM_TABLE_SPOTS = [
+  [-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]
+];
+const FARM_AREA = Object.freeze({ x0:-46, x1:46, z0:172, z1:268 });
 const DAYLEN            = 600;                   // seg reais = 1 dia de jogo (igual o cliente)
 const GROW_MS           = 1000;                  // recalcula plantas a cada 1s
 // Crescimento agrícola: a água deve exigir atenção, não congelar a colheita.
@@ -97,6 +116,11 @@ const num = (v, min, max, def = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
 };
+const FARM_STAGE_TIMES = Object.freeze({
+  secagem: num(process.env.FARM_SEC_S, .1, 3600, 55),
+  cura: num(process.env.FARM_CURA_S, .1, 3600, 70),
+  embalagem: num(process.env.FARM_EMBALAGEM_S, .1, 3600, 35)
+});
 const str = (v, max) => String(v == null ? '' : v).slice(0, max);
 const CLIENTE_FIRST_S   = num(process.env.CLIENTE_FIRST_S, 1, 60, 5);
 const CLIENTE_MIN_S     = num(process.env.CLIENTE_MIN_S, 1, 120, 12);
@@ -142,6 +166,23 @@ for (let i = 0; i < NUM_LOTES; i++) {
 }
 const loteDe = new Map();   // chave persistente -> índice do lote
 
+// Setores privados da fazenda. O slot continua reservado após desconexão:
+// reconectar recupera os mesmos 12 canteiros e nunca recebe o setor de outro.
+const farmSlots = FARM_SLOT_SPOTS.map(([x, z], slotIndex) => ({
+  slotIndex, ownerKey: null, ownerName: null, unlockedAt: 0, updatedAt: 0,
+  x, z,
+  plots: Array.from({ length: FARM_PLOTS_PER_PLAYER }, (_, localIndex) => ({
+    id: `farm_${slotIndex}_${localIndex}`, ownerKey: null, slotIndex, localIndex,
+    x: x + FARM_PLOT_OFFSETS[localIndex][0],
+    z: z + FARM_PLOT_OFFSETS[localIndex][1],
+    plant: null
+  }))
+}));
+const farmSlotDe = new Map();
+const farmTables = FARM_TABLE_SPOTS.map(([x, z], stationId) => ({
+  stationId, x: FARM_BARN.x + x, z: FARM_BARN.z + z,
+  job: null, queue: []
+}));
 
 function atribuirLote(chave, nome) {
   if (loteDe.has(chave)) {
@@ -303,7 +344,14 @@ function iniciarBanco() {
         rack_max INTEGER DEFAULT 6, armor REAL DEFAULT 0, municao TEXT DEFAULT '{}', funcs TEXT DEFAULT '[]', imoveis TEXT DEFAULT '[]', nivel INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, territorios TEXT DEFAULT '{}', atualizado BIGINT)`)
         .then(() => pg.query(`CREATE TABLE IF NOT EXISTS lotes (
           idx INTEGER PRIMARY KEY, dono_chave TEXT, dono_nome TEXT,
-          plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0)`))
+          plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);
+          CREATE TABLE IF NOT EXISTS farm_slots (
+            slot_index INTEGER PRIMARY KEY, owner_key TEXT UNIQUE, owner_name TEXT,
+            plots TEXT DEFAULT '[]', unlocked_at BIGINT DEFAULT 0, updated_at BIGINT DEFAULT 0);
+          CREATE TABLE IF NOT EXISTS farm_jobs (
+            job_id TEXT PRIMARY KEY, owner_key TEXT NOT NULL, station_id INTEGER NOT NULL,
+            operation TEXT NOT NULL, stock_id BIGINT NOT NULL, quantity INTEGER NOT NULL,
+            started_at BIGINT NOT NULL, completes_at BIGINT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', source_json TEXT DEFAULT '{}')`))
         .then(() => pg.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS armor REAL DEFAULT 0'))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS municao TEXT DEFAULT '{}'"))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS funcs TEXT DEFAULT '[]'"))
@@ -311,7 +359,9 @@ function iniciarBanco() {
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nivel INTEGER DEFAULT 1"))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS xp INTEGER DEFAULT 0"))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS territorios TEXT DEFAULT '{}'"))
+        .then(() => pg.query("ALTER TABLE farm_jobs ADD COLUMN IF NOT EXISTS source_json TEXT DEFAULT '{}'"))
         .then(() => { console.log('banco: Postgres pronto'); return carregarLotes(); })
+        .then(() => carregarFarmState())
         .then(() => carregarTerritoriosPersistidos())
         .then(() => { bancoPronto = true; })
         .catch(e => { console.error('Postgres falhou:', e.message); pg = null; dbTipo = 'indisponivel'; bancoPronto = false; });
@@ -336,7 +386,14 @@ function iniciarBanco() {
       rack_max INTEGER DEFAULT 6, armor REAL DEFAULT 0, municao TEXT DEFAULT '{}', funcs TEXT DEFAULT '[]', imoveis TEXT DEFAULT '[]', nivel INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, territorios TEXT DEFAULT '{}', atualizado INTEGER)`);
     db.exec(`CREATE TABLE IF NOT EXISTS lotes (
       idx INTEGER PRIMARY KEY, dono_chave TEXT, dono_nome TEXT,
-      plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0)`);
+      plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS farm_slots (
+      slot_index INTEGER PRIMARY KEY, owner_key TEXT UNIQUE, owner_name TEXT,
+      plots TEXT DEFAULT '[]', unlocked_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS farm_jobs (
+      job_id TEXT PRIMARY KEY, owner_key TEXT NOT NULL, station_id INTEGER NOT NULL,
+      operation TEXT NOT NULL, stock_id INTEGER NOT NULL, quantity INTEGER NOT NULL,
+      started_at INTEGER NOT NULL, completes_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', source_json TEXT DEFAULT '{}')`);
     try { db.exec('ALTER TABLE usuarios ADD COLUMN armor REAL DEFAULT 0'); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN municao TEXT DEFAULT '{}'"); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN funcs TEXT DEFAULT '[]'"); } catch (_) {}
@@ -344,9 +401,11 @@ function iniciarBanco() {
     try { db.exec("ALTER TABLE usuarios ADD COLUMN nivel INTEGER DEFAULT 1"); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN xp INTEGER DEFAULT 0"); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN territorios TEXT DEFAULT '{}'"); } catch (_) {}
+    try { db.exec("ALTER TABLE farm_jobs ADD COLUMN source_json TEXT DEFAULT '{}'" ); } catch (_) {}
     dbTipo = 'sqlite';
-    console.log('banco: SQLite em ' + DB_PATH);
+      console.log('banco: SQLite em ' + DB_PATH);
     carregarLotes();
+    carregarFarmState();
     carregarTerritoriosPersistidos();
     bancoPronto = true;
   } catch (e) {
@@ -495,10 +554,300 @@ function carregarLotes() {
   }
   return Promise.resolve();
 }
+function farmPlantPublic(pl) {
+  if (!pl || !pl.s) return null;
+  return { id: pl.id || null, s: pl.s, prog: num(pl.prog, 0, 100, 0), agua: num(pl.agua, 0, 1, 0),
+    saude: num(pl.saude, 0, 1, 0), praga: num(pl.praga, 0, 1, 0), estagio: num(pl.estagio, 0, 4, 0) | 0,
+    adubOrg: num(pl.adubOrg, 0, 1000, 0), adubCres: num(pl.adubCres, 0, 1000, 0), adubFlor: !!pl.adubFlor };
+}
+function farmPlotPublic(p, includePlant = true) {
+  return { id: p.id, slotIndex: p.slotIndex, localIndex: p.localIndex, x: p.x, z: p.z,
+    plant: includePlant ? farmPlantPublic(p.plant) : null };
+}
+function farmSlotPublic(slot, includePlots = false) {
+  return { slotIndex: slot.slotIndex, x: slot.x, z: slot.z,
+    donoNome: slot.ownerName || null, donoId: slot.ownerKey || null,
+    plots: includePlots ? slot.plots.map(p => farmPlotPublic(p, true)) : [] };
+}
+function farmTablePublic(table) {
+  const j = table.job;
+  return { stationId: table.stationId, x: table.x, z: table.z,
+    status: j ? 'working' : (table.queue.length ? 'queued' : 'idle'),
+    jobId: j ? j.jobId : null, operation: j ? j.operation : null,
+    ownerKey: j ? j.ownerKey : null, quantity: j ? j.quantity : 0,
+    completesAt: j ? j.completesAt : 0, queueLength: table.queue.length };
+}
+function farmStateFor(j) {
+  const slot = j && j.chave && farmSlotDe.has(j.chave) ? farmSlots[farmSlotDe.get(j.chave)] : null;
+  return { unlocked: !!slot, slot: slot ? farmSlotPublic(slot, true) : null,
+    slots: farmSlots.map(s => farmSlotPublic(s, false)),
+    tables: farmTables.map(farmTablePublic) };
+}
+function aplicarFarmJobRows(rows) {
+  for (const table of farmTables) { table.job = null; table.queue = []; }
+  for (const r of rows || []) {
+    const stationId = Number(r.station_id), table = farmTables[stationId];
+    if (!table || !r.owner_key) continue;
+    let sourceRaw = {};
+    try { sourceRaw = JSON.parse(r.source_json || '{}'); } catch (_) { sourceRaw = {}; }
+    const source = { s: limparStrain(sourceRaw.s), qual: num(sourceRaw.qual, 0, 1.35, .55), desde: num(sourceRaw.desde, 0, Number.MAX_SAFE_INTEGER, agora()) };
+    if (!source.s) { console.error('job de fazenda ignorado: genética de origem inválida'); continue; }
+    const job = { jobId: String(r.job_id), ownerKey: String(r.owner_key), stationId,
+      operation: String(r.operation), stockId: Number(r.stock_id), quantity: Number(r.quantity),
+      startedAt: Number(r.started_at), completesAt: Number(r.completes_at), status: String(r.status || 'queued'), source };
+    if (job.status === 'running' && !table.job) table.job = job;
+    else { job.status = 'queued'; table.queue.push(job); }
+  }
+}
+function aplicarFarmSlotRows(rows) {
+  for (const r of rows || []) {
+    const slot = farmSlots[Number(r.slot_index)]; if (!slot) continue;
+    slot.ownerKey = r.owner_key || null; slot.ownerName = nomeSeguro(r.owner_name) || null;
+    slot.unlockedAt = Number(r.unlocked_at) || 0; slot.updatedAt = Number(r.updated_at) || 0;
+    if (slot.ownerKey) farmSlotDe.set(slot.ownerKey, slot.slotIndex);
+    let ps = []; try { ps = JSON.parse(r.plots || '[]'); } catch (_) { ps = []; }
+    for (let i = 0; i < FARM_PLOTS_PER_PLAYER; i++) {
+      const p = slot.plots[i], raw = ps[i];
+      p.ownerKey = slot.ownerKey;
+      if (!raw) { p.plant = null; continue; }
+      p.id = String(raw.id || `farm_${slot.slotIndex}_${i}`);
+      p.plant = farmPlantPublic(raw.plant || raw);
+      if (!p.plant || !p.plant.s) p.plant = null;
+    }
+  }
+}
+function carregarFarmState() {
+  if (dbTipo === 'sqlite' && db) {
+    try {
+      aplicarFarmSlotRows(db.prepare('SELECT * FROM farm_slots ORDER BY slot_index').all());
+      aplicarFarmJobRows(db.prepare("SELECT * FROM farm_jobs WHERE status IN ('queued','running') ORDER BY started_at").all());
+    } catch (e) { console.error('erro ao carregar fazenda:', e.message); }
+    return Promise.resolve();
+  }
+  if (dbTipo === 'postgres' && pg) {
+    return Promise.all([
+      pg.query('SELECT * FROM farm_slots ORDER BY slot_index'),
+      pg.query("SELECT * FROM farm_jobs WHERE status IN ('queued','running') ORDER BY started_at")
+    ]).then(([slots, jobs]) => { aplicarFarmSlotRows(slots.rows); aplicarFarmJobRows(jobs.rows); })
+      .catch(e => { console.error('erro ao carregar fazenda (pg):', e.message); throw e; });
+  }
+  return Promise.resolve();
+}
+function salvarFarmState() {
+  const rows = farmSlots.map(s => [s.slotIndex, s.ownerKey, s.ownerName || '', JSON.stringify(s.plots.map(p => ({
+    id:p.id, plant:farmPlantPublic(p.plant)
+  }))), s.unlockedAt || 0, s.updatedAt || agora()]);
+  if (dbTipo === 'sqlite' && db) {
+    try {
+      const st = db.prepare(`INSERT INTO farm_slots (slot_index,owner_key,owner_name,plots,unlocked_at,updated_at)
+        VALUES (?,?,?,?,?,?) ON CONFLICT(slot_index) DO UPDATE SET owner_key=excluded.owner_key,
+        owner_name=excluded.owner_name, plots=excluded.plots, unlocked_at=excluded.unlocked_at, updated_at=excluded.updated_at`);
+      db.transaction(() => rows.forEach(r => st.run(...r)))();
+    } catch (e) { console.error('erro ao salvar fazenda:', e.message); }
+  } else if (dbTipo === 'postgres' && pg) {
+    for (const r of rows) pg.query(`INSERT INTO farm_slots (slot_index,owner_key,owner_name,plots,unlocked_at,updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(slot_index) DO UPDATE SET owner_key=EXCLUDED.owner_key,
+      owner_name=EXCLUDED.owner_name, plots=EXCLUDED.plots, unlocked_at=EXCLUDED.unlocked_at, updated_at=EXCLUDED.updated_at`, r)
+      .catch(e => console.error('erro ao salvar fazenda (pg):', e.message));
+  }
+  salvarFarmJobs();
+}
+function listarFarmJobs() { return farmTables.flatMap(t => [t.job, ...t.queue]).filter(Boolean); }
+let farmJobsSaveChain = Promise.resolve();
+function salvarFarmJobs() {
+  const jobs = listarFarmJobs();
+  if (dbTipo === 'sqlite' && db) {
+    try {
+      db.transaction(() => {
+        db.prepare('DELETE FROM farm_jobs').run();
+        const st = db.prepare(`INSERT INTO farm_jobs (job_id,owner_key,station_id,operation,stock_id,quantity,started_at,completes_at,status,source_json)
+          VALUES (?,?,?,?,?,?,?,?,?,?)`);
+        jobs.forEach(j => st.run(j.jobId,j.ownerKey,j.stationId,j.operation,j.stockId,j.quantity,j.startedAt,j.completesAt,j.status,JSON.stringify(j.source || {})));
+      })();
+    } catch (e) { console.error('erro ao salvar mesas:', e.message); }
+  } else if (dbTipo === 'postgres' && pg) {
+    // Pool.query em DELETE + INSERT separados permitia que dois saves se
+    // cruzassem e apagassem o snapshot mais novo. Uma conexão dedicada e
+    // transação tornam cada snapshot indivisível; a fila preserva a ordem.
+    farmJobsSaveChain = farmJobsSaveChain.catch(() => {}).then(async () => {
+      const client = await pg.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM farm_jobs');
+        for (const j of jobs) await client.query(`INSERT INTO farm_jobs
+          (job_id,owner_key,station_id,operation,stock_id,quantity,started_at,completes_at,status,source_json)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [j.jobId,j.ownerKey,j.stationId,j.operation,j.stockId,j.quantity,j.startedAt,j.completesAt,j.status,JSON.stringify(j.source || {})]);
+        await client.query('COMMIT');
+      } catch (e) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+        console.error('erro ao salvar mesas (pg):', e.message);
+      } finally { client.release(); }
+    });
+  }
+}
+function farmSlotDoJogador(j) {
+  if (!j || !j.chave || !farmSlotDe.has(j.chave)) return null;
+  const slot = farmSlots[farmSlotDe.get(j.chave)];
+  const c = j.carteiraPronta ? carteiras.get(j.chave) : null;
+  if (!slot || !c || c.nivel < 10 || !(c.imoveis || []).includes('fazenda')) return null;
+  return slot;
+}
+function atribuirFarmSlot(j, c) {
+  if (!j || !j.chave || !c || Number(c.nivel) < 10 || !(c.imoveis || []).includes('fazenda')) return null;
+  if (farmSlotDe.has(j.chave)) {
+    const slot = farmSlots[farmSlotDe.get(j.chave)];
+    if (slot) { slot.ownerName = j.nome; slot.updatedAt = agora(); }
+    return slot || null;
+  }
+  const slot = farmSlots.find(s => !s.ownerKey);
+  if (!slot) return null;
+  slot.ownerKey = j.chave; slot.ownerName = j.nome; slot.unlockedAt = agora(); slot.updatedAt = slot.unlockedAt;
+  slot.plots.forEach(p => { p.ownerKey = j.chave; });
+  farmSlotDe.set(j.chave, slot.slotIndex);
+  salvarFarmState();
+  farmEnviarSlots();
+  return slot;
+}
+function farmSetorEm(x, z) {
+  return farmSlots.find(s => x >= s.x - 12 && x <= s.x + 12 && z >= s.z - 14 && z <= s.z + 14) || null;
+}
+function farmPlotDoJogador(j, id) {
+  const slot = farmSlotDoJogador(j);
+  if (!slot) { enviar(j, { t:'recusado', motivo:'fazenda bloqueada — nível 10 e fazenda comprada' }); return null; }
+  const plot = slot.plots.find(p => p.id === String(id || '').slice(0, 32));
+  if (!plot) { enviar(j, { t:'recusado', motivo:'canteiro da fazenda não pertence ao jogador' }); metricas.rejeitadas++; return null; }
+  return plot;
+}
+function farmLocalPlotDoJogador(j, index) {
+  const slot = farmSlotDoJogador(j);
+  if (!slot) { enviar(j, { t:'recusado', motivo:'fazenda bloqueada — nível 10 e fazenda comprada' }); return null; }
+  const i = num(index, 0, FARM_PLOTS_PER_PLAYER - 1, -1) | 0;
+  const plot = slot.plots[i];
+  if (!plot) { metricas.rejeitadas++; return null; }
+  return plot;
+}
+function farmDistanciaMesa(j, stationId) {
+  const table = farmTables[num(stationId, 0, farmTables.length - 1, -1) | 0];
+  return table && Math.hypot(j.x - table.x, j.z - table.z) <= 3.4 ? table : null;
+}
+function farmTemAcessoAoGalpao(j) {
+  const slot = farmSlotDoJogador(j);
+  if (!slot) return false;
+  return j.x >= FARM_BARN.x - FARM_BARN.w / 2 - 1 && j.x <= FARM_BARN.x + FARM_BARN.w / 2 + 1 &&
+    j.z >= FARM_BARN.z - FARM_BARN.d / 2 - 1 && j.z <= FARM_BARN.z + FARM_BARN.d / 2 + 1;
+}
+function farmEnviarSlots() {
+  const ev = { t:'farm_slots', slots:farmSlots.map(s => farmSlotPublic(s, false)) };
+  for (const j of jogadores.values()) if (j.autenticado) enviar(j, ev);
+}
+function farmEnviarTabelas() {
+  const ev = { t:'farm_tables', tables:farmTables.map(farmTablePublic) };
+  for (const j of jogadores.values()) {
+    if (!j.autenticado || !j.carteiraPronta) continue;
+    if (Math.hypot(j.x - FARM_BARN.x, j.z - FARM_BARN.z) <= AOI_RAIO || farmSlotDe.has(j.chave)) enviar(j, ev);
+  }
+}
+function farmEnviarPlotUpdates(slot, updates) {
+  const ev = { t:'farm_plots_update', slotIndex:slot.slotIndex, updates };
+  for (const j of jogadores.values()) {
+    if (!j.autenticado || !j.carteiraPronta) continue;
+    if (j.chave === slot.ownerKey || Math.hypot(j.x - slot.x, j.z - slot.z) <= AOI_RAIO) enviar(j, ev);
+  }
+}
+function farmIniciarProximo(table, now) {
+  if (table.job || !table.queue.length) return;
+  const job = table.queue.shift(); job.status = 'running'; job.startedAt = now;
+  job.completesAt = now + FARM_STAGE_TIMES[job.operation] * 1000;
+  table.job = job;
+}
+function farmConcluirJob(table, now) {
+  const job = table.job; if (!job || now < job.completesAt) return false;
+  const c = carteiras.get(job.ownerKey);
+  if (!c) { job.completesAt = now + 5000; return false; }
+  if (c.estoque.length >= c.rackMax) { job.completesAt = now + 5000; return false; }
+  const source = job.source || {};
+  const stage = job.operation === 'secagem' ? 'cura' : job.operation === 'cura' ? 'embalagem' : 'pronto';
+  const qualMult = job.operation === 'cura' ? 1.12 : job.operation === 'embalagem' ? 1.04 : 1;
+  c.estoque.push({ id:job.stockId, s:source.s, qtd:job.quantity, estagio:stage,
+    qual:Math.min(1.35, Number(source.qual) * qualMult || .55), desde:now });
+  marcarSuja({ chave:job.ownerKey });
+  const dono = [...jogadores.values()].find(j => j.chave === job.ownerKey && j.autenticado);
+  if (dono) {
+    enviar(dono, { t:'farm_job_ok', jobId:job.jobId, stationId:job.stationId, operation:job.operation,
+      stockId:job.stockId, estagio:stage, qtd:job.quantity });
+    enviarEstado(dono);
+  }
+  table.job = null; farmIniciarProximo(table, now); salvarFarmState(); farmEnviarTabelas(); return true;
+}
+function farmProcessarMesas() {
+  const now = agora(); let mudou = false;
+  for (const table of farmTables) mudou = farmConcluirJob(table, now) || mudou;
+  if (mudou) farmEnviarTabelas();
+}
+function farmPlantar(j, m) {
+  if (!exigirJogadorVivo(j)) return;
+  const plot = m.plotId ? farmPlotDoJogador(j, m.plotId) : farmLocalPlotDoJogador(j, m.plot);
+  if (!plot || plot.plant) { if (plot && plot.plant) enviar(j, { t:'recusado', motivo:'canteiro já ocupado' }); return; }
+  if (!exigirDistancia(j, plot.x, plot.z, 4.5, 'longe do canteiro da fazenda')) return;
+  const c = carteiras.get(j.chave), seedId = num(m.seedId, 0, 1e9, -1) | 0;
+  const entry = c && c.bank.find(e => e.s && e.s.id === seedId);
+  if (!entry || entry.qtd < 1) { enviar(j, { t:'recusado', motivo:'semente não pertence ao jogador' }); metricas.rejeitadas++; return; }
+  const s = limparStrain(entry.s); if (!s || !bankTirar(c, s.id, 1)) { metricas.rejeitadas++; return; }
+  plot.plant = { id:novoId('fp'), s, prog:0, agua:1, saude:1, praga:0, estagio:0,
+    adubOrg:0, adubCres:0, adubFlor:false };
+  plot.updatedAt = agora(); const slot = farmSlotDoJogador(j); slot.updatedAt = plot.updatedAt;
+  marcarSuja(j); enviar(j, { t:'farm_plot_update', slotIndex:slot.slotIndex, localIndex:plot.localIndex, plot:farmPlotPublic(plot) });
+  enviarEstado(j); salvarFarmState();
+}
+function farmRegar(j, m) {
+  if (!exigirJogadorVivo(j)) return;
+  const plot = m.plotId ? farmPlotDoJogador(j, m.plotId) : farmLocalPlotDoJogador(j, m.plot);
+  if (!plot || !plot.plant) { if (plot) enviar(j, { t:'recusado', motivo:'canteiro vazio' }); return; }
+  if (!exigirDistancia(j, plot.x, plot.z, 4.5, 'longe do canteiro da fazenda')) return;
+  plot.plant.agua = 1; plot.plant.praga = 0; plot.updatedAt = agora();
+  const slot = farmSlotDoJogador(j); slot.updatedAt = agora();
+  marcarSuja(j); farmEnviarPlotUpdates(slot, [{ localIndex:plot.localIndex, plot:farmPlotPublic(plot) }]);
+  enviarEstado(j); salvarFarmState();
+}
+function farmColher(j, m) {
+  if (!exigirJogadorVivo(j)) return;
+  const plot = m.plotId ? farmPlotDoJogador(j, m.plotId) : farmLocalPlotDoJogador(j, m.plot);
+  if (!plot || !plot.plant) { if (plot) enviar(j, { t:'recusado', motivo:'canteiro vazio' }); return; }
+  if (!exigirDistancia(j, plot.x, plot.z, 4.5, 'longe do canteiro da fazenda')) return;
+  const p = plot.plant, c = carteiras.get(j.chave);
+  if (p.estagio !== 4) { enviar(j, { t:'recusado', motivo:'planta ainda não está pronta' }); return; }
+  if (c.estoque.length >= c.rackMax) { enviar(j, { t:'recusado', motivo:'bancada cheia' }); return; }
+  const q = Math.max(2, Math.round((1.3 + p.s.t.rendimento / 100 * 2.6) * p.saude * 7 * (p.s.auto ? .72 : 1) * (RAR_MULT[p.s.rar] || 1)));
+  plot.plant = null; plot.updatedAt = agora();
+  c.estoque.push({ id:proxLoteId++, s:p.s, qtd:q, estagio:'sec', qual:.55 + p.saude * .45, desde:agora() });
+  const slot = farmSlotDoJogador(j); slot.updatedAt = agora(); marcarSuja(j);
+  enviar(j, { t:'farm_plot_update', slotIndex:slot.slotIndex, localIndex:plot.localIndex, plot:farmPlotPublic(plot) });
+  enviar(j, { t:'colheita', plotIndex:plot.localIndex, qtd:q, strain:p.s, fazenda:true }); enviarEstado(j); salvarFarmState();
+}
+function farmIniciarJob(j, m) {
+  if (!exigirJogadorVivo(j)) return;
+  const slot = farmSlotDoJogador(j); if (!slot || !farmTemAcessoAoGalpao(j)) { enviar(j, { t:'recusado', motivo:'entre no galpão da fazenda' }); return; }
+  const table = farmDistanciaMesa(j, m.stationId); if (!table) { enviar(j, { t:'recusado', motivo:'aproxime-se de uma mesa da fazenda' }); return; }
+  const operation = str(m.operation, 16); if (!Object.prototype.hasOwnProperty.call(FARM_STAGE_TIMES, operation)) { enviar(j, { t:'recusado', motivo:'etapa de produção inválida' }); metricas.rejeitadas++; return; }
+  if (table.queue.length >= 4 || table.job && table.job.ownerKey === j.chave && table.job.stockId === Number(m.stockId)) { enviar(j, { t:'recusado', motivo:'mesa ocupada para este lote' }); return; }
+  const c = carteiras.get(j.chave), stockId = num(m.stockId, 0, 1e9, -1) | 0;
+  const i = c.estoque.findIndex(l => l.id === stockId), lot = i >= 0 ? c.estoque[i] : null;
+  const esperado = operation === 'secagem' ? 'sec' : operation === 'cura' ? 'cura' : 'embalagem';
+  if (!lot || lot.estagio !== esperado || lot.qtd < 1) { enviar(j, { t:'recusado', motivo:'lote não está na etapa correta' }); return; }
+  c.estoque.splice(i, 1); marcarSuja(j);
+  const job = { jobId:'fj_' + crypto.randomUUID(), ownerKey:j.chave, stationId:table.stationId,
+    operation, stockId:lot.id, quantity:lot.qtd, startedAt:0, completesAt:0, status:'queued',
+    source:{ s:lot.s, qual:lot.qual, desde:lot.desde } };
+  table.queue.push(job);
+  farmIniciarProximo(table, agora());
+  enviar(j, { t:'farm_job_started', jobId:job.jobId, stationId:table.stationId, operation, qtd:job.quantity });
+  enviarEstado(j); salvarFarmState(); farmEnviarTabelas();
+}
 function salvarTudo() {
   for (const j of jogadores.values()) copiarPosicaoParaCarteira(j);
   for (const chave of carteiras.keys()) salvarCarteira(chave);
   salvarLotes();
+  salvarFarmState();
 }
 
 /* ═════════ ETAPA C — REGISTRO DE ENTIDADES ═════════
@@ -611,7 +960,7 @@ const CAT_IMOVEIS = Object.freeze(Object.assign(Object.create(null), {
   predio1: { custo:4200, nivel:2, renda:110, x:-.6, z:19.6 },
   predio2: { custo:6800, nivel:4, renda:180, x:14.4, z:19.6 },
   predio3: { custo:11000, nivel:6, renda:290, x:29.4, z:19.6 },
-  fazenda: { custo:26000, nivel:8, renda:0, x:0, z:168 }
+  fazenda: { custo:26000, nivel:10, renda:0, x:0, z:168 }
 }));
 const CAT_ADUBO = Object.freeze(Object.assign(Object.create(null), { organico:60, crescimento:110, floracao:180 }));
 const CAT_ARMA = Object.freeze(Object.assign(Object.create(null), { punho:0, pistola:450, smg:1500, rifle:3600 }));
@@ -807,7 +1156,8 @@ function enviarEstado(j) {
       const e = id && entidades.get(id); return e && e.ref ? resumoFunc(e.ref) : null;
     }).filter(Boolean),
     imoveis: c.imoveis || [], nivel: c.nivel || 1, xp: c.xp || 0,
-    territorios:     c.territorios || {}, hp: j.hp, armor: j.armor, wanted: j.procurado || 0, avatarId: j.avatarId
+    territorios:     c.territorios || {}, hp: j.hp, armor: j.armor, wanted: j.procurado || 0, avatarId: j.avatarId,
+    farm: farmStateFor(j)
 
   });
 }
@@ -872,14 +1222,26 @@ const COL_ESTATICOS = [
   [-0.18,0.18,147.8,148.2], [13.82,14.18,147.8,148.2], [27.82,28.18,147.8,148.2], [41.82,42.18,147.8,148.2],
   [55.82,56.18,147.8,148.2], [69.82,70.18,147.8,148.2], [9.5,18.5,10.15,10.85], [11,11.4,13.4,13.8],
   [-1.9,-1.3,12.4,13], [-7.6,6.4,21,32], [7.4,21.4,21,32], [22.4,36.4,21,32],
-  [-8.6,37.4,19.7,20.3], [-5.3,-4.7,171.7,172.3], [4.7,5.3,171.7,172.3], [-29,-15,187.5,196.5],
-  [-36.5,-31.5,189.5,194.5], [-53.05,-50.95,46.5,47.5], [52.95,55.05,136.5,137.5], [62.95,65.05,46.5,47.5],
+  [-8.6,37.4,19.7,20.3], [-5.3,-4.7,171.7,172.3], [4.7,5.3,171.7,172.3], [-36.5,-31.5,189.5,194.5],
+  // perímetro authoritative da fazenda; a abertura central do portão é
+  // validada por conta no handler de movimento.
+  [-46.3,-45.7,172,268], [45.7,46.3,172,268], [-46,46,267.7,268.3],
+  [-46,-5,171.7,172.3], [5,46,171.7,172.3],
+  // galpão: paredes laterais/norte e frente dividida por uma porta central.
+  [-13.3,-12.7,246,258], [12.7,13.3,246,258], [-13,13,245.7,246.3],
+  [-13,-1.6,257.7,258.3], [1.6,13,257.7,258.3],   [-53.05,-50.95,46.5,47.5], [52.95,55.05,136.5,137.5], [62.95,65.05,46.5,47.5],
   [-17.05,-14.95,110.5,111.5], [18.95,21.05,78.5,79.5], [20.95,23.05,116.5,117.5], [-17.05,-14.95,46.5,47.5],
   [54.95,57.05,78.5,79.5], [18.95,21.05,46.5,47.5], [-17.05,-14.95,78.5,79.5], [-20.9,-19.1,-9.9,-8.1],
   [-17.3,-15.7,-7,-6], [64.5,73.5,55.85,56.15], [64.5,73.5,63.85,64.15], [64.35,64.65,56,64],
   [69.5,73.1,56.4,59.6], [-1.6,-1.2,-11.3,-10.9], [1.4,1.8,-11.3,-10.9], [4,4.4,-11.3,-10.9],
   [-0.1,2.9,-11.85,-10.95], [-8.5,-6.3,-2.75,-1.65], [3.75,6.05,6.88,7.75]
 ];
+// Divisórias dos seis setores: cada jogador só atravessa a própria porta.
+for (const [sx, sz] of FARM_SLOT_SPOTS) {
+  const x0 = sx - 12, x1 = sx + 12, z0 = sz - 14, z1 = sz + 14;
+  COL_ESTATICOS.push([x0-.3,x0+.3,z0,z1], [x1-.3,x1+.3,z0,z1], [x0,x1,z1-.3,z1+.3],
+    [x0,sx-1.6,z0-.3,z0+.3], [sx+1.6,x1,z0-.3,z0+.3]);
+}
 
 /* Colisores de cada propriedade, em coordenada RELATIVA ao centro do lote.
    O índice 5 é o portão: só bloqueia quando está fechado. */
@@ -1741,6 +2103,7 @@ async function ativarSessao(j, chave, dados = {}) {
     if (salva) carteiras.set(k, salva);
   }
   const c = sincronizarEquipamento(j);
+  const farmSlot = atribuirFarmSlot(j, c);
   const retomada = consumirPosicaoRetomada(j.chave) || posicaoCarteira(c);
   const idx = atribuirLote(j.chave, j.nome);
   const loteInicial = idx !== null ? lotes[idx] : null;
@@ -1750,7 +2113,9 @@ async function ativarSessao(j, chave, dados = {}) {
   j.x = spawn.x; j.y = 0; j.z = spawn.z; j.ry = spawn.ry || 0;
   j.vy = 0; j.onGround = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
   enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: !!retomada,
-    posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null });
+    posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null,
+    farm: farmSlot ? farmSlotPublic(farmSlot, true) : null,
+    farmTables: farmTables.map(farmTablePublic) });
   paraTodos({ t: 'nome', id:j.id, nome:j.nome, avatarId:j.avatarId }, j.id);
   for (const nomeTerr of Object.keys(c.territorios || {})) {
     const terr = TERRITORIOS.find(x => x.nome === nomeTerr);
@@ -1802,7 +2167,9 @@ wss.on('connection', (ws, req) => {
     t: 'welcome', id, tick: tickAtual, tickHz: TICK_HZ,
     lotes: lotes.map(resumoLote),
     territorios: TERRITORIOS.map(t => ({ nome:t.nome, x:t.x, z:t.z, raio:t.raio,
-      demanda:t.demanda, donoChave:t.ownerKey || null, donoNome:t.ownerNome || null }))
+      demanda:t.demanda, donoChave:t.ownerKey || null, donoNome:t.ownerNome || null })),
+    farms: farmSlots.map(s => farmSlotPublic(s, false)),
+    farmTables: farmTables.map(farmTablePublic)
   });
   paraTodos({ t: 'join', id, nome: j.nome, avatarId: j.avatarId }, id);
 
@@ -1934,6 +2301,7 @@ wss.on('connection', (ws, req) => {
       case 'nome': {
         j.nome = nomeSeguro(m.nome) || j.nome;
         if (j.chave && loteDe.has(j.chave)) lotes[loteDe.get(j.chave)].donoNome = j.nome;
+        if (j.chave && farmSlotDe.has(j.chave)) { const fs = farmSlots[farmSlotDe.get(j.chave)]; if (fs) { fs.ownerName = j.nome; fs.updatedAt = agora(); salvarFarmState(); farmEnviarSlots(); } }
         marcarSuja(j);
         paraTodos({ t: 'nome', id, nome: j.nome, avatarId: j.avatarId }, id);
         break;
@@ -1986,6 +2354,19 @@ wss.on('connection', (ws, req) => {
           // um cliente modificado atravessava qualquer parede. Agora o
           // servidor recusa a travessia e devolve a posição válida.
           const r = moverComColisao(j.x, j.z, nx, nz, RAIO_JOGADOR);
+          // A abertura do perímetro só pode ser atravessada por uma conta
+          // com fazenda comprada no nível 10 e setor persistente atribuído.
+                  if (r.z >= FARM_AREA.z0 - .4 && r.x > -FARM_GATE_W / 2 && r.x < FARM_GATE_W / 2 && !farmSlotDoJogador(j)) {
+            r.x = j.x; r.z = j.z;
+            enviar(j, { t:'recusado', motivo:'fazenda bloqueada — nível 10 e fazenda comprada' });
+            metricas.rejeitadas++;
+          }
+          const setor = farmSetorEm(r.x, r.z);
+          if (setor && (!farmSlotDoJogador(j) || farmSlotDoJogador(j).slotIndex !== setor.slotIndex)) {
+            r.x = j.x; r.z = j.z;
+            enviar(j, { t:'recusado', motivo:'este setor pertence a outro jogador' });
+            metricas.rejeitadas++;
+          }
           if (Math.hypot(r.x - nx, r.z - nz) > .25) {
             metricas.rejeitadas++;
             enviar(j, { t: 'correcao', seq: inputSeq, x: r.x, y: j.y, z: r.z });
@@ -2002,6 +2383,26 @@ wss.on('connection', (ws, req) => {
         j.arma = (armaSolicitada && (armaSolicitada === 'punho' || j.armas[armaSolicitada]))
           ? ARMA_INDEX.indexOf(armaSolicitada) : 0;
         j.ultimoMov = t;
+        break;
+      }
+
+      case 'farm_plantar': {
+        farmPlantar(j, m);
+        break;
+      }
+
+      case 'farm_colher': {
+        farmColher(j, m);
+        break;
+      }
+
+      case 'farm_regar': {
+        farmRegar(j, m);
+        break;
+      }
+
+      case 'farm_job': {
+        farmIniciarJob(j, m);
         break;
       }
 
@@ -2298,6 +2699,9 @@ wss.on('connection', (ws, req) => {
         const k = str(m.k, 16);
         const def = CAT_IMOVEIS[k];
         if (!def || c.imoveis.includes(k)) { metricas.rejeitadas++; return; }
+        if (k === 'fazenda' && !farmSlotDe.has(j.chave) && !farmSlots.some(s => !s.ownerKey)) {
+          enviar(j, { t:'recusado', motivo:'a fazenda atingiu o limite de seis jogadores' }); metricas.rejeitadas++; return;
+        }
         if (c.nivel < def.nivel) {
           enviar(j, { t: 'recusado', motivo: 'nível insuficiente' }); metricas.rejeitadas++; return;
         }
@@ -2307,7 +2711,9 @@ wss.on('connection', (ws, req) => {
         }
         c.cash -= def.custo;
         c.imoveis.push(k);
+        if (k === 'fazenda') atribuirFarmSlot(j, c);
         enviar(j, { t: 'imovel_comprado', k });
+        if (k === 'fazenda') farmEnviarSlots();
         enviarEstado(j);
         break;
       }
@@ -2575,6 +2981,7 @@ setInterval(() => {
     if (b.tipo === 'pm' && b.alvo) tiroPM(b);
   }
   for (const f of funcionarios) passoFuncionario(f, dtTick);
+  farmProcessarMesas();
   // polícia tem prazo: some sozinha depois de um tempo
   for (let i = bots.length - 1; i >= 0; i--) {
     const b = bots[i];
@@ -2640,8 +3047,12 @@ setInterval(() => {
       }
     }
     metricas.snapshots++;
+    const farmsPerto = farmSlots.filter(s => Math.hypot(j.x - s.x, j.z - s.z) <= AOI_RAIO)
+      .map(s => farmSlotPublic(s, true));
     enviar(j, { t: 'snap', tick: tickAtual, players: perto, bots: botsPerto,
-      funcs: funcsPerto, clientes: clientesPerto, lotes: lotesNovos });
+      funcs: funcsPerto, clientes: clientesPerto, lotes: lotesNovos,
+      farms: farmsPerto, farmTables: Math.hypot(j.x - FARM_BARN.x, j.z - FARM_BARN.z) <= AOI_RAIO
+        ? farmTables.map(farmTablePublic) : [] });
   }
   metricas.tickMaxMs = Math.max(metricas.tickMaxMs, performance.now() - tickInicio);
 }, TICK_MS);
@@ -2680,6 +3091,21 @@ setInterval(() => {
       // progresso contínuo sem inundar sockets que nem estão na área.
       paraInteresse({ t: 'lotes_update', loteIndex: lote.index, updates }, lote.x, lote.z, lote.donoChave);
     }
+  }
+  for (const slot of farmSlots) {
+    if (!slot.ownerKey) continue;
+    const c = carteiras.get(slot.ownerKey), updates = [];
+    for (const plot of slot.plots) {
+      if (!plot.plant) continue;
+      const mudouEstagio = crescer(plot.plant, dt, relogio, 'sol', c ? c.up : null);
+      const mudouProg = Math.abs(plot.plant.prog - (plot.plant._ultProg ?? -99)) >= 0.7;
+      const mudouAgua = Math.abs(plot.plant.agua - (plot.plant._ultAgua ?? -99)) >= 0.05;
+      if (mudouEstagio || mudouProg || mudouAgua) {
+        plot.plant._ultProg = plot.plant.prog; plot.plant._ultAgua = plot.plant.agua;
+        plot.updatedAt = agora(); updates.push({ localIndex:plot.localIndex, plot:farmPlotPublic(plot) });
+      }
+    }
+    if (updates.length) { slot.updatedAt = agora(); farmEnviarPlotUpdates(slot, updates); }
   }
 }, GROW_MS);
 

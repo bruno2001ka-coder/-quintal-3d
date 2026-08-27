@@ -29,3 +29,9 @@ Uma prévia com câmera a 25 m confirmou que a fazenda é extensa demais para av
 ## Validação próxima concluída
 
 Com a tentativa WebSocket desativada corretamente apenas na cópia de prévia, a inspeção confirmou que os canteiros estavam sendo ocultados pelo `setModoMultiplayerVisual(true)` da tentativa de conexão contra o servidor HTTP, não por erro de criação. Após a correção da fixture, os canteiros apareceram em distância de gameplay com bordas elevadas, solo interno, irrigação, postes de treliça e rótulos `CANTEIRO`. A mesma cena mostrou o pátio visual com seis mesas em enquadramento voltado para o galpão.
+
+## Verificação da implementação authoritative — 2026-08-27
+
+A fixture local foi iniciada com SQLite descartável, `DATABASE_URL` vazio e conta de teste no nível 10 com o imóvel `fazenda`. A regressão WebSocket confirmou seis setores, 12 canteiros por jogador, bloqueio do sétimo jogador, entrada no galpão, seis mesas e as três etapas de processamento.
+
+A inspeção do HTML no navegador confirmou que a cena carrega sem tela branca. O navegador isolado desta sessão não alcançou o WebSocket em `127.0.0.1`; o endereço proxied aceitou handshake WebSocket por um cliente Node, mas o navegador proxied permaneceu offline, indicando limitação do ambiente de pré-visualização e não uma falha reproduzida no fluxo da fixture. Por isso, a inspeção visual end-to-end do interior do galpão não é declarada como concluída nesta sessão. A verificação visual automatizada ficou limitada à presença dos elementos no HTML e aos testes authoritative do servidor.

@@ -118,6 +118,34 @@ assert.match(html, /placaLote\('6 MESAS'/,
   'o pátio deve mostrar visualmente as seis mesas de produção');
 assert.match(html, /Não adicionamos colliders nesta camada/,
   'o passe visual não deve criar colisões que quebrem a navegação');
+assert.match(html, /const FARM_MAX_PLAYERS=6,FARM_PLOTS_PER_PLAYER=12/,
+  'o cliente deve espelhar o limite de seis jogadores e doze canteiros');
+assert.match(html, /const farmSlotsOnline=FARM_SLOT_SPOTS\.map/,
+  'os setores da fazenda devem ser estruturas online únicas');
+assert.match(html, /const farmTablesOnline=FARM_TABLE_SPOTS\.map/,
+  'as seis mesas devem ser representadas pelo estado do servidor');
+assert.match(html, /const farmTableVisuals=\[\]/,
+  'cada mesa deve guardar referências de suas placas e indicadores visuais');
+assert.match(html, /function atualizarFarmMesaVisual\(t\)/,
+  'o visual da mesa deve refletir livre, fila ou operação authoritative');
+assert.match(html, /ref\.placa\.material\.map=T\(placaLote\(texto,cor\)\)/,
+  'a placa da mesa deve ser atualizada sem criar estado local de produção');
+assert.match(html, /if\(focus\?\.t==='farmTable'\)abrirPainelFarmMesa\(focus\.mesa\)/,
+  'aproximar-se de uma mesa deve abrir o painel do galpão');
+assert.match(html, /focus\.t==='farmPlotOnline'/,
+  'o foco deve diferenciar canteiro da fazenda dos lotes urbanos');
+assert.match(html, /focus\.t==='farmTable'/,
+  'o foco deve diferenciar mesa interna do galpão');
+assert.match(html, /t:'farm_job',stationId:table\.stationId,operation:op,stockId:l\.id/,
+  'a UI deve solicitar jobs com estação, operação e lote authoritative');
+assert.match(html, /const FARM_GATE_W=10/,
+  'a abertura visual da porteira externa deve ter largura explícita');
+assert.match(html, /slot\.gateCol=col\(x-1\.6,x\+1\.6/,
+  'cada setor deve ter uma porteira física com colisor próprio');
+assert.match(html, /FARM_GATE_W\/2,FAZ\.z0-\.3/,
+  'o colisor da porteira externa deve acompanhar sua abertura visual');
+assert.match(html, /setModoMultiplayerVisual\(true\)/,
+  'o modo online deve desativar o visual legado que poderia duplicar canteiros');
 
 const geneticAssetSlugs=[
  'northern-lights','white-widow','skunk-1','hindu-kush','amnesia-haze','sour-diesel','blue-dream','og-kush',
