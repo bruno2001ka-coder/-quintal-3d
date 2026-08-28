@@ -70,4 +70,4 @@ A suíte local foi executada com servidores isolados, bancos temporários e port
 | Persistência | `PERSISTENCE_RESTART_OK` e `FARM_PERSISTENCE_OK` |
 | Novo placar | `SCORE_AUTHORITATIVE_OK` |
 
-Esses resultados são validações locais. Eles não substituem a confirmação posterior do HTML no GitHub Pages e da versão efetivamente executada no Fly.
+Esses resultados são validações locais. A publicação do GitHub Pages do commit `155f6bc` foi observada com conclusão `success`, e o HTML público de Pages e Fly respondeu com 340.588 bytes contendo `renderPlacar`. O endpoint `https://quintal-3d.fly.dev/healthz` respondeu `ok: true` com banco SQLite. Isso comprova disponibilidade e conteúdo estático público; não comprova, por si só, que o processo server-side do Fly já foi recriado com o novo handler, porque a consulta autenticada da Machine ficou bloqueada pela tela de login do painel. Não houve alteração destrutiva no Render ou no Fly.
