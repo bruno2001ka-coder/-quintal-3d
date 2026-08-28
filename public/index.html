@@ -4333,10 +4333,10 @@ function tick(){
 
  /* câmera */
  const alt=aiming?1.5:1.45, dd=aiming?2.5:camDist;
- camT.set(player.position.x,player.position.y+alt,player.position.z);
- // O GLB tem escala humana; nunca deixamos o resolvedor encostar a câmera
- // no avatar quando uma parede fica muito próxima do ponto de origem.
- const CAMERA_MIN_DIST=aiming?1.35:1.75;
+ camT.set(player.position.x,player.position.y+alt+.18,player.position.z);
+ // O GLB tem escala humana; mantemos uma distância confortável para que
+ // a câmera nunca fique dentro do avatar quando uma parede fica próxima.
+ const CAMERA_MIN_DIST=aiming?2.25:3.2;
  let dist=Math.max(CAMERA_MIN_DIST,dd);
  const cxf=Math.sin(camYaw)*Math.cos(camPitch),czf=Math.cos(camYaw)*Math.cos(camPitch);
  for(let s=CAMERA_MIN_DIST;s<=dist;s+=.4){
