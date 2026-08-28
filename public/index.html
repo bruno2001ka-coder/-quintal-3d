@@ -362,7 +362,6 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/layout-quebrada.js"></script>
 <script>
 
 /*
@@ -731,14 +730,13 @@ function atualizarMetricas(dt){atualizarVisibilidadePerf();perfT-=dt;perfFrames+
 
 /* ═════════ COLISÃO ═════════ */
 const colliders=[];
-const col=(a,b,c,d)=>{if(c>=170||d>=170){c+=FARM_SHIFT_Z;d+=FARM_SHIFT_Z}const r={minX:a,maxX:b,minZ:c,maxZ:d,active:true};colliders.push(r);return r};
+const col=(a,b,c,d)=>{const r={minX:a,maxX:b,minZ:c,maxZ:d,active:true};colliders.push(r);return r};
 
 /* ═════════ MAPA ═════════ */
-const Q={x0:-25,x1:9,z0:-13,z1:0};          // fundos
+const Q={x0:-25,x1:9,z0:-13,z1:0};          // fundos — esticado a oeste pra bater ~500m² de lote
 const C={x0:3.4,x1:9,z0:0,z1:10.5};        // corredor
-const FARM_SHIFT_Z=Number(globalThis.QUINTAL_LAYOUT?.farm?.shiftZ||0);
 const CITY={x0:-62,x1:76,z0:11,z1:150};
-const FAZ={x0:-46,x1:46,z0:172+FARM_SHIFT_Z,z1:268+FARM_SHIFT_Z};   // área pública de circulação
+const FAZ={x0:-46,x1:46,z0:172,z1:268};   // área pública de circulação
 const SUPERMARKET={x:38,z:140}; // ponto authoritative de compra, junto à estrada da fazenda
 const MERCADO_ENTRADA={x:38,z:138.4}; // porta física da loja
 const FARM_GATE_W=10;
@@ -1784,8 +1782,8 @@ function makePlot(x,z,tipo,hidden){ // tipo: 'sol' | 'estufa' | 'grow'
  }
  // Avenida central e cruzamentos deixam as fileiras fáceis de ler e percorrer.
  caminho(9,92,0,(FAZ.z0+FAZ.z1)/2);
- caminho(78,4.2,0,212.8+FARM_SHIFT_Z);caminho(78,4.2,0,226.4+FARM_SHIFT_Z);
- caminho(4.2,92,-24,220+FARM_SHIFT_Z);caminho(4.2,92,24,220+FARM_SHIFT_Z);
+ caminho(78,4.2,0,212.8);caminho(78,4.2,0,226.4);
+ caminho(4.2,92,-24,220);caminho(4.2,92,24,220);
  // Cerca baixa decorativa. Não adicionamos colliders nesta camada para não
  // bloquear a navegação authoritative já existente.
  function cerca(x1,z1,x2,z2){
@@ -1819,7 +1817,7 @@ function makePlot(x,z,tipo,hidden){ // tipo: 'sol' | 'estufa' | 'grow'
   caixa(.28,.06,.28,0,1.36,0,madeira,g);
   const lamp=new THREE.Mesh(new THREE.BoxGeometry(.16,.2,.16),luz);lamp.position.y=1.22;g.add(lamp);fazDetalhe.add(g);
  }
- [[-24,212.8+FARM_SHIFT_Z],[24,212.8+FARM_SHIFT_Z],[-24,226.4+FARM_SHIFT_Z],[24,226.4+FARM_SHIFT_Z],[0,202+FARM_SHIFT_Z],[0,238+FARM_SHIFT_Z]].forEach(p=>lanterna(p[0],p[1]));
+ [[-24,212.8],[24,212.8],[-24,226.4],[24,226.4],[0,202],[0,238]].forEach(p=>lanterna(p[0],p[1]));
  // Pátio visual das seis mesas, reservado para o fluxo futuro de produção.
  const patio=new THREE.Group();patio.name='patioProcessamentoVisual';patio.position.set(18,0,191);fazDetalhe.add(patio);
  for(let i=0;i<6;i++){
@@ -1832,8 +1830,8 @@ function makePlot(x,z,tipo,hidden){ // tipo: 'sol' | 'estufa' | 'grow'
  const placaProc=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('PROCESSAMENTO','#8fe063')),transparent:true,depthTest:false}));placaProc.scale.set(2.35,.58,1);placaProc.position.set(0,3.05,-2.7);patio.add(placaProc);
  const placaMesas=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('6 MESAS','#e8d264')),transparent:true,depthTest:false}));placaMesas.scale.set(1.55,.38,1);placaMesas.position.set(0,2.55,-2.7);patio.add(placaMesas);
  // Caixas, sacos e pedras dão escala à área sem usar texturas pesadas.
- [[-37,186+FARM_SHIFT_Z],[-34,186+FARM_SHIFT_Z],[-37,189+FARM_SHIFT_Z],[34,248+FARM_SHIFT_Z],[37,248+FARM_SHIFT_Z],[34,251+FARM_SHIFT_Z]].forEach(([x,z],i)=>{caixa(.72,.5,.62,x,.25,z,i%2?madeira:palha);if(i%2===0)caixa(.48,.06,.05,x,.54,z+.32,madeiraClara)});
- [[-41,203+FARM_SHIFT_Z],[-40,203.8+FARM_SHIFT_Z],[-40.5,202.5+FARM_SHIFT_Z],[40,238+FARM_SHIFT_Z],[41,239+FARM_SHIFT_Z]].forEach(([x,z])=>{const p=new THREE.Mesh(new THREE.DodecahedronGeometry(.32,0),pedras);p.position.set(x,.25,z);p.scale.y=.65;p.castShadow=true;fazDetalhe.add(p)});
+ [[-37,186],[-34,186],[-37,189],[34,248],[37,248],[34,251]].forEach(([x,z],i)=>{caixa(.72,.5,.62,x,.25,z,i%2?madeira:palha);if(i%2===0)caixa(.48,.06,.05,x,.54,z+.32,madeiraClara)});
+ [[-41,203],[-40,203.8],[-40.5,202.5],[40,238],[41,239]].forEach(([x,z])=>{const p=new THREE.Mesh(new THREE.DodecahedronGeometry(.32,0),pedras);p.position.set(x,.25,z);p.scale.y=.65;p.castShadow=true;fazDetalhe.add(p)});
  // Portal de entrada com rótulo procedural, sem alterar a porta authoritative.
  const portal=new THREE.Group();portal.position.set(0,0,FAZ.z0+.5);fazDetalhe.add(portal);
  caixa(.22,3.1,.22,-5.8,1.55,0,madeira,portal);caixa(.22,3.1,.22,5.8,1.55,0,madeira,portal);caixa(12,.22,.22,0,3.05,0,madeira,portal);
@@ -4654,9 +4652,9 @@ let meuLoteIndex=null;
 // Fazenda multiplayer: as posições são iguais às do servidor. Cada setor
 // tem 12 canteiros privados; as mesas ficam dentro do galpão central.
 const FARM_MAX_PLAYERS=6,FARM_PLOTS_PER_PLAYER=12;
-const FARM_AREA={x0:-46,x1:46,z0:172+FARM_SHIFT_Z,z1:268+FARM_SHIFT_Z};
-const FARM_BARN={x:0,z:252+FARM_SHIFT_Z,w:26,d:12,doorW:3.2};
-const FARM_SLOT_SPOTS=[[-30,194+FARM_SHIFT_Z],[0,194+FARM_SHIFT_Z],[30,194+FARM_SHIFT_Z],[-30,230+FARM_SHIFT_Z],[0,230+FARM_SHIFT_Z],[30,230+FARM_SHIFT_Z]];
+const FARM_AREA={x0:-46,x1:46,z0:172,z1:268};
+const FARM_BARN={x:0,z:252,w:26,d:12,doorW:3.2};
+const FARM_SLOT_SPOTS=[[-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]];
 const FARM_PLOT_OFFSETS=[[-7,-10],[-2.3,-10],[2.4,-10],[-7,-4],[-2.3,-4],[2.4,-4],[-7,2],[-2.3,2],[2.4,2],[-7,8],[-2.3,8],[2.4,8]];
 const FARM_TABLE_SPOTS=[[-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]];
 const farmSlotsOnline=FARM_SLOT_SPOTS.map(([x,z],slotIndex)=>({slotIndex,x,z,preco:FARM_LOT_PRICES[slotIndex],disponivel:true,portaoId:null,portaoAberto:false,donoNome:null,donoId:null,plots:FARM_PLOT_OFFSETS.map(([dx,dz],localIndex)=>({id:`farm_${slotIndex}_${localIndex}`,x:x+dx,z:z+dz,localIndex,dados:null,mesh:null,meshEstagio:-1,meshSeedId:null,group:null,ring:null}))}));
