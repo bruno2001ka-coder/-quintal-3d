@@ -1358,6 +1358,25 @@ function dentroDeParede(x, z, raio) {
   }
   return false;
 }
+// Recupera posições persistidas que ficaram dentro de uma bancada/parede.
+// Isso pode acontecer se o jogador fechar o navegador em cima da mesa ou se
+// uma geometria antiga tiver sido maior. Sem esta saída, o resolvedor só
+// recusa cada novo passo e o personagem parece travado para sempre.
+function destravarPosicao(x, z, raio) {
+  const r = Math.max(.2, Number(raio) || 0);
+  for (const c of colisores) {
+    if (!(x + r > c.x0 && x - r < c.x1 && z + r > c.z0 && z - r < c.z1)) continue;
+    const margem = r + .08;
+    const candidatos = [
+      { x:c.x0 - margem, z }, { x:c.x1 + margem, z },
+      { x, z:c.z0 - margem }, { x, z:c.z1 + margem }
+    ].filter(p => !dentroDeParede(p.x, p.z, r));
+    if (!candidatos.length) return null;
+    candidatos.sort((a,b) => Math.hypot(a.x-x,a.z-z) - Math.hypot(b.x-x,b.z-z));
+    return candidatos[0];
+  }
+  return null;
+}
 /* Movimento com colisão, em SUB-PASSOS.
    Testar só o ponto final não funciona: as paredes têm 0,4m de espessura e
    um passo de 1,2m cai inteiro do outro lado sem nunca tocar nela. É o
@@ -2543,6 +2562,11 @@ wss.on('connection', (ws, req) => {
           enviar(j, { t: 'recusado', motivo: 'lote ainda não atribuído' });
           metricas.rejeitadas++;
           return;
+        }
+        const posicaoTravada = destravarPosicao(j.x, j.z, RAIO_JOGADOR);
+        if (posicaoTravada) {
+          j.x = posicaoTravada.x; j.z = posicaoTravada.z;
+          enviar(j, { t:'correcao', seq:inputSeq, x:j.x, y:j.y, z:j.z, motivo:'posição liberada da bancada' });
         }
         const dist = Math.hypot(nx - j.x, nz - j.z);
         const limite = VEL_MAX * dtMov + 2;   // folga pra lag
