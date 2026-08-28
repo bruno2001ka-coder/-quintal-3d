@@ -555,9 +555,9 @@ const scene=new THREE.Scene();
 scene.fog=new THREE.FogExp2(0xcfd6dd,.038);
 const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,85);
 const qualidadeCfg={alto:{pixel:1.35,sombras:true,tipo:THREE.PCFSoftShadowMap,mapa:1024},medio:{pixel:1.1,sombras:true,tipo:THREE.PCFShadowMap,mapa:768},baixo:{pixel:1,sombras:false,tipo:THREE.BasicShadowMap,mapa:512}};
-let qualidade='alto';
-try{qualidade=localStorage.getItem('quintal3d-qualidade')||'alto'}catch(e){}
-if(!qualidadeCfg[qualidade])qualidade='alto';
+let qualidade=matchMedia('(pointer:coarse)').matches?'baixo':'medio';
+try{qualidade=localStorage.getItem('quintal3d-qualidade')||qualidade}catch(e){}
+if(!qualidadeCfg[qualidade])qualidade=matchMedia('(pointer:coarse)').matches?'baixo':'medio';
 let somAtivo=true;
 try{somAtivo=localStorage.getItem('quintal3d-som')!=='mudo'}catch(e){}
 const cfgQual=()=>qualidadeCfg[qualidade];
