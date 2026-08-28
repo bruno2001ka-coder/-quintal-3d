@@ -513,11 +513,6 @@ const RARIDADES={
  roxa:   {nome:'RARA',  cor:0x7b4a9c, bud:0x7d4d9e, mult:1.35, chance:.18},
  laranja:{nome:'RARA',  cor:0xc4761f, bud:0xc07a2a, mult:1.35, chance:.14},
  hibrida:{nome:'ÉPICA', cor:0xd8b23a, bud:0x9a6a8e, mult:1.80, chance:.06}};
-function sorteiaRaridade(){
- const r=Math.random();let ac=0;
- for(const k in RARIDADES){ac+=RARIDADES[k].chance;if(r<=ac)return k}
- return 'comum';
-}
 const metaSemente=(nivelMin,qualidade,slug,aromaPerfil,cheiro)=>({nivelMin,qualidade,slug,aromaPerfil,cheiro});
 const mkS=(nome,cor,t,gen=0,rar='comum',meta={})=>({id:sid++,nome,cor,t,gen,auto:false,rar,...meta});
 const mkA=(nome,cor,t,gen=0,rar='comum',meta={})=>({id:sid++,nome,cor,t,gen,auto:true,rar,...meta});
@@ -558,19 +553,6 @@ const seedCost=s=>Math.round((8+TRAITS.reduce((a,t)=>a+s.t[t.k],0)*.16+s.gen*9)*
 const traitAvg=s=>TRAITS.reduce((a,t)=>a+s.t[t.k],0)/TRAITS.length;
 const PRE=['Super','Royal','Purple','White','Blue','Green','Critical','Sweet','Early','Black'];
 const SUF=['Kush','Haze','Auto','OG','Widow','Diesel','Glue','Cookies','Punch','Dream','Skunk','#2'];
-function cross(a,b){
- // Cruzamento visual não cria uma nona genética: escolhe a entrada oficial
- // mais próxima da combinação dos pais, igual ao servidor authoritative.
- const preferAuto=!!(a.auto&&b.auto),alvo=Object.fromEntries(TRAITS.map(tr=>[tr.k,(a.t[tr.k]+b.t[tr.k])/2]));
- let melhor=null,scoreMelhor=Infinity;
- for(const candidato of BASE){
-  if(candidato.id===a.id||candidato.id===b.id)continue;
-  let score=preferAuto===candidato.auto?0:250;
-  for(const tr of TRAITS)score+=(candidato.t[tr.k]-alvo[tr.k])**2;
-  if(score<scoreMelhor){scoreMelhor=score;melhor=candidato}
- }
- return {...melhor,t:{...melhor.t}};
-}
 
 /* ═════════ TEXTURAS ═════════ */
 function cv(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
@@ -4164,80 +4146,7 @@ async function loadRaw(){
 async function apagarSave(){
  toast('a carteira online não pode ser apagada pelo navegador');
 }
-function applySave(d){
- sid=Math.max(sid,(d.sid|0));
- Object.assign(G,{running:true,cash:d.cash,day:d.day,clock:d.clock,sel:d.sel||0,
-  heat:d.heat||0,wanted:d.wanted||0,hp:d.hp,armor:d.armor,arma:d.arma,
-  municao:d.municao||{},rackMax:d.rackMax||6,vy:0,onGround:true,crimeT:0,
-  rain:0,rainTimer:rnd(40,90),cliTimer:8});
- G.up=Object.assign({vasos:false,led:false,rack:false,placa:false,auto:false,irrig:false},d.up||{});
- G.fert=Object.assign({organico:0,crescimento:0,floracao:0},d.fert||{});
- G.nivel=d.nivel||1;G.xp=d.xp||0;
- for(const k in G.func){if(G.func[k])scene.remove(G.func[k].g)}G.func={};
- IMOVEIS.forEach(im=>{im.comprado=(d.imoveis||[]).includes(im.k);
-  im.ring.material.color.setHex(im.comprado?0x8fe063:0xe8d264)});
- // A fazenda não é mais um imóvel global comprável. O fallback local não
- // concede canteiros: a posse de um lote só vem do servidor online.
- const temFaz=false;
- fazPlots.forEach(p=>{p.locked=true;p.group.visible=false});
- if(fazPortao)fazPortao.visible=true;
- const temCasaNova=IMOVEIS.find(i=>i.k==='casanova').comprado;
- casaNovaPlots.forEach(p=>{p.locked=!temCasaNova;p.group.visible=temCasaNova});
- (d.func||[]).forEach(k=>{const f=FUNCS.find(x=>x.k===k);
-  if(f){const sv=G.cash;G.cash=f.custo;contratar(f);G.cash=sv}});
- G.bank=(d.bank||[]).map(e=>({s:e.s,qtd:e.qtd}));
- G.lotes=(d.lotes||[]).map(l=>({s:l.s,qtd:l.qtd,stage:l.stage,t:l.t,qual:l.qual}));
- if(G.up.vasos)plots.forEach(p=>{if(p.locked){p.locked=false;p.group.visible=true}});
- Object.keys(G.up).forEach(k=>{if(G.up[k])aplicarVisualMelhoria(k)});
- plots.forEach((p,i)=>{
-  if(p.plant){scene.remove(p.plant.mesh);p.plant=null}
-  const sp=(d.plots||[])[i];
-  // ETAPA A — defesa contra save ANTIGO: arquivos salvos antes desta
-  // correção ainda contêm essas plantas. Ignoramos: quem repovoa esses
-  // canteiros é o servidor, via lote_update.
-  if(p.online)return;
-  if(sp){const g2=buildPlant(sp.s);
-   g2.position.set(p.x,p.baseY,p.z);scene.add(g2);
-   p.plant={s:sp.s,prog:sp.prog,agua:sp.agua,saude:sp.saude,praga:sp.praga,
-    estagio:sp.estagio,mesh:g2,sway:Math.random()*6,
-    adubOrg:sp.adubOrg||0,adubCres:sp.adubCres||0,adubFlor:!!sp.adubFlor}}});
- // canteiros da fazenda ficavam de fora do save — sumiam ao continuar
- fazPlots.forEach((p,i)=>{
-  if(p.plant){scene.remove(p.plant.mesh);p.plant=null}
-  const sp=(d.fazPlots||[])[i];
-  if(sp&&!p.locked){const g2=buildPlant(sp.s);
-   g2.position.set(p.x,p.baseY,p.z);scene.add(g2);
-   p.plant={s:sp.s,prog:sp.prog,agua:sp.agua,saude:sp.saude,praga:sp.praga,
-    estagio:sp.estagio,mesh:g2,sway:Math.random()*6,
-    adubOrg:sp.adubOrg||0,adubCres:sp.adubCres||0,adubFlor:!!sp.adubFlor}}});
- casaNovaPlots.forEach((p,i)=>{
-  if(p.plant){scene.remove(p.plant.mesh);p.plant=null}
-  const sp=(d.casaNovaPlots||[])[i];
-  if(sp&&!p.locked){const g2=buildPlant(sp.s);
-   g2.position.set(p.x,p.baseY,p.z);scene.add(g2);
-   p.plant={s:sp.s,prog:sp.prog,agua:sp.agua,saude:sp.saude,praga:sp.praga,
-    estagio:sp.estagio,mesh:g2,sway:Math.random()*6,
-    adubOrg:sp.adubOrg||0,adubCres:sp.adubCres||0,adubFlor:!!sp.adubFlor}}});
- // crescimento em tempo real: avança as plantas pelo tempo de verdade que
- // passou desde o último save, não só pelo tempo que o jogo ficou aberto
- const elapsed=d.ts?Math.max(0,(Date.now()-d.ts)/1000):0;
- if(elapsed>5)catchUpPlantas(elapsed);
- G.inimigos.forEach(e=>scene.remove(e.g));G.inimigos=[];
- G.policia.forEach(e=>scene.remove(e.g));G.policia=[];
- G.clientes.forEach(c=>scene.remove(c.g));G.clientes=[];
- TERR.forEach((t,i)=>{const st=(d.terr||[])[i]||{};
-  t.dono=(st.dono==='seu')?'seu':'rival';if(st.demanda)t.demanda=st.demanda;
-  const cor=t.dono==='seu'?0x8fe063:0xe0503c;
-  t.ring.material.color.setHex(cor);t.disc.material.color.setHex(cor);
-  if(t.dono!=='seu')povoarTerritorio(t)});
- if(ONLINE){garantirNome().then(loadWorldTerritories)}
- G.gate.open=!!d.gateOpen;if(gateCol)gateCol.active=!G.gate.open;
- if(gateLeaf)gateLeaf.rotation.y=G.gate.open?-1.95:0;
- player.position.set(d.pos?d.pos.x:GATEX,0,d.pos?d.pos.z:C.z1-4);camYaw=0;
- $('overlay').classList.add('hide');
- renderSeeds();renderStock();updHUD();
- toast(`carregado — dia ${G.day}, R$ ${Math.floor(G.cash)}`);
- ativarAudio()}
+
 // botão CONTINUAR aparece só se existir save
 (async()=>{
  const raw=await loadRaw();
@@ -4700,8 +4609,8 @@ function tick(){
   atualizarRota(dt);
   if($('mapPanel').classList.contains('on')){mapaT-=dt;if(mapaT<=0){mapaT=.5;drawWorldMap()}}
   if(G.running&&mpConnected&&estadoDoServidor)tickFuncs(dt);
- if(G.running)streamLotes(dt);
- // primeira vez que sai da própria propriedade
+   if(G.running){streamLotes(dt);atualizarMapaLeve(dt)}
+  // primeira vez que sai da própria propriedade
  if(G.running&&meuLoteIndex!==null&&lotesOnline[meuLoteIndex]){
   const meu=lotesOnline[meuLoteIndex];
   if(Math.hypot(player.position.x-meu.x,player.position.z-meu.z)>26)
@@ -5171,18 +5080,48 @@ function setModoMultiplayerVisual(online){
  }
 }
 let streamT=0;
+// Proxy leve: lotes distantes continuam visíveis como silhueta, mas sem
+// interiores, plantas, bancadas ou dezenas de materiais. O proxy não recebe
+// colisor; a autoridade de colisão continua sendo o servidor.
+const loteProxyCasaMat=new THREE.MeshStandardMaterial({color:0xb9ad95,roughness:1});
+const loteProxyTelhaMat=new THREE.MeshStandardMaterial({color:0x8f4a34,roughness:1});
+const loteProxyMuroMat=new THREE.MeshStandardMaterial({color:0x8d8578,roughness:1});
+function montarLoteProxy(lote){
+ if(lote.proxy)return;
+ const g=new THREE.Group();g.name='loteProxy_'+lote.index;
+ const casa=new THREE.Mesh(new THREE.BoxGeometry(4.2,2.8,3.2),loteProxyCasaMat);casa.position.set(0,1.4,-1.8);g.add(casa);
+ const telha=new THREE.Mesh(new THREE.BoxGeometry(4.8,.18,3.8),loteProxyTelhaMat);telha.position.set(0,2.9,-1.8);telha.rotation.z=.05;g.add(telha);
+ const muro=new THREE.Mesh(new THREE.BoxGeometry(20,1.25,.16),loteProxyMuroMat);muro.position.set(0,.62,8);g.add(muro);
+ g.position.set(lote.x,0,lote.z);g.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false}});scene.add(g);lote.proxy=g;
+}
+function desmontarLoteProxy(lote){if(!lote.proxy)return;scene.remove(lote.proxy);lote.proxy=null}
+let mapaStreamT=0;
+function atualizarMapaLeve(dt){
+ mapaStreamT-=dt;if(mapaStreamT>0)return;mapaStreamT=.5;
+ const px=player.position.x,pz=player.position.z;
+ const detalhes=[
+  [scene.getObjectByName('fazendaVisualDetalhada'),0,220,118],
+  [scene.getObjectByName('condominioFrente'),-3,26,105],
+  [scene.getObjectByName('frenteCasa'),4,6,95],
+  [scene.getObjectByName('casaNova'),69,60,115]
+ ];
+ for(const [g,x,z,raio] of detalhes){if(!g)continue;const perto=Math.hypot(px-x,pz-z)<raio;g.traverse(o=>{if(o.isMesh){o.castShadow=perto;o.receiveShadow=perto}})}
+ const predios=scene.getObjectByName('predios');
+ if(predios){const perto=Math.hypot(px,pz-80)<95;predios.traverse(o=>{if(o.isMesh){o.castShadow=perto;o.receiveShadow=perto}})}
+}
 function streamLotes(dt){
  streamT-=dt; if(streamT>0)return; streamT=.25;
  // O mapa recebe todos os nomes pelo handshake; o 3D monta só a vizinhança.
  // Casas ocupadas entram um pouco antes para não aparecerem quando o jogador
  // já está em cima delas. Casas livres mantêm um raio menor para o celular.
  const PERTO_OCUPADA=52, LONGE_OCUPADA=68, PERTO_LIVRE=26;
- for(const lote of lotesOnline){
+  for(const lote of lotesOnline){
   const d=Math.hypot(player.position.x-lote.x,player.position.z-lote.z);
+  if(!offlineAtivo())montarLoteProxy(lote);
   const ocupado=!!lote.donoNome||lote.index===meuLoteIndex;
   const deveMontar=ocupado?d<PERTO_OCUPADA:d<PERTO_LIVRE;
-  if(!lote.montado&&deveMontar)montarLote(lote);
-  else if(lote.montado&&d>(ocupado?LONGE_OCUPADA:42)&&lote.index!==meuLoteIndex)desmontarLote(lote);
+  if(!lote.montado&&deveMontar){desmontarLoteProxy(lote);montarLote(lote)}
+  else if(lote.montado&&d>(ocupado?LONGE_OCUPADA:42)&&lote.index!==meuLoteIndex){desmontarLote(lote);montarLoteProxy(lote)}
  }
 }
 // ETAPA C — o estado do portão vem do servidor e vale pra todo mundo
@@ -5191,18 +5130,6 @@ function streamLotes(dt){
 // mandava ele pra propriedade e o start() jogava de volta pro quintal
 // antigo, todos no mesmo ponto, empilhados contra a parede.
 // Agora existe UM lugar só que decide onde nascer.
-function nascerNaPropriedade(){
- if(meuLoteIndex===null||meuLoteIndex===undefined)return false;
- const lote=lotesOnline[meuLoteIndex];
- if(!lote)return false;
- // um pouco atrás do portão, olhando pra dentro do terreno
- player.position.set(lote.x,0,lote.z+LOTE_D/2-3.2);
- player.rotation.y=0;camYaw=Math.PI;
- // monta a casa na hora, sem esperar o streaming — senão o jogador
- // aparece no vazio e os colisores ainda não existem
- if(!lote.montado)montarLote(lote);
- return true;
-}
 function aplicarPortao(lote,aberto){
  lote.portaoAberto=!!aberto;
  if(lote.colPortao)lote.colPortao.active=!lote.portaoAberto;
