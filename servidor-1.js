@@ -1134,8 +1134,15 @@ function aplicarDiariaServidor() {
 }
 function spawnOficial(j) {
   const lote = loteDoJogador(j);
-  if (lote) return { x: lote.x, y: 0, z: lote.z + LOTE_D / 2 - 3.2 };
-  return { x: 0, y: 0, z: 15 };
+  if (lote) {
+    return {
+      x: lote.x + LOTE_W / 2 + 3.5,
+      y: 12,
+      z: lote.z + LOTE_D / 2 + 4.5,
+      ry: 0
+    };
+  }
+  return { x: 5, y: 12, z: 25, ry: 0 };
 }
 function posicaoCarteira(c) {
   const p = c && c.up && c.up._posicao;
@@ -2308,10 +2315,13 @@ async function ativarSessao(j, chave, dados = {}) {
   const retomadaLegada = loteInicial && posicaoNaCasaAntiga(retomadaBruta);
   const retomada = retomadaLegada ? null : retomadaBruta;
   const spawn = retomada || (loteInicial ? {
-    x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
+    x: loteInicial.x + LOTE_W / 2 + 3.5,
+    y: 12,
+    z: loteInicial.z + LOTE_D / 2 + 4.5,
+    ry: 0
   } : spawnOficial(j));
   const spawnLivre = destravarPosicao(spawn.x, spawn.z, RAIO_JOGADOR) || spawn;
-  j.x = spawnLivre.x; j.y = 0; j.z = spawnLivre.z; j.ry = spawn.ry || 0;
+  j.x = spawnLivre.x; j.y = 12; j.z = spawnLivre.z; j.ry = spawn.ry || 0;
   j.vy = 0; j.onGround = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
   enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: !!retomada,
     posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null,
