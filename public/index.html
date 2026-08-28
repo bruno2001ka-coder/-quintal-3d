@@ -5796,9 +5796,10 @@ function mpConnect(){
       // ela pode ser a última posição válida antes da queda; aplicar aqui
       // evita que o navegador continue enviando a posição antiga e receba
       // um retorno brusco em seguida.
-      if(msg.posicao&&(
-        msg.retomada||mpReentrada||!G._nasceuNoLote||G._esperandoLote))
-       mpAplicarSpawnAuthoritative(msg.posicao);
+      // A posição do servidor vence sempre no lote_atribuido. Em reconexões
+      // rápidas, G._nasceuNoLote pode continuar true no cliente antigo e
+      // ignorar a porta segura enviada pelo servidor.
+      if(msg.posicao)mpAplicarSpawnAuthoritative(msg.posicao);
       atualizarPlacaLote(lote);
       if(msg.lote&&msg.lote.plots)
        msg.lote.plots.forEach((pl,i)=>aplicarPlotOnline(meuLoteIndex,i,pl));
