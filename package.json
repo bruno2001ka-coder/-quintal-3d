@@ -32,7 +32,8 @@
     "test:catalogo-sementes": "node testes/test-catalogo-sementes.js",
     "test:offline": "node testes/test-offline-sandbox.js",
     "test:render-config": "node testes/test-render-config.js",
-    "test:placar": "node testes/test-placar-authoritative.js"
+    "test:placar": "node testes/test-placar-authoritative.js",
+    "test:assets": "node testes/test-assets-geneticas.js"
   },
   "engines": {
     "node": ">=18"

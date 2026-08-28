@@ -53,6 +53,7 @@ jobs:
           node --check testes/test-offline-sandbox.js
           node --check testes/test-render-config.js
           node --check testes/test-placar-authoritative.js
+          node --check testes/test-assets-geneticas.js
           node check-client-syntax.js
           node --check /tmp/quintal-client-inline.js
       - name: Run isolated regression servers and tests
@@ -115,4 +116,5 @@ jobs:
           npm run test:colheita
           npm run test:render-config
           npm run test:placar
+          npm run test:assets
           for port in 8800 8801 8802 8803 8804 8805 8806 8807 8809 8810; do cat "$RUNNER_TEMP/quintal-$port.log"; done

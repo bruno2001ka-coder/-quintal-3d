@@ -14,8 +14,8 @@ A referência é conceitual e não representa uma tela final nem uma promessa de
 
 - `docs/assets/farm-visual-target.webp` — referência 16:9 gerada para a direção de arte.
 - `docs/assets/plant-style-reference.png` — referência quadrada de escala, iluminação e aparência das plantas; fica fora de `public` e não é baixada pelo jogador.
-- `public/assets/plantas-estagios-real/` — quinze texturas WebP 512×512, divididas em cinco estágios para Blueberry Auto, Amnesia Haze Auto e Northern Lights.
-- `public/assets/plantas-estagios/white-widow/` — cinco texturas WebP legadas da White Widow.
-- `public/assets/geneticas/` — somente as quatro imagens de catálogo ainda usadas no cliente: Northern Light Auto, OG Kush, Sour Diesel e White Widow.
+- `public/assets/plantas-estagios-real/` — trinta e cinco texturas WebP 512×512 em cinco estágios para Blueberry Auto, Amnesia Haze Auto, Northern Lights, Northern Light Auto, White Widow Auto, OG Kush e Sour Diesel.
+- `public/assets/plantas-estagios/white-widow/` — cinco texturas WebP da White Widow.
+- `public/assets/geneticas/` — imagens JPEG de catálogo mantidas como legado físico, mas as oito genéticas oficiais agora usam referências próprias de estágio no cliente.
 
-Os PNGs de 1920×1920 e as imagens JPEG do catálogo antigo foram removidos do caminho publicado depois de validar que não havia referências no cliente nem nos testes. A troca preserva o quadrado e o canal alpha, mas reduz o peso das texturas reais de aproximadamente 56 MB para aproximadamente 860 KB.
+As quatro genéticas avançadas receberam matrizes próprias: `northern-light-auto/`, `white-widow-auto/`, `og-kush/` e `sour-diesel/`. Os PNGs intermediários de 1920×1920 não ficam no caminho publicado. As vinte novas texturas foram reduzidas para 512×512 WebP com canal alpha real; o conjunto novo pesa aproximadamente 762 KB.
