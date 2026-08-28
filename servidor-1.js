@@ -2313,7 +2313,11 @@ async function ativarSessao(j, chave, dados = {}) {
   // retomada válida em outra região ainda é respeitada para não teletransportar
   // quem saiu no meio da cidade ou da fazenda.
   const retomadaLegada = loteInicial && posicaoNaCasaAntiga(retomadaBruta);
-  const retomada = retomadaLegada ? null : retomadaBruta;
+  // Segurança de reconexão: preserva X/Z/rotação da última posição, mas
+  // nunca reaplica a altura salva. O jogador antigo sempre entra a y=12.
+  const retomada = retomadaLegada ? null : (retomadaBruta ? {
+    x: retomadaBruta.x, y: 12, z: retomadaBruta.z, ry: retomadaBruta.ry || 0
+  } : null);
   const spawn = retomada || (loteInicial ? {
     x: loteInicial.x + LOTE_W / 2 + 3.5,
     y: 12,
