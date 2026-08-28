@@ -660,8 +660,10 @@ function mat(canvas,rx,ry,o){return new THREE.MeshStandardMaterial(Object.assign
 
 /* ═════════ RENDERER ═════════ */
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0xcfd6dd,.038);
-const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,85);
+// Distância visual menor reduz o custo de fragmentos e sombras no celular.
+// Colisão, AOI e simulação continuam independentes desta camada.
+scene.fog=new THREE.FogExp2(0xcfd6dd,.058);
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,68);
 const qualidadeCfg={alto:{pixel:1.35,sombras:true,tipo:THREE.PCFSoftShadowMap,mapa:1024},medio:{pixel:1.1,sombras:true,tipo:THREE.PCFShadowMap,mapa:768},baixo:{pixel:1,sombras:false,tipo:THREE.BasicShadowMap,mapa:512}};
 let qualidade=matchMedia('(pointer:coarse)').matches?'baixo':'medio';
 try{qualidade=localStorage.getItem('quintal3d-qualidade')||qualidade}catch(e){}
@@ -4609,7 +4611,7 @@ function tick(){
   atualizarRota(dt);
   if($('mapPanel').classList.contains('on')){mapaT-=dt;if(mapaT<=0){mapaT=.5;drawWorldMap()}}
   if(G.running&&mpConnected&&estadoDoServidor)tickFuncs(dt);
-   if(G.running){streamLotes(dt);atualizarMapaLeve(dt)}
+   if(G.running){streamLotes(dt);atualizarMapaLeve(dt);atualizarCullingVisual(dt)}
   // primeira vez que sai da própria propriedade
  if(G.running&&meuLoteIndex!==null&&lotesOnline[meuLoteIndex]){
   const meu=lotesOnline[meuLoteIndex];
@@ -5277,6 +5279,55 @@ const mpBots=new Map();
 // o boneco quando o ID chega no snapshot, e apaga quando some.
 const mpFuncs=new Map();
 const mpClientes=new Map();
+// Culling visual: não remove entidades do multiplayer nem da física; apenas
+// evita desenhar atores muito distantes ou ocultos atrás de uma construção.
+const cullRaycaster=new THREE.Raycaster();
+const cullRayOrigin=new THREE.Vector3(),cullRayDir=new THREE.Vector3(),cullTarget=new THREE.Vector3();
+const cullBox=new THREE.Box3();
+let cullVisualT=0;
+function centroVisual(obj){
+ if(!obj)return null;
+ cullBox.setFromObject(obj);
+ return cullBox.isEmpty()?obj.getWorldPosition(new THREE.Vector3()):cullBox.getCenter(new THREE.Vector3());
+}
+function bloqueadoPorPredio(alvo,oclusores){
+ const p=centroVisual(alvo);if(!p)return false;
+ cullRayOrigin.copy(camera.getWorldPosition(new THREE.Vector3()));
+ cullTarget.copy(p).sub(cullRayOrigin);const d=cullTarget.length();
+ if(d<18)return false; // perto: prioridade de jogabilidade e interação
+ cullRayDir.copy(cullTarget).normalize();cullRaycaster.set(cullRayOrigin,cullRayDir);cullRaycaster.far=d-.45;
+ return cullRaycaster.intersectObjects(oclusores,true).length>0;
+}
+function atualizarCullingVisual(dt){
+ if(!G.running||!player)return;
+ cullVisualT-=dt;if(cullVisualT>0)return;cullVisualT=.22;
+ const px=player.position.x,pz=player.position.z;
+ const roots=['predios','condominioFrente','frenteCasa','casaNova','fazendaVisualDetalhada']
+  .map(n=>scene.getObjectByName(n)).filter(Boolean);
+ const oclusores=roots;
+ const aplicar=(obj,limite,forcar=false)=>{
+  if(!obj)return;
+  const p=centroVisual(obj);if(!p)return;
+  const d=Math.hypot(p.x-px,p.z-pz);
+  // Grupos fixos usam somente distância; raycast de oclusão em um grupo
+  // inteiro atingiria a própria parede e o esconderia falsamente.
+  obj.visible=forcar||d<=limite;
+ };
+ // Prédios inteiros podem desaparecer no horizonte; perto do jogador ficam intactos.
+ const predios=scene.getObjectByName('predios');
+ if(predios)predios.traverse(o=>{if(o.isMesh){const wp=o.getWorldPosition(new THREE.Vector3());o.visible=Math.hypot(wp.x-px,wp.z-pz)<64}});
+ for(const nome of ['condominioFrente','frenteCasa','casaNova','fazendaVisualDetalhada']){
+  const g=scene.getObjectByName(nome);if(g)aplicar(g,62,nome==='frenteCasa'&&Math.hypot(px-4,pz-6)<28);
+ }
+ for(const p of mpPlayers.values()){
+  const d=Math.hypot(p.g.position.x-px,p.g.position.z-pz);
+  p.g.visible=d<58 && (d<20||!bloqueadoPorPredio(p.g,oclusores));
+ }
+ for(const c of mpClientes.values()){
+  const d=Math.hypot(c.g.position.x-px,c.g.position.z-pz);
+  c.g.visible=d<48 && (d<16||!bloqueadoPorPredio(c.g,oclusores));
+ }
+}
 const mpPlayers=new Map(); // id -> {g,L,nome,tx,ty,tz,tr,walk,label}
 
 function mpLabelTex(nome){
