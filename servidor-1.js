@@ -1346,7 +1346,7 @@ function reconstruirColisores() {
     for (let i = 0; i < COL_LOTE_REL.length; i++) {
       if (i === IDX_PORTAO && l.portaoAberto) continue;   // portão aberto não bloqueia
       const r = COL_LOTE_REL[i];
-      colisores.push({ x0: l.x + r[0], x1: l.x + r[1], z0: l.z + r[2], z1: l.z + r[3] });
+      colisores.push({ x0: l.x + r[0], x1: l.x + r[1], z0: l.z + r[2], z1: l.z + r[3], tipo: i === IDX_PORTAO ? 'portao_lote' : 'estrutura_lote', lote: l });
     }
   }
   // A área geral da fazenda é pública. A passagem pelos vãos dos setores é
@@ -1355,10 +1355,11 @@ function reconstruirColisores() {
   // Não duplicamos o portão como colisor global: a regra é direcional e
   // depende da posição anterior do jogador.
 }
-function dentroDeParede(x, z, raio) {
+function dentroDeParede(x, z, raio, permitir) {
   const r = raio || 0;
   for (let i = 0; i < colisores.length; i++) {
     const c = colisores[i];
+    if (permitir && permitir(c)) continue;
     if (x + r > c.x0 && x - r < c.x1 && z + r > c.z0 && z - r < c.z1) return true;
   }
   return false;
@@ -1389,7 +1390,7 @@ function destravarPosicao(x, z, raio) {
    estava tudo bem. Aqui o trajeto é percorrido em fatias menores que a
    parede mais fina, e cada fatia é testada. */
 const PASSO_MAX = .15;
-function moverComColisao(x, z, nx, nz, raio) {
+function moverComColisao(x, z, nx, nz, raio, permitir) {
   const dx = nx - x, dz = nz - z;
   const dist = Math.hypot(dx, dz);
   if (dist < 1e-6) return { x, z };
@@ -1397,10 +1398,10 @@ function moverComColisao(x, z, nx, nz, raio) {
   let cx = x, cz = z;
   for (let i = 0; i < n; i++) {
     const tx = cx + dx / n, tz = cz + dz / n;
-    if (!dentroDeParede(tx, tz, raio)) { cx = tx; cz = tz; continue; }
+    if (!dentroDeParede(tx, tz, raio, permitir)) { cx = tx; cz = tz; continue; }
     // bateu: tenta deslizar em cada eixo, pra não encravar em quina
-    if (!dentroDeParede(tx, cz, raio)) { cx = tx; continue; }
-    if (!dentroDeParede(cx, tz, raio)) { cz = tz; continue; }
+    if (!dentroDeParede(tx, cz, raio, permitir)) { cx = tx; continue; }
+    if (!dentroDeParede(cx, tz, raio, permitir)) { cz = tz; continue; }
     break;
   }
   return { x: cx, z: cz };
@@ -2585,7 +2586,11 @@ wss.on('connection', (ws, req) => {
           // COLISÃO NO SERVIDOR: antes só a velocidade era checada, então
           // um cliente modificado atravessava qualquer parede. Agora o
           // servidor recusa a travessia e devolve a posição válida.
-          const r = moverComColisao(j.x, j.z, nx, nz, RAIO_JOGADOR);
+          const loteDoJogadorAtual = loteDoJogador(j);
+          const permitirPortaoProprio = loteDoJogadorAtual
+            ? c => c.tipo === 'portao_lote' && c.lote === loteDoJogadorAtual
+            : null;
+          const r = moverComColisao(j.x, j.z, nx, nz, RAIO_JOGADOR, permitirPortaoProprio);
           // A fazenda inteira, fora dos setores privados, é uma área pública.
           // O portão externo não é um bloqueio de compra: a compra libera os
           // canteiros e a operação econômica, não a caminhada pelo espaço.

@@ -5035,7 +5035,9 @@ function montarLote(lote){
   // colisor do vão do portão: ativo enquanto fechado
  // colisor nasce coerente com o estado atual do portão
  const colPortao={minX:LX-vao/2,maxX:LX+vao/2,minZ:LZ+D/2-.2,maxZ:LZ+D/2+.2,
-  active:!lote.portaoAberto};
+  // o proprietário nunca fica preso do lado de fora da própria casa;
+  // visitantes continuam sujeitos ao estado authoritative do portão
+  active:!(lote.portaoAberto||lote.index===meuLoteIndex)};
  colliders.push(colPortao);lote.cols.push(colPortao);lote.colPortao=colPortao;
  addCol(cx-cw/2,cx+cw/2,cz-cd/2,cz+cd/2);           // casinha
   lote.grp=g;lote.montado=true;
@@ -5132,7 +5134,8 @@ function streamLotes(dt){
 // Agora existe UM lugar só que decide onde nascer.
 function aplicarPortao(lote,aberto){
  lote.portaoAberto=!!aberto;
- if(lote.colPortao)lote.colPortao.active=!lote.portaoAberto;
+ if(lote.colPortao)lote.colPortao.active=!(lote.portaoAberto||lote.index===meuLoteIndex);
+ if(lote.portaoFolha)lote.portaoFolha.rotation.y=lote.portaoAberto?-1.35:0;
 }
 function atualizarPlacaLote(lote){
  if(!lote.placa)return;   // casa desmontada: nada pra pintar
