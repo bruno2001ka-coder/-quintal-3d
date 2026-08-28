@@ -2317,23 +2317,16 @@ async function ativarSessao(j, chave, dados = {}) {
     x: retomadaBruta.x, y: 12, z: retomadaBruta.z, ry: retomadaBruta.ry || 0
   } : null);
   const portaSpawn = loteInicial ? spawnNaPortaDoLote(loteInicial) : spawnOficial(j);
-  // Retomada válida preserva X/Z. Se a posição salva estiver presa dentro
-  // de balcão, parede ou móvel, cai para a porta frontal do próprio lote.
-  const retomadaDentroDoProprioLote = retomada && loteInicial &&
-    dentroDePropriedade(retomada.x, retomada.z) === idx;
-  const retomadaPresa = retomada && (
-    dentroDeParede(retomada.x, retomada.z, RAIO_JOGADOR) ||
-    // Mesas/móveis visuais antigos podem não existir na lista authoritative
-    // de colisores. Dentro do próprio lote, longe do portão, a retomada é
-    // considerada potencialmente presa e cai para a porta segura.
-    retomadaDentroDoProprioLote
-  );
-  const spawn = retomadaPresa ? portaSpawn : (retomada || portaSpawn);
+  // Donos de lote sempre entram pela porta frontal. Não reaplicamos a
+  // retomada antiga porque móveis visuais (como balcões) podem não existir
+  // na lista authoritative de colisores e manteriam a conta presa.
+  const retomadaUsada = !!retomada && !loteInicial;
+  const spawn = retomadaUsada ? retomada : portaSpawn;
   const spawnLivre = destravarPosicao(spawn.x, spawn.z, RAIO_JOGADOR) || spawn;
   const spawnFinal = dentroDeParede(spawnLivre.x, spawnLivre.z, RAIO_JOGADOR) ? portaSpawn : spawnLivre;
   j.x = spawnFinal.x; j.y = 12; j.z = spawnFinal.z; j.ry = spawnFinal.ry || 0;
   j.vy = 0; j.onGround = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
-  enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: !!retomada,
+  enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: retomadaUsada,
     posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null,
     farm: farmSlot ? farmSlotPublic(farmSlot, true) : null,
     farmTables: farmSlot ? farmTables.filter(t => t.farmSlotIndex === farmSlot.slotIndex).map(farmTablePublic) : [] });
