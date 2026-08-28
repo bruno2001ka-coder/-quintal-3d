@@ -79,9 +79,10 @@ body.touch #zona{top:calc(8px + clamp(30px,8.5vmin,40px) + 66px)}
 #routeHint{top:119px;left:10px;font-size:10px;letter-spacing:.7px;color:#e8d264;opacity:.9;max-width:250px}
 #routeHint b{color:#8fe063}
 #vitals{bottom:78px;left:10px;width:190px}
-#hpbar,#armbar{height:7px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;margin-top:4px}
+#hpbar,#healthbar,#armbar{height:7px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;margin-top:4px}
 #hpbar>i{display:block;height:100%;background:#e0503c;width:100%;transition:width .15s}
 #armbar>i{display:block;height:100%;background:#5aa8e0;width:0%;transition:width .15s}
+#healthbar>i{display:block;height:100%;background:#e8d264;width:100%;transition:width .15s}
 #gun{margin-top:6px;font-size:10.5px;opacity:.85}
 #gun b{color:#e8d264}
 #wanted{position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:20px;letter-spacing:3px;color:#ffd24a;text-shadow:0 2px 10px #000;opacity:0;transition:opacity .25s}
@@ -281,7 +282,7 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
   <div class="panel" id="stock"><span class="ttl">PRODUÇÃO DO LOTE</span><div id="stockList">sem produção</div></div>
   <div class="panel" id="zone"></div>
   <div class="panel" id="routeHint"></div>
-  <div class="panel" id="vitals">VIDA<div id="hpbar"><i></i></div>COLETE<div id="armbar"><i></i></div>
+  <div class="panel" id="vitals">VIDA<div id="hpbar"><i></i></div>SAÚDE<div id="healthbar"><i></i></div>COLETE<div id="armbar"><i></i></div>
     <div id="gun"><b id="gunName">Mãos</b> · <span id="ammo">—</span></div></div>
   <div id="wanted"></div>
   <div id="ver">v21</div>
@@ -301,7 +302,7 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
 </div>
 <div class="modal mapPanel" id="mapPanel"><h2>MAPA DO QUINTAL</h2><div class="mapSub">Toque em FECHAR para voltar ao jogo. O ponto verde é você; o amarelo é o próximo objetivo.</div><canvas id="worldMapC" width="720" height="520"></canvas><div id="mapLegend"><span><i class="mapDot" style="background:#8fe063"></i>você / seu lote</span><span><i class="mapDot" style="background:#e8d264"></i>objetivo</span><span><i class="mapDot" style="background:#5aa8e0"></i>jogador / polícia</span><span><i class="mapDot" style="background:#e0503c"></i>rival</span></div><button class="close" data-close>FECHAR MAPA</button></div>
 <div class="modal" id="banca">
-  <div class="tabs"><button class="tab on" data-t="sem">SEMENTES</button><button class="tab" data-t="cruz">CRUZAR</button>
+  <div class="tabs"><button class="tab on" data-t="sem">SEMENTES</button><button class="tab" data-t="food">MERCADO</button><button class="tab" data-t="cruz">CRUZAR</button>
     <button class="tab" data-t="proc">GALPÃO</button><button class="tab" data-t="melh">ESTRUTURA</button><button class="tab" data-t="adu">ADUBO</button><button class="tab" data-t="neg">NEGÓCIOS</button><button class="tab" data-t="arm">ARSENAL</button></div>
   <div id="bancaBody"></div><button class="close" data-close>FECHAR</button>
 </div>
@@ -627,6 +628,7 @@ const Q={x0:-25,x1:9,z0:-13,z1:0};          // fundos — esticado a oeste pra b
 const C={x0:3.4,x1:9,z0:0,z1:10.5};        // corredor
 const CITY={x0:-62,x1:76,z0:11,z1:150};
 const FAZ={x0:-46,x1:46,z0:172,z1:268};   // área pública de circulação
+const SUPERMARKET={x:38,z:140}; // prédio existente no quarteirão norte, junto à estrada da fazenda
 const FARM_GATE_W=10;
 const FARM_LOT_PRICES=[26000,28000,30000,32000,34000,36000];
 const FARM_LOT_CATALOG=FARM_LOT_PRICES.map((custo,slotIndex)=>({slotIndex,nome:`Lote ${slotIndex+1} da fazenda`,custo,nivel:10}));
@@ -1240,6 +1242,16 @@ const RUAS_Z=[15,47,79,111,143],RUAS_X=[-50,-18,22,54];
   inst.instanceMatrix.needsUpdate=true;g.add(inst)}
  g.matrixAutoUpdate=false;g.updateMatrix();
  reg('predios',g);scene.add(g);
+ // O supermercado reutiliza o bloco existente em x=38, z=117..137.
+ // Apenas a fachada, marquise e placa são adicionadas; não há prédio duplicado.
+ const mercado=new THREE.Group();
+ const metal=new THREE.MeshStandardMaterial({color:0x315d46,roughness:.5,metalness:.15});
+ const vidro=new THREE.MeshStandardMaterial({color:0x9bd9c4,roughness:.18,metalness:.1,transparent:true,opacity:.72});
+ const marquise=new THREE.Mesh(new THREE.BoxGeometry(15,.24,2.3),metal);marquise.position.set(SUPERMARKET.x,3.2,137.7);marquise.castShadow=true;mercado.add(marquise);
+ const vitrine=new THREE.Mesh(new THREE.BoxGeometry(10,2.4,.08),vidro);vitrine.position.set(SUPERMARKET.x,1.35,137.2);mercado.add(vitrine);
+ const porta=new THREE.Mesh(new THREE.BoxGeometry(2.1,2.8,.12),new THREE.MeshStandardMaterial({color:0x25312e,roughness:.3,metalness:.25}));porta.position.set(SUPERMARKET.x,1.4,137.1);mercado.add(porta);
+ const placaMercado=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('MERCADO · ALIMENTOS','#e8d264')),transparent:true,depthTest:false}));placaMercado.scale.set(5.8,.78,1);placaMercado.position.set(SUPERMARKET.x,4.15,137.35);mercado.add(placaMercado);
+ reg('supermercado',mercado);scene.add(mercado);
 })();
 // postes
 (function(){const g=new THREE.Group();
@@ -2373,14 +2385,18 @@ const ARMAS=[
 /* ═════════ ESTADO ═════════ */
 const G={running:false,cash:80,sel:0,day:1,clock:6*60,DAYLEN:600,
  rain:0,rainTimer:rnd(40,90),watering:0,vy:0,onGround:true,
- bank:[],lotes:[],clientes:[],cliTimer:8,rackMax:6,
- hp:100,armor:0,arma:0,municao:{},heat:0,wanted:0,crimeT:0,
+ bank:[],alimentos:[],lotes:[],clientes:[],cliTimer:8,rackMax:6,
+ hp:100,saude:100,armor:0,arma:0,municao:{},heat:0,wanted:0,crimeT:0,
  inimigos:[],policia:[],civis:[],
  up:{vasos:false,led:false,rack:false,placa:false,auto:false,irrig:false},
  gate:{open:false},fert:{organico:0,crescimento:0,floracao:0},func:{},nivel:1,xp:0,admin:false,
  respawnT:0,_nasceuNoLote:false,_esperandoLote:true};
 // adubos: buffs de jogo aplicados na planta. Números são de balanceamento,
 // não é receita de nutrição — é o mesmo padrão das outras mecânicas.
+const ALIMENTOS=[
+ {k:'lanche',nome:'Lanche natural',custo:45,cura:18,saude:10,d:'recupera um pouco de vida e saúde'},
+ {k:'refeicao',nome:'Refeição completa',custo:95,cura:40,saude:24,d:'recupera bastante vida e saúde'},
+ {k:'kit',nome:'Kit de recuperação',custo:180,cura:78,saude:45,d:'recuperação forte, usado uma vez'}];
 const ADUBOS=[
  {k:'organico',nome:'Composto orgânico',custo:60, cor:0x6b4a2e,
   d:'recupera saúde e segura a praga por um tempo'},
@@ -2470,6 +2486,8 @@ function aplicarEstado(d){
   if(d.arma!==undefined){const armaNum=Math.max(0,Math.min(ARMAS.length-1,Number(d.arma)||0));G.arma=G.municao[ARMAS[armaNum].k]||armaNum===0?armaNum:0}
   if(d.fert)G.fert=Object.assign({organico:0,crescimento:0,floracao:0},d.fert);
   if(d.armor!==undefined)G.armor=Math.max(0,Math.min(100,Number(d.armor)||0));
+  if(d.saude!==undefined)G.saude=Math.max(0,Math.min(100,Number(d.saude)||0));
+  G.alimentos=Array.isArray(d.alimentos)?d.alimentos.filter(v=>v&&typeof v.k==='string'&&Number(v.qtd)>0).map(v=>({k:v.k,qtd:Math.floor(Number(v.qtd))})):[];
   if(d.wanted!==undefined)G.wanted=Math.max(0,Math.min(5,Number(d.wanted)||0));
   if(d.nivel!==undefined)G.nivel=Math.max(1,Math.min(12,Number(d.nivel)||1));
   if(d.xp!==undefined)G.xp=Math.max(0,Number(d.xp)||0);
@@ -2569,7 +2587,16 @@ function renderBanca(){
    d.onclick=()=>{G.sel=i;renderSeeds();renderBanca();toast('vai plantar '+e.s.nome)};
    b.appendChild(d)})}
  else b.innerHTML+='<div class="sub">Você não tem sementes. Compra abaixo.</div>';
- if(bancaTab==='sem'){
+  if(bancaTab==='food'){
+   b.innerHTML+='<h2 class="mt">SUPERMERCADO</h2><div class="sub">Compre alimentos para recuperar vida e saúde. O servidor confirma cada compra e consumo.</div>';
+   ALIMENTOS.forEach(a=>{
+    const have=G.alimentos.filter(v=>v.k===a.k).reduce((n,v)=>n+Number(v.qtd||0),0);
+    const r=document.createElement('div');r.className='row';r.innerHTML=`<div class="sw" style="background:#e8d264"></div><div class="info"><b>${escaparHTML(a.nome)}</b><small>${escaparHTML(a.d)} · +${a.cura} vida · +${a.saude} saúde · ${have} no inventário</small></div>`;
+    const buy=document.createElement('button');buy.textContent='R$ '+a.custo;buy.disabled=!mpConnected||!mpReady||G.cash<a.custo;buy.onclick=()=>{if(pedirAoServidor({t:'comprar',oq:'alimento',k:a.k})){buy.disabled=true;toast(a.nome+' solicitado')}};r.appendChild(buy);
+    if(have){const eat=document.createElement('button');eat.textContent='COMER';eat.disabled=!mpConnected||!mpReady||G.hp>=100&&G.saude>=100;eat.onclick=()=>{if(pedirAoServidor({t:'comer',k:a.k})){eat.disabled=true;toast('consumo solicitado')}};r.appendChild(eat)}
+    b.appendChild(r);
+   });
+  } else if(bancaTab==='sem'){
   b.innerHTML+='<h2 class="mt">SEMENTES BASE</h2><div class="sub">Barras: ritmo, rendimento, resistência, aroma, brilho.</div>';
   BASE.forEach(s=>{const c=seedCost(s),r=document.createElement('div');r.className='row';
    const possuida=G.bank.filter(e=>e.s&&e.s.nome===s.nome).reduce((n,e)=>n+Number(e.qtd||0),0);
@@ -2827,8 +2854,9 @@ function updHUD(){
  $('hour').textContent=`${h<10?'0':''}${h}:${m<10?'0':''}${m}`;
  $('day').textContent=G.day;
  $('wx').textContent=G.rain>0?'chuva':(h>=18||h<6?'noite':'sol');
- $('hpbar').firstElementChild.style.width=G.hp+'%';
- $('armbar').firstElementChild.style.width=G.armor+'%';
+ $('hpbar').firstElementChild.style.width=Math.max(0,Math.min(100,Number(G.hp)||0))+'%';
+  $('healthbar').firstElementChild.style.width=Math.max(0,Math.min(100,Number(G.saude)||0))+'%';
+  $('armbar').firstElementChild.style.width=G.armor+'%';
   const a=ARMAS[G.arma];$('gunName').textContent=a.k==='punho'?'Mãos':`[${a.nome}]`;
   const _wep=$('wep');if(_wep){_wep.textContent=a.k==='punho'?'EQUIPAR':'TROCAR';_wep.setAttribute('aria-label',a.k==='punho'?'Equipar arma':'Trocar arma')}
  const _r=$('rel'),_m=G.municao[a.k];
@@ -3363,7 +3391,7 @@ function findFocus(){
  // correspondente. O balcão público continua reservado ao sandbox.
  const clientePerto=mpConnected&&[...mpClientes.values()].some(c=>
   c.fase==='atendendo'&&!c.done&&Math.hypot(p.x-c.g.position.x,p.z-c.g.position.z)<2.6);
- if(mpConnected&&meuLoteIndex!==null&&!clientePerto){
+   if(mpConnected&&meuLoteIndex!==null&&!clientePerto){
   const meu=lotesOnline[meuLoteIndex],es=posEstacoesOnline(meu);
   if(meu)for(const nome of ['secagem','cura','embalagem']){
    const e=es[nome];if(e&&Math.hypot(p.x-e.x,p.z-e.z)<2.5)return{t:'estacao',lote:meu,online:true,station:nome};
@@ -3383,7 +3411,8 @@ function findFocus(){
  }
   const cli=G.clientes.find(c=>c.phase==='atendendo'&&!c.done);
  if(!mpConnected&&Math.hypot(p.x-COUNTER.x,p.z-COUNTER.z)<2.3)return cli?{t:'venda',cli}:{t:'balcao'};
- if(Math.hypot(p.x-SHOP.x,p.z-SHOP.z)<2.2)return{t:'banca'};
+  if(Math.hypot(p.x-SUPERMARKET.x,p.z-SUPERMARKET.z)<2.6)return{t:'supermercado'};
+  if(Math.hypot(p.x-SHOP.x,p.z-SHOP.z)<2.2)return{t:'banca'};
  if(!mpConnected&&Math.hypot(p.x-DRY.x,p.z-DRY.z)<2.1)return{t:'estacao'};
  let best=null,bd=1.7;
  // No online, todos os canteiros válidos vêm de lotesOnline (16 por lote).
@@ -3598,6 +3627,7 @@ function doAction(){
   if(mpConnected){toast('use o portão da sua propriedade no online');return}
   G.gate.open=!G.gate.open;gateCol.active=!G.gate.open;
   blip(G.gate.open?500:320,.13,'square',.06);toast(G.gate.open?'portão aberto':'portão fechado');return}
+ if(focus.t==='supermercado'){bancaTab='food';renderBanca();$('banca').classList.add('on');return}
  if(focus.t==='banca'){renderBanca();$('banca').classList.add('on');return}
  if(focus.t==='vendaOnline'){
   if(!Number.isInteger(focus.cli.loteIndex)){toast('cliente sem lote — aguardando sincronização');return}
@@ -5664,7 +5694,7 @@ function mpConnect(){
    } else if(msg.t==='levou_tiro'){
     // O servidor já aplicou dano, armadura e morte. O cliente apenas espelha.
     if(G.running){
-     G.hp=Number(msg.hp)||0;G.armor=Number(msg.armor)||0;
+     G.hp=Number(msg.hp)||0;G.saude=Number(msg.saude)||0;G.armor=Number(msg.armor)||0;
      $('hurt').classList.add('on');clearTimeout(dano._t);
      dano._t=setTimeout(()=>$('hurt').classList.remove('on'),220);
      updHUD();blip(180,.07,'square',.06);
@@ -5672,7 +5702,7 @@ function mpConnect(){
    } else if(msg.t==='player_morreu'){
     if(msg.id===mpId){G.hp=0;toast('você caiu — aguardando renascimento');updHUD()}
    } else if(msg.t==='respawn'){
-    if(msg.x!==undefined){player.position.set(msg.x,msg.y||0,msg.z);G.hp=Number(msg.hp)||100;G.armor=Number(msg.armor)||0;updHUD();toast('você voltou ao jogo')}
+    if(msg.x!==undefined){player.position.set(msg.x,msg.y||0,msg.z);G.hp=Number(msg.hp)||100;G.saude=Number(msg.saude)||100;G.armor=Number(msg.armor)||0;updHUD();toast('você voltou ao jogo')}
    } else if(msg.t==='tiro_npc'){
     // clarão e rastro do tiro, pra todo mundo ver quem atirou em quem
     if(G.running&&eTracers.length){
@@ -5727,6 +5757,8 @@ function mpConnect(){
     const el=$('adminTag');
     if(el){el.textContent='FUNDADOR';el.style.display='block'}
     toast('reconhecido como fundador');
+   } else if(msg.t==='alimento_ok'){
+    toast('alimentação confirmada: vida e saúde recuperadas');updHUD();renderBanca();
    } else if(msg.t==='placar'){
     renderPlacar(msg.board);
    } else if(msg.t==='estado'){

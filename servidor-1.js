@@ -364,7 +364,7 @@ function iniciarBanco() {
         chave TEXT PRIMARY KEY, nome TEXT, cash INTEGER DEFAULT 0,
         bank TEXT DEFAULT '[]', estoque TEXT DEFAULT '[]',
         up TEXT DEFAULT '{}', armas TEXT DEFAULT '{}', fert TEXT DEFAULT '{}',
-        rack_max INTEGER DEFAULT 6, armor REAL DEFAULT 0, municao TEXT DEFAULT '{}', funcs TEXT DEFAULT '[]', imoveis TEXT DEFAULT '[]', nivel INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, territorios TEXT DEFAULT '{}', atualizado BIGINT)`)
+        rack_max INTEGER DEFAULT 6, armor REAL DEFAULT 0, saude REAL DEFAULT 100, alimentos TEXT DEFAULT '[]', municao TEXT DEFAULT '{}', funcs TEXT DEFAULT '[]', imoveis TEXT DEFAULT '[]', nivel INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, territorios TEXT DEFAULT '{}', atualizado BIGINT)`)
         .then(() => pg.query(`CREATE TABLE IF NOT EXISTS lotes (
           idx INTEGER PRIMARY KEY, dono_chave TEXT, dono_nome TEXT,
           plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);
@@ -378,6 +378,8 @@ function iniciarBanco() {
             started_at BIGINT NOT NULL, completes_at BIGINT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', source_json TEXT DEFAULT '{}')`))
         .then(() => pg.query('ALTER TABLE farm_slots ADD COLUMN IF NOT EXISTS portao_aberto INTEGER DEFAULT 0'))
         .then(() => pg.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS armor REAL DEFAULT 0'))
+        .then(() => pg.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS saude REAL DEFAULT 100'))
+        .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS alimentos TEXT DEFAULT '[]'"))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS municao TEXT DEFAULT '{}'"))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS funcs TEXT DEFAULT '[]'"))
         .then(() => pg.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS imoveis TEXT DEFAULT '[]'"))
@@ -408,7 +410,7 @@ function iniciarBanco() {
       chave TEXT PRIMARY KEY, nome TEXT, cash INTEGER DEFAULT 0,
       bank TEXT DEFAULT '[]', estoque TEXT DEFAULT '[]',
       up TEXT DEFAULT '{}', armas TEXT DEFAULT '{}', fert TEXT DEFAULT '{}',
-      rack_max INTEGER DEFAULT 6, armor REAL DEFAULT 0, municao TEXT DEFAULT '{}', funcs TEXT DEFAULT '[]', imoveis TEXT DEFAULT '[]', nivel INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, territorios TEXT DEFAULT '{}', atualizado INTEGER)`);
+      rack_max INTEGER DEFAULT 6, armor REAL DEFAULT 0, saude REAL DEFAULT 100, alimentos TEXT DEFAULT '[]', municao TEXT DEFAULT '{}', funcs TEXT DEFAULT '[]', imoveis TEXT DEFAULT '[]', nivel INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, territorios TEXT DEFAULT '{}', atualizado INTEGER)`);
     db.exec(`CREATE TABLE IF NOT EXISTS lotes (
       idx INTEGER PRIMARY KEY, dono_chave TEXT, dono_nome TEXT,
       plots TEXT DEFAULT '[]', portao_aberto INTEGER DEFAULT 0);
@@ -422,6 +424,8 @@ function iniciarBanco() {
       started_at INTEGER NOT NULL, completes_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', source_json TEXT DEFAULT '{}')`);
     try { db.exec('ALTER TABLE farm_slots ADD COLUMN portao_aberto INTEGER DEFAULT 0'); } catch (_) {}
     try { db.exec('ALTER TABLE usuarios ADD COLUMN armor REAL DEFAULT 0'); } catch (_) {}
+    try { db.exec('ALTER TABLE usuarios ADD COLUMN saude REAL DEFAULT 100'); } catch (_) {}
+    try { db.exec("ALTER TABLE usuarios ADD COLUMN alimentos TEXT DEFAULT '[]'"); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN municao TEXT DEFAULT '{}'"); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN funcs TEXT DEFAULT '[]'"); } catch (_) {}
     try { db.exec("ALTER TABLE usuarios ADD COLUMN imoveis TEXT DEFAULT '[]'"); } catch (_) {}
@@ -453,7 +457,7 @@ function carregarCarteira(chave) {
         estoque: JSON.parse(r.estoque || '[]'), up,
         avatarId: avatarCatalogado(up._avatarId),
         armas: JSON.parse(r.armas || '{}'),         fert: JSON.parse(r.fert || '{}'),
-        rackMax: r.rack_max || 6, armor: Number(r.armor) || 0,
+        rackMax: r.rack_max || 6, armor: Number(r.armor) || 0, saude: num(r.saude, 0, 100, 100), alimentos: JSON.parse(r.alimentos || '[]'),
         municao: JSON.parse(r.municao || '{}'), funcs: JSON.parse(r.funcs || '[]'),
         imoveis: JSON.parse(r.imoveis || '[]'), nivel: Number(r.nivel) || 1, xp: Number(r.xp) || 0,
         territorios: JSON.parse(r.territorios || '{}'), _iniciado: true
@@ -474,7 +478,7 @@ async function carregarCarteiraAsync(chave) {
       estoque: JSON.parse(x.estoque || '[]'), up,
       avatarId: avatarCatalogado(up._avatarId),
       armas: JSON.parse(x.armas || '{}'),       fert: JSON.parse(x.fert || '{}'),
-      rackMax: x.rack_max || 6, armor: Number(x.armor) || 0,
+      rackMax: x.rack_max || 6, armor: Number(x.armor) || 0, saude: num(x.saude, 0, 100, 100), alimentos: JSON.parse(x.alimentos || '[]'),
       municao: JSON.parse(x.municao || '{}'), funcs: JSON.parse(x.funcs || '[]'),
       imoveis: JSON.parse(x.imoveis || '[]'), nivel: Number(x.nivel) || 1, xp: Number(x.xp) || 0,
       territorios: JSON.parse(x.territorios || '{}'), _iniciado: true
@@ -488,29 +492,29 @@ function salvarCarteira(chave) {
   const dados = [chave, c._nome || '', Math.floor(c.cash),
     JSON.stringify(c.bank || []), JSON.stringify(c.estoque || []),
     JSON.stringify(upSalvo), JSON.stringify(c.armas || {}),
-    JSON.stringify(c.fert || {}), c.rackMax || 6, Number(c.armor) || 0,
+    JSON.stringify(c.fert || {}), c.rackMax || 6, Number(c.armor) || 0, num(c.saude, 0, 100, 100), JSON.stringify(c.alimentos || []),
     JSON.stringify(c.municao || {}), JSON.stringify(c.funcs || []), JSON.stringify(c.imoveis || []),
     Number(c.nivel) || 1, Number(c.xp) || 0, JSON.stringify(c.territorios || {}), Date.now()];
   if (dbTipo === 'sqlite' && db) {
     try {
       db.prepare(`INSERT INTO usuarios
-        (chave,nome,cash,bank,estoque,up,armas,fert,rack_max,armor,municao,funcs,imoveis,nivel,xp,territorios,atualizado)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        (chave,nome,cash,bank,estoque,up,armas,fert,rack_max,armor,saude,alimentos,municao,funcs,imoveis,nivel,xp,territorios,atualizado)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(chave) DO UPDATE SET nome=excluded.nome, cash=excluded.cash,
           bank=excluded.bank, estoque=excluded.estoque, up=excluded.up,
           armas=excluded.armas, fert=excluded.fert, rack_max=excluded.rack_max,
-          armor=excluded.armor, municao=excluded.municao, funcs=excluded.funcs,
+          armor=excluded.armor, saude=excluded.saude, alimentos=excluded.alimentos, municao=excluded.municao, funcs=excluded.funcs,
           imoveis=excluded.imoveis, nivel=excluded.nivel, xp=excluded.xp,
           territorios=excluded.territorios, atualizado=excluded.atualizado`).run(...dados);
     } catch (e) { console.error('erro ao salvar carteira:', e.message); }
   } else if (dbTipo === 'postgres' && pg) {
     pg.query(`INSERT INTO usuarios
-      (chave,nome,cash,bank,estoque,up,armas,fert,rack_max,armor,municao,funcs,imoveis,nivel,xp,territorios,atualizado)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      (chave,nome,cash,bank,estoque,up,armas,fert,rack_max,armor,saude,alimentos,municao,funcs,imoveis,nivel,xp,territorios,atualizado)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       ON CONFLICT(chave) DO UPDATE SET nome=EXCLUDED.nome, cash=EXCLUDED.cash,
         bank=EXCLUDED.bank, estoque=EXCLUDED.estoque, up=EXCLUDED.up,
         armas=EXCLUDED.armas, fert=EXCLUDED.fert, rack_max=EXCLUDED.rack_max,
-        armor=EXCLUDED.armor, municao=EXCLUDED.municao, funcs=EXCLUDED.funcs,
+        armor=EXCLUDED.armor, saude=EXCLUDED.saude, alimentos=EXCLUDED.alimentos, municao=EXCLUDED.municao, funcs=EXCLUDED.funcs,
         imoveis=EXCLUDED.imoveis, nivel=EXCLUDED.nivel, xp=EXCLUDED.xp,
         territorios=EXCLUDED.territorios, atualizado=EXCLUDED.atualizado`, dados)
       .catch(e => console.error('erro ao salvar carteira (pg):', e.message));
@@ -1023,6 +1027,21 @@ function avatarCatalogado(v) {
 }
 const CUSTO_COLETE = 520;
 const CUSTO_CRUZAR = 120;
+const SUPERMERCADO = Object.freeze({ x: 38, z: 140, raio: 6 });
+const CAT_ALIMENTOS = Object.freeze(Object.assign(Object.create(null), {
+  lanche: { nome:'Lanche natural', custo:45, cura:18, saude:10, descricao:'recupera um pouco de vida e saúde' },
+  refeicao: { nome:'Refeição completa', custo:95, cura:40, saude:24, descricao:'recupera bastante vida e saúde' },
+  kit: { nome:'Kit de recuperação', custo:180, cura:78, saude:45, descricao:'recuperação forte, usado uma vez' }
+}));
+function alimentoCatalogado(k) { const key = str(k, 16); return Object.prototype.hasOwnProperty.call(CAT_ALIMENTOS, key) ? CAT_ALIMENTOS[key] : null; }
+function alimentoAdd(c, k, qtd = 1) {
+  const n = Math.max(0, Math.min(99, Math.floor(Number(qtd) || 0))); if (!n) return false;
+  const item = c.alimentos.find(v => v.k === k); if (item) item.qtd = Math.min(99, item.qtd + n); else c.alimentos.push({ k, qtd: n }); return true;
+}
+function alimentoTirar(c, k) {
+  const item = c.alimentos.find(v => v.k === k && v.qtd > 0); if (!item) return false;
+  item.qtd--; c.alimentos = c.alimentos.filter(v => v.qtd > 0); return true;
+}
 const TRAIT_KEYS = ['ritmo','rendimento','resistencia','aroma','brilho'];
 
 function precoSemente(s) {
@@ -1048,7 +1067,7 @@ function carteiraDe(j) {
     // tenta recuperar do banco antes de criar uma carteira nova
     const salva = carregarCarteira(k);
     carteiras.set(k, salva || { cash: CASH_INICIAL, bank: [], estoque: [],
-      rackMax: 6, up: {}, avatarId: avatarCatalogado(j.avatarId), armas: { pistola: true }, fert: {}, municao: {}, funcs: [] });
+      rackMax: 6, up: {}, avatarId: avatarCatalogado(j.avatarId), armas: { pistola: true }, fert: {}, municao: {}, funcs: [], saude: 100 });
   }
   const c = carteiras.get(k);
   normalizarBancoCatalogo(c);
@@ -1063,6 +1082,8 @@ function carteiraDe(j) {
   c.territorios = c.territorios && typeof c.territorios === 'object' ? c.territorios : {};
   c.nivel = Math.max(1, Math.min(12, Number(c.nivel) || 1));
   c.xp = Math.max(0, Number(c.xp) || 0);
+  c.saude = num(c.saude, 0, 100, 100);
+  c.alimentos = Array.isArray(c.alimentos) ? c.alimentos.filter(v => v && typeof v.k === 'string' && Number(v.qtd) > 0).map(v => ({ k: str(v.k, 16), qtd: Math.min(99, Math.floor(Number(v.qtd))) })) : [];
   c.funcs = Array.isArray(c.funcs) ? c.funcs : [];
   c.avatarId = avatarCatalogado(c.avatarId || (c.up && c.up._avatarId) || j.avatarId);
   j.avatarId = c.avatarId;
@@ -1080,6 +1101,7 @@ function sincronizarEquipamento(j) {
   j.armas = c.armas;
   j.municao = c.municao;
   j.armor = c.armor;
+  j.saude = c.saude;
   return c;
 }
 function darXP(j, quantidade) {
@@ -1162,7 +1184,9 @@ function aplicarDanoJogador(j, dano, de) {
   c.armor = j.armor;
   restante -= absorvido;
   j.hp = Math.max(0, j.hp - restante);
-  const resultado = { aplicado: restante, hp: j.hp, armor: j.armor, morreu: false };
+  j.saude = Math.max(0, j.saude - restante * .25);
+  c.saude = j.saude;
+  const resultado = { aplicado: restante, hp: j.hp, saude: j.saude, armor: j.armor, morreu: false };
   if (j.hp <= 0) {
     const perda = Math.floor(Math.max(0, c.cash) * .3);
     c.cash = Math.max(0, c.cash - perda);
@@ -1176,7 +1200,7 @@ function aplicarDanoJogador(j, dano, de) {
     resultado.perda = perda;
     paraInteresse({ t: 'player_morreu', id: j.id, por: de || null }, j.x, j.z, j.chave);
   }
-  enviar(j, { t: 'levou_tiro', de, dano: resultado.aplicado, hp: j.hp, armor: j.armor });
+  enviar(j, { t: 'levou_tiro', de, dano: resultado.aplicado, hp: j.hp, saude: j.saude, armor: j.armor });
   enviarEstado(j);
   marcarSuja(j);
   return resultado;
@@ -1197,6 +1221,7 @@ function enviarEstado(j) {
       qual: +l.qual.toFixed(3), desde: l.desde
     })),
     rackMax: c.rackMax,
+    alimentos: Array.isArray(c.alimentos) ? c.alimentos : [], saude: j.saude,
     up: c.up, armas: c.armas, fert: c.fert || {},
     municao: c.municao || j.municao || {},
     funcs: (c.funcs || []).map(registro => {
@@ -2305,10 +2330,10 @@ wss.on('connection', (ws, req) => {
     nome: 'Jogador' + id,
     chave: null,
     x: 0, y: 0, z: 0, ry: 0, arma: 0, avatarId: 'carmo',
-    hp: 100, armor: 0, procurado: 0, morto: false, respawnEm: 0,
+    hp: 100, saude: 100, armor: 0, procurado: 0, morto: false, respawnEm: 0,
     armas: { pistola: true },
     municao: { pistola: { pente: 12, reserva: 24 } },
-    ultimoTiro: 0, ultimoCrime: 0,
+    ultimoTiro: 0, ultimoCrime: 0, ultimoAlimento: 0,
     lotesVisiveis: new Set(),
     posIniciada: false, autenticado: false, autenticando: false, helloRecebido: false, carteiraPronta: false,
     ultimoInputSeq: 0,
@@ -2706,6 +2731,12 @@ wss.on('connection', (ws, req) => {
           }
           custo = CAT_UPG[k];
           aplicar = () => { c.up[k] = true; if (k === 'rack') c.rackMax = 10; };
+        } else if (oq === 'alimento') {
+          if (!exigirDistancia(j, SUPERMERCADO.x, SUPERMERCADO.z, SUPERMERCADO.raio, 'longe do supermercado')) return;
+          const k = str(m.k, 16), def = alimentoCatalogado(k);
+          if (!def) { enviar(j, { t:'recusado', motivo:'alimento fora do catálogo' }); metricas.rejeitadas++; return; }
+          custo = def.custo;
+          aplicar = () => alimentoAdd(c, k, 1);
         } else if (oq === 'adubo') {
           const k = str(m.k, 12);
           if (!(k in CAT_ADUBO)) {
@@ -2750,6 +2781,17 @@ wss.on('connection', (ws, req) => {
         aplicar();
         enviarEstado(j);
         break;
+      }
+
+      case 'comer': {
+        if (!exigirJogadorVivo(j)) return;
+        const c = carteiraDe(j), k = str(m.k, 16), def = alimentoCatalogado(k);
+        if (!def || !alimentoTirar(c, k)) { enviar(j, { t:'recusado', motivo:'alimento não está no inventário' }); metricas.rejeitadas++; return; }
+        const agoraMs = agora();
+        if (agoraMs - (j.ultimoAlimento || 0) < 900) { alimentoAdd(c, k, 1); enviar(j, { t:'recusado', motivo:'aguarde antes de comer novamente' }); metricas.rejeitadas++; return; }
+        if (j.hp >= 100 && j.saude >= 100) { alimentoAdd(c, k, 1); enviar(j, { t:'recusado', motivo:'vida e saúde já estão cheias' }); metricas.rejeitadas++; return; }
+        j.hp = Math.min(100, j.hp + def.cura); j.saude = Math.min(100, j.saude + def.saude); c.saude = j.saude; j.ultimoAlimento = agoraMs; marcarSuja(j);
+        enviar(j, { t:'alimento_ok', k, hp:j.hp, saude:j.saude }); enviarEstado(j); break;
       }
 
       case 'cruzar': {
@@ -3237,10 +3279,11 @@ setInterval(() => {
     }
     if (j.morto && agora() >= j.respawnEm) {
       const p = spawnOficial(j);
-      j.x = p.x; j.y = 0; j.z = p.z; j.vy = 0; j.onGround = true; j.hp = 100; j.armor = 0;
-      j.morto = false; j.vivo = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
-      const c = sincronizarEquipamento(j); c.armor = 0;
-      enviar(j, { t:'respawn', x:j.x, y:j.y, z:j.z, hp:j.hp, armor:j.armor });
+      j.x = p.x; j.y = 0; j.z = p.z; j.vy = 0; j.onGround = true; j.hp = 100; j.saude = 100; j.armor = 0;
+      j.morto = false; j.vivo = true; j.ultimoMov = agora() - 250; j.posIniciada = true; j.ultimoAlimento = 0;
+      const c = sincronizarEquipamento(j); c.armor = 0; c.saude = j.saude;
+      marcarSuja(j);
+      enviar(j, { t:'respawn', x:j.x, y:j.y, z:j.z, hp:j.hp, saude:j.saude, armor:j.armor });
       enviarEstado(j);
     }
     const perto = [];
