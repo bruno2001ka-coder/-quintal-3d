@@ -362,6 +362,7 @@ body.touch #gameMenu .menuNote{font-size:clamp(10px,2.5vmin,13px)}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 
 /*
@@ -2319,6 +2320,39 @@ function humanoid(shirt,pants,skin){
 const P=humanoid(0x1a1c1a,0x4a5233);
 const player=P.g,limbs=P.L;
 player.position.set(GATEX,0,C.z1-4);player.rotation.y=Math.PI;scene.add(player);
+// Personagem principal importado: a física continua usando o mesmo grupo
+// `player`, posição, colisores, câmera e arma. O boneco low-poly antigo fica
+// como fallback caso o GLB ou o CDN do loader não carregue.
+let bossMixer=null,bossActions={},bossAction=null,bossModeloPronto=false;
+function bossTocar(nome,fade=.16){
+ if(!bossMixer||!bossActions[nome])return;
+ const proxima=bossActions[nome];if(bossAction===proxima)return;
+ if(bossAction)bossAction.fadeOut(fade);proxima.reset().fadeIn(fade).play();bossAction=proxima;
+}
+function carregarPersonagemPrincipal(){
+ if(!window.THREE||!THREE.GLTFLoader)return;
+ const loader=new THREE.GLTFLoader();
+ loader.load('assets/TheBoss_com_animacoes.glb',gltf=>{
+  const modelo=gltf.scene;
+  const caixa=new THREE.Box3().setFromObject(modelo),tam=caixa.getSize(new THREE.Vector3());
+  if(!tam.y||!Number.isFinite(tam.y))return;
+  modelo.scale.setScalar(1.78/tam.y);
+  const pos=caixa.getCenter(new THREE.Vector3());
+  modelo.position.y=-caixa.min.y*modelo.scale.y;
+  modelo.rotation.y=Math.PI;
+  modelo.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true}});
+  for(const antigo of [...player.children])antigo.visible=false;
+  player.add(modelo);
+  bossMixer=new THREE.AnimationMixer(modelo);
+  for(const clip of (gltf.animations||[])){
+   const nome=clip.name||'';
+   if(['Idle','Walk','Run','Reload','WalkBackwards'].includes(nome))bossActions[nome]=bossMixer.clipAction(clip);
+  }
+  bossModeloPronto=!!bossActions.Idle;
+  if(bossModeloPronto)bossTocar('Idle',0);
+ },undefined,()=>{ /* fallback low-poly permanece ativo */ });
+}
+carregarPersonagemPrincipal();
 const pShadow=contact(0,0,.55,.5);
 
 // arma na mão
@@ -4242,11 +4276,18 @@ function tick(){
  const sw=Math.sin(walkPhase)*(mag>.05?(run?.92:.55):.09);
  limbs.legL.rotation.x=sw;limbs.legR.rotation.x=-sw;
  limbs.armL.rotation.x=-sw*.8;limbs.armR.rotation.x=sw*.8;
+ if(bossModeloPronto){
+  const andando=mag>.05&&!modalOpen()&&!aguardandoPrimeiroLote;
+  bossTocar(andando?(run?'Run':'Walk'):'Idle');
+  if(bossMixer)bossMixer.update(dt);
+ }
 
  /* arma */
  const a=armaAtual();
  gunMesh.visible=a.k!=='punho';
  if(gunMesh.visible&&gunAtualK!==a.k)buildGun(a.k);
+ // O GLB possui Reload; a arma existente continua sendo a fonte authoritative.
+ if(bossModeloPronto&&G.reloading)bossTocar('Reload',.08);
  if(gunMesh.visible){
   const y=player.rotation.y;
   const off=aiming?.42:.3;
