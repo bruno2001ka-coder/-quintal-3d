@@ -5669,6 +5669,12 @@ function mpConnect(){
     if(seq)mpLastCorrectionSeq=seq;
     const dd=Math.hypot(player.position.x-msg.x,player.position.z-msg.z);
     if(dd<.42)return;
+    // A saída de uma bancada não é jitter: é uma posição de recuperação.
+    // Aplicar inteira evita que o input antigo continue empurrando o jogador
+    // contra o mesmo colisor a cada snapshot.
+    if(msg.motivo==='posição liberada da bancada'){
+     player.position.set(msg.x,msg.y||0,msg.z);mpLastCorrectionSeq=seq||mpLastCorrectionSeq;return;
+    }
     if(dd>6)player.position.set(msg.x,msg.y,msg.z);
     else{ player.position.x+=(msg.x-player.position.x)*.18;
           player.position.z+=(msg.z-player.position.z)*.18; }
