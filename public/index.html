@@ -584,7 +584,8 @@ const skyC=cv(4,256),skyT=T(skyC);
 const skyDome=new THREE.Mesh(new THREE.SphereGeometry(230,26,18),
  new THREE.MeshBasicMaterial({map:skyT,side:THREE.BackSide,depthWrite:false,fog:false}));
 scene.add(skyDome);
-function paintSky(a,b,c){const g=skyC.getContext('2d'),gr=g.createLinearGradient(0,0,0,256);
+let ultimaPaletaCeu='';
+function paintSky(a,b,c){const chave=a+'|'+b+'|'+c;if(chave===ultimaPaletaCeu)return;ultimaPaletaCeu=chave;const g=skyC.getContext('2d'),gr=g.createLinearGradient(0,0,0,256);
  gr.addColorStop(0,a);gr.addColorStop(.5,b);gr.addColorStop(1,c);g.fillStyle=gr;g.fillRect(0,0,4,256);skyT.needsUpdate=true}
 const sun=new THREE.DirectionalLight(0xffe9c4,1.85);
  sun.castShadow=cfgQual().sombras;sun.shadow.mapSize.set(cfgQual().mapa,cfgQual().mapa);
