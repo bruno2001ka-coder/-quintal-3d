@@ -87,11 +87,13 @@ const TIPO_PLOT = [
 ];
 // Fazenda multiplayer: cada conta pode ter um setor persistente com 12
 // canteiros. O limite de seis é da fazenda, não do servidor inteiro.
+const LAYOUT_QUEBRADA = require('./public/layout-quebrada.js');
+const FARM_SHIFT_Z = Number(LAYOUT_QUEBRADA.farm && LAYOUT_QUEBRADA.farm.shiftZ || 0);
 const FARM_MAX_PLAYERS = 6;
 const FARM_PLOTS_PER_PLAYER = 12;
 const FARM_LOT_PRICES = Object.freeze([26000, 28000, 30000, 32000, 34000, 36000]);
 const FARM_SLOT_SPOTS = [
-  [-30,194],[0,194],[30,194],[-30,230],[0,230],[30,230]
+  [-30,194 + FARM_SHIFT_Z],[0,194 + FARM_SHIFT_Z],[30,194 + FARM_SHIFT_Z],[-30,230 + FARM_SHIFT_Z],[0,230 + FARM_SHIFT_Z],[30,230 + FARM_SHIFT_Z]
 ];
 const FARM_PLOT_OFFSETS = [
   [-7,-10],[-2.3,-10],[2.4,-10],
@@ -99,12 +101,12 @@ const FARM_PLOT_OFFSETS = [
   [-7,2],[-2.3,2],[2.4,2],
   [-7,8],[-2.3,8],[2.4,8]
 ];
-const FARM_BARN = Object.freeze({ x:0, z:252, w:26, d:12, doorW:3.2 });
+const FARM_BARN = Object.freeze({ x:0, z:252 + FARM_SHIFT_Z, w:26, d:12, doorW:3.2 });
 const FARM_GATE_W = 10;
 const FARM_TABLE_SPOTS = [
   [-8,-2],[0,-2],[8,-2],[-8,2],[0,2],[8,2]
 ];
-const FARM_AREA = Object.freeze({ x0:-46, x1:46, z0:172, z1:268 });
+const FARM_AREA = Object.freeze({ x0:-46, x1:46, z0:172 + FARM_SHIFT_Z, z1:268 + FARM_SHIFT_Z });
 const DAYLEN            = 600;                   // seg reais = 1 dia de jogo (igual o cliente)
 const GROW_MS           = 1000;                  // recalcula plantas a cada 1s
 // Crescimento agrícola: a água deve exigir atenção, não congelar a colheita.
@@ -1320,6 +1322,11 @@ const COL_ESTATICOS = [
   [69.5,73.1,56.4,59.6], [-1.6,-1.2,-11.3,-10.9], [1.4,1.8,-11.3,-10.9], [4,4.4,-11.3,-10.9],
   [-0.1,2.9,-11.85,-10.95], [-8.5,-6.3,-2.75,-1.65], [3.75,6.05,6.88,7.75]
 ];
+// Os colisores agrícolas antigos eram absolutos; normalizamos todos pelo
+// mesmo deslocamento usado pelo cliente antes de gerar divisórias e lotes.
+for (const c of COL_ESTATICOS) {
+  if (c[2] >= 170 || c[3] >= 170) { c[2] += FARM_SHIFT_Z; c[3] += FARM_SHIFT_Z; }
+}
 // Divisórias dos seis setores: cada jogador só atravessa a própria porta.
 for (const [sx, sz] of FARM_SLOT_SPOTS) {
   const x0 = sx - 12, x1 = sx + 12, z0 = sz - 14, z1 = sz + 14;

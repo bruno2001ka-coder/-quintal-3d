@@ -2,12 +2,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+const layout = require(path.join(__dirname, '..', 'public', 'layout-quebrada.js'));
 
 function extrairLiteral(nome) {
   const re = new RegExp(`const\\s+${nome}\\s*=\\s*([^;]+);`);
   const m = html.match(re);
   assert.ok(m, `constante ${nome} não encontrada`);
-  return Function(`"use strict"; return (${m[1]});`)();
+  const expr = m[1].replaceAll('FARM_SHIFT_Z', String(Number(layout.farm?.shiftZ || 0)));
+  return Function(`"use strict"; return (${expr});`)();
 }
 const Q = extrairLiteral('Q');
 const C = extrairLiteral('C');
