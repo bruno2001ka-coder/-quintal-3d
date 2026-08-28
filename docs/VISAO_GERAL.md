@@ -59,10 +59,10 @@ No celular, o botão **MAPA** abre o mapa completo. Ele mostra fundos, cidade, e
 O cliente usa a URL configurada em `public/index.html`:
 
 ```text
-wss://quintal-3d.onrender.com
+wss://quintal-3d.fly.dev
 ```
 
-Quando o cliente é servido pelo Render, ele troca automaticamente por WebSocket same-origin; o endereço acima permanece como fallback para o GitHub Pages. O protocolo começa com `hello`. O cliente envia nome, avatar, token de sessão, identificação do aparelho e semente inicial visual. O servidor responde com:
+Quando o cliente é servido pelo Render, ele troca automaticamente por WebSocket same-origin; no GitHub Pages usa o backend Fly acima. O Render permanece documentado apenas como ambiente legado/rollback, não como autoridade atual. O protocolo começa com `hello`. O cliente envia nome, avatar, token de sessão, identificação do aparelho e semente inicial visual. O servidor responde com:
 
 1. `sessao`, contendo token HMAC e chave persistente da carteira;
 2. `lote_atribuido`, contendo lote, posição de nascimento e portão;

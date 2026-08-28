@@ -2843,7 +2843,7 @@ function updHUD(){
  $('zone').innerHTML=z}
 
 /* ═════════ MUNDO ONLINE — modo compartilhado, assíncrono ═════════ */
-const ONLINE = typeof window!=='undefined' && !!(window.storage && window.storage.get);
+const ONLINE = typeof window!=='undefined' && typeof window.WebSocket==='function';
 let meuNome=null, meuId=null;
 
 // ─── MODO ADMINISTRADOR ───
@@ -2915,33 +2915,29 @@ async function claimTerritoryOnline(t){
  if(!mpConnected||!mpReady||!estadoDoServidor){toast('sem conexão com o servidor');return false}
  return pedirAoServidor({t:'capturar_territorio',nome:t.nome});
 }
-async function syncLeaderboard(){
- if(!ONLINE||!meuId||!meuNome)return;
- try{
-  let board=[];
-  try{const r=await window.storage.get('mundo:placar',true);if(r&&r.value)board=JSON.parse(r.value)}catch(e){}
-  const pontos=TERR.filter(t=>t.dono==='seu').length;
-  const idx=board.findIndex(x=>x.id===meuId);
-  const entry={id:meuId,nome:meuNome,cash:Math.floor(G.cash),nivel:G.nivel,pontos,dia:G.day,ts:Date.now()};
-  if(idx>=0)board[idx]=entry;else board.push(entry);
-  board.sort((a,b)=>b.cash-a.cash);board=board.slice(0,30);
-  await window.storage.set('mundo:placar',JSON.stringify(board),true);
- }catch(e){}}
-async function abrirMundo(){
+function renderPlacar(board){
  const b=$('mundoBody');
- if(!ONLINE){b.innerHTML='<div class="sub">modo online indisponível aqui</div>';$('mundo').classList.add('on');return}
- b.innerHTML='carregando...';$('mundo').classList.add('on');
- try{
-  const r=await window.storage.get('mundo:placar',true);
-  const board=(r&&r.value)?JSON.parse(r.value):[];
-  if(!board.length){b.innerHTML='<div class="sub">ninguém salvou progresso ainda — seja o primeiro</div>';return}
-  b.innerHTML=board.map((p,i)=>{
-   const nome=escaparHTML(p.nome),nivel=Math.max(1,Math.floor(Number(p.nivel)||1));
-   const pontos=Math.max(0,Math.floor(Number(p.pontos)||0)),dia=Math.max(1,Math.floor(Number(p.dia)||1));
-   const cash=Math.max(0,Math.floor(Number(p.cash)||0));
-   return `<div class="row"><div class="info"><b style="color:${p.id===meuId?'#8fe063':'#fff'}">${i+1}. ${nome}${p.id===meuId?' (você)':''}</b><small>nível ${nivel} · ${pontos} território(s) · dia ${dia}</small></div><div style="color:#e8d264;font-size:13px;white-space:nowrap">R$ ${cash}</div></div>`;
-  }).join('');
- }catch(e){b.innerHTML='<div class="sub">não consegui carregar agora — tenta de novo</div>'}}
+ const lista=Array.isArray(board)?board:[];
+ if(!lista.length){b.innerHTML='<div class="sub">ninguém salvou progresso ainda — seja o primeiro</div>';return}
+ b.innerHTML=lista.map((p,i)=>{
+  const nome=escaparHTML(p.nome),nivel=Math.max(1,Math.floor(Number(p.nivel)||1));
+  const pontos=Math.max(0,Math.floor(Number(p.pontos)||0));
+  const cash=Math.max(0,Math.floor(Number(p.cash)||0)),self=p.id==='self';
+  return `<div class="row"><div class="info"><b style="color:${self?'#8fe063':'#fff'}">${i+1}. ${nome}${self?' (você)':''}</b><small>nível ${nivel} · ${pontos} território(s)</small></div><div style="color:#e8d264;font-size:13px;white-space:nowrap">R$ ${cash}</div></div>`;
+ }).join('');
+}
+function syncLeaderboard(){
+ if(!ONLINE||!mpConnected||!mpReady||!estadoDoServidor)return;
+ pedirAoServidor({t:'placar'});
+}
+function abrirMundo(){
+ const b=$('mundoBody');$('mundo').classList.add('on');
+ if(!ONLINE||!mpConnected||!mpReady||!estadoDoServidor){
+  b.innerHTML='<div class="sub">entre no mundo online para ver o placar authoritative</div>';return;
+ }
+ b.innerHTML='carregando...';
+ if(!pedirAoServidor({t:'placar'}))b.innerHTML='<div class="sub">não consegui consultar agora — tente novamente</div>';
+}
 // ─── diagnóstico: ver e copiar a chave deste aparelho ───
 // Fica só aqui, nesta caixa. Não vai pro placar, não vai em broadcast,
 // e nenhum outro jogador recebe.
@@ -3841,7 +3837,7 @@ function iniciarSandboxOffline(){
  clearTimeout(mpRetryTimer);mpRetryTimer=null;
  modoOfflineDev=true;mpReconnecting=false;mpHadConnection=false;mpConnected=false;mpReady=false;estadoDoServidor=false;
  if(mpWs&&mpWs.readyState<2){try{mpWs.close(1000,'sandbox offline')}catch(e){}}
- mpWs=null;mpId=null;meuId=null;meuNome='sandbox';contaUsuario='';meuLoteIndex=null;meuFarmSlotIndex=null;farmUnlocked=false;
+ mpWs=null;mpId=null;meuId=null;mpPersistId='';meuNome='sandbox';contaUsuario='';meuLoteIndex=null;meuFarmSlotIndex=null;farmUnlocked=false;
  [G.clientes,G.inimigos,G.policia].forEach(lista=>lista.forEach(e=>scene.remove(e.g)));
  Object.values(G.func||{}).forEach(f=>{if(f&&f.g)scene.remove(f.g)});
  G.clientes=[];G.inimigos=[];G.policia=[];G.func={};
@@ -5073,7 +5069,7 @@ function acaoPlotOnline(focus){
    if(!e||e.qtd<=0){toast('sem semente — passa na bancada');return}
    // O estoque só muda quando o servidor responder com estado.
    mpWs.send(JSON.stringify({t:'plantar',plot:P.plotIndex,seedId:e.s.id,strain:e.s}));
-   blip(400,.13,'sine',.06);toast(`${e.s.nome} plantada no seu lote`);
+   blip(400,.13,'sine',.06);toast(`${e.s.nome} solicitada para plantio`);
   } else if(d.estagio===4){
    if(G.lotes.length>=G.rackMax){toast('bancada cheia');return}
    mpWs.send(JSON.stringify(P.entId?{t:'colher',id:P.entId}:{t:'colher',plot:P.plotIndex}));
@@ -5145,7 +5141,7 @@ const MP_URL=(()=>{
 })();
 let mpWs=null, mpId=null, mpConnected=false, mpReady=false, mpReconnecting=false, mpReentrada=false, mpHadConnection=false, mpSendT=0, mpTentativas=0, mpRetryTimer=null;
 let mpInputSeq=0,mpLastCorrectionSeq=0,mpJumpQueued=false;
-let mpToken='',mpAvatarId='carmo',contaUsuario='';
+let mpToken='',mpAvatarId='carmo',contaUsuario='',mpPersistId='';
 try{mpAvatarId=localStorage.getItem('quintal3d-avatar')||'carmo'}catch(e){}
 try{mpToken=localStorage.getItem('quintal3d-account-token')||sessionStorage.getItem('quintal3d-session-token')||''}catch(e){}
 function authStatus(text,erro=false){const el=$('authStatus');if(!el)return;el.textContent=text;el.classList.toggle('error',!!erro)}
@@ -5504,7 +5500,7 @@ function mpConnect(){
      authStatus(msg.novo?'conta criada; carregando seu jogador…':'conta reconhecida; carregando seu jogador…');
      const p=$('authPanel');if(p)p.hidden=true;
    } else if(msg.t==='sessao'){
-     mpToken=msg.token||'';
+     mpToken=msg.token||'';mpPersistId=msg.persistId||'';
      try{
       sessionStorage.setItem('quintal3d-session-token',mpToken);
       localStorage.setItem('quintal3d-account-token',mpToken);
@@ -5698,7 +5694,7 @@ function mpConnect(){
    } else if(msg.t==='imovel_comprado'){
     const im=IMOVEIS.find(x=>x.k===msg.k);if(im){im.comprado=true;im.ring.material.color.setHex(0x8fe063);renderBanca();updHUD()}
    } else if(msg.t==='territorio_estado'){
-    const t=TERR.find(x=>x.nome===msg.nome);if(t){t.dono='jogador';t.donoNome=msg.dono;t.ring.material.color.setHex(msg.donoChave===meuId?0x8fe063:0x5aa8e0);t.disc.material.color.setHex(msg.donoChave===meuId?0x8fe063:0x5aa8e0)}
+    const t=TERR.find(x=>x.nome===msg.nome);if(t){const proprio=msg.donoChave===mpPersistId;t.dono=proprio?'seu':'jogador';t.donoNome=proprio?null:msg.dono;t.ring.material.color.setHex(proprio?0x8fe063:0x5aa8e0);t.disc.material.color.setHex(proprio?0x8fe063:0x5aa8e0)}
    } else if(msg.t==='farm_lote_comprado'){
     const S=msg.slot,slot=S&&farmSlotsOnline[S.slotIndex];
     if(slot){slot.preco=Number(S.preco)||FARM_LOT_PRICES[S.slotIndex];slot.disponivel=false;slot.portaoId=S.portaoId||slot.portaoId;slot.portaoAberto=!!S.portaoAberto;slot.donoNome=S.donoNome||'você';slot.donoId=S.donoId||null;meuFarmSlotIndex=slot.slotIndex;farmUnlocked=true;montarFarmSetor(slot);(S.plots||[]).forEach((P,i)=>farmAplicarPlot(slot.slotIndex,i,P));farmAtualizarPortao(slot);farmAtualizarNome(slot);blip(560,.2,'triangle',.08);toast(`Lote ${slot.slotIndex+1} comprado por R$ ${msg.valor}`);renderBanca();updHUD()}
@@ -5727,6 +5723,8 @@ function mpConnect(){
     const el=$('adminTag');
     if(el){el.textContent='FUNDADOR';el.style.display='block'}
     toast('reconhecido como fundador');
+   } else if(msg.t==='placar'){
+    renderPlacar(msg.board);
    } else if(msg.t==='estado'){
     aplicarEstado(msg);
    } else if(msg.t==='recusado'){

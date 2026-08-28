@@ -209,6 +209,15 @@ assert.match(html, /col\(FARM_GATE_W\/2, FAZ\.x1, FAZ\.z0-\.3/,
 assert.match(html, /setModoMultiplayerVisual\(true\)/,
   'o modo online deve desativar o visual legado que poderia duplicar canteiros');
 
+assert.match(html,/function renderPlacar\(board\)/,
+  'o placar deve ter renderização própria após resposta do servidor');
+assert.match(html,/pedirAoServidor\(\{t:'placar'\}\)/,
+  'o menu MUNDO deve consultar o placar pelo protocolo authoritative');
+assert.doesNotMatch(html,/mundo:placar|window\.storage\.get\('mundo:placar'/,
+  'o placar não pode voltar ao armazenamento compartilhado do navegador');
+assert.match(html,/const proprio=msg\.donoChave===mpPersistId/,
+  'a captura deve comparar a posse com a chave persistente entregue pelo servidor');
+
 const geneticNames=['Blueberry Auto','Amnesia Haze Auto','Northern Lights','White Widow','Northern Light Auto','White Widow Auto','OG Kush','Sour Diesel'];
 assert.match(html,/const GENETICA_ART=Object\.freeze\(/,
  'o catálogo deve mapear as artes das oito genéticas sem duplicar a fonte de nomes');

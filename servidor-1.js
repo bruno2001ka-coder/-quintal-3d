@@ -2028,6 +2028,36 @@ function caminhoPublico(url) {
   if (absoluto !== PUBLIC_DIR && !absoluto.startsWith(PUBLIC_DIR + path.sep)) return null;
   return absoluto;
 }
+function contarTerritoriosDoPlacar(raw) {
+  let mapa = raw;
+  if (typeof raw === 'string') {
+    try { mapa = JSON.parse(raw || '{}'); } catch (_) { mapa = {}; }
+  }
+  if (!mapa || typeof mapa !== 'object') return 0;
+  return TERRITORIOS.reduce((total, t) => total + (mapa[t.nome] === true ? 1 : 0), 0);
+}
+function linhaPlacarPublico(row, atual = null) {
+  const chave = String(row.chave || '');
+  return {
+    id: atual && chave === atual ? 'self' : null,
+    nome: nomeSeguro(row.nome) || 'Jogador',
+    cash: Math.max(0, Math.floor(Number(row.cash) || 0)),
+    nivel: Math.max(1, Math.min(12, Math.floor(Number(row.nivel) || 1))),
+    pontos: contarTerritoriosDoPlacar(row.territorios)
+  };
+}
+async function placarPublico(chaveAtual = null) {
+  let rows = [];
+  if (dbTipo === 'sqlite' && db) {
+    rows = db.prepare(`SELECT chave,nome,cash,nivel,territorios FROM usuarios
+      ORDER BY cash DESC, nivel DESC, atualizado DESC LIMIT 30`).all();
+  } else if (dbTipo === 'postgres' && pg) {
+    const r = await pg.query(`SELECT chave,nome,cash,nivel,territorios FROM usuarios
+      ORDER BY cash DESC, nivel DESC, atualizado DESC LIMIT 30`);
+    rows = r.rows;
+  }
+  return rows.map(row => linhaPlacarPublico(row, chaveAtual));
+}
 function servirArquivoPublico(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8', Allow: 'GET, HEAD' });
@@ -2200,6 +2230,7 @@ function sessaoJaConectada(chave, idAtual) {
 }
 async function ativarSessao(j, chave, dados = {}) {
   if (!chave || sessaoJaConectada(chave, j.id)) {
+    j.autenticando = false;
     enviar(j, { t: dados.falhaAuth ? 'auth_error' : 'recusado', motivo: 'esta conta já está conectada em outro lugar' });
     metricas.rejeitadas++;
     return false;
@@ -2258,6 +2289,7 @@ async function ativarSessao(j, chave, dados = {}) {
   }
   enviarEstado(j);
   if (j.fundador) enviar(j, { t: 'fundador', ok: true });
+  j.autenticando = false;
   return true;
 }
 
@@ -2278,7 +2310,7 @@ wss.on('connection', (ws, req) => {
     municao: { pistola: { pente: 12, reserva: 24 } },
     ultimoTiro: 0, ultimoCrime: 0,
     lotesVisiveis: new Set(),
-    posIniciada: false, autenticado: false, helloRecebido: false, carteiraPronta: false,
+    posIniciada: false, autenticado: false, autenticando: false, helloRecebido: false, carteiraPronta: false,
     ultimoInputSeq: 0,
     vy: 0, onGround: true,
     ultimoMov: agora(),
@@ -2324,6 +2356,13 @@ wss.on('connection', (ws, req) => {
         j.ultimoPong = t; j.vivo = true;
         break;
 
+      case 'placar': {
+        if (!exigirJogadorVivo(j)) return;
+        placarPublico(j.chave).then(board => enviar(j, { t:'placar', board }))
+          .catch(() => enviar(j, { t:'recusado', motivo:'placar indisponível agora' }));
+        break;
+      }
+
       case 'hello': {
         if (!bancoPronto || dbTipo === 'indisponivel') {
           enviar(j, { t:'recusado', motivo:'persistência indisponível — tente novamente' });
@@ -2331,7 +2370,7 @@ wss.on('connection', (ws, req) => {
           try { j.ws.close(1013, 'persistência indisponível'); } catch (_) {}
           break;
         }
-        if (j.autenticado) {
+        if (j.autenticado || j.autenticando) {
           enviar(j, { t: 'recusado', motivo: 'hello já recebido' });
           metricas.rejeitadas++;
           break;
@@ -2353,10 +2392,13 @@ wss.on('connection', (ws, req) => {
         // O fallback anônimo existe apenas para os testes automatizados locais.
         if (!chave) chave = novaIdentidade();
         if (chave) {
+          j.autenticando = true;
           (async () => {
-            await ativarSessao(j, chave, { aparelhoId:m.aparelhoId, nome:m.nome, avatarId:m.avatarId,
+            const ok = await ativarSessao(j, chave, { aparelhoId:m.aparelhoId, nome:m.nome, avatarId:m.avatarId,
               sementeBase:m.sementeBase });
+            if (!ok) j.autenticando = false;
           })().catch(e => {
+            j.autenticando = false;
             console.error('erro ao ativar sessão:', e.message);
             enviar(j, { t:'auth_error', motivo:'não foi possível carregar sua conta' });
           });
@@ -2365,7 +2407,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'auth_register': {
-        if (!j.helloRecebido || j.autenticado) {
+        if (!j.helloRecebido || j.autenticado || j.autenticando) {
           enviar(j, { t:'auth_error', motivo:'abra uma nova conexão para entrar' });
           break;
         }
@@ -2380,16 +2422,20 @@ wss.on('connection', (ws, req) => {
           enviar(j, { t:'auth_error', motivo:'usuário: 3–24 letras/números; senha: 8–128 caracteres' });
           break;
         }
+        j.autenticando = true;
         (async () => {
           const conta = await criarConta(usuario, nome, senha);
           if (!conta) {
+            j.autenticando = false;
             enviar(j, { t:'auth_error', motivo:'usuário já existe ou não foi possível criar a conta' });
             return;
           }
           enviar(j, { t:'auth_ok', usuario:conta.usuario, nome:conta.nome, novo:true });
-          await ativarSessao(j, conta.chave, { usuario:conta.usuario, nome:conta.nome,
+          const ok = await ativarSessao(j, conta.chave, { usuario:conta.usuario, nome:conta.nome,
             aparelhoId:m.aparelhoId, avatarId:m.avatarId, sementeBase:m.sementeBase, falhaAuth:true });
+          if (!ok) j.autenticando = false;
         })().catch(e => {
+          j.autenticando = false;
           console.error('erro no cadastro:', e.message);
           enviar(j, { t:'auth_error', motivo:'não foi possível criar a conta' });
         });
@@ -2407,16 +2453,20 @@ wss.on('connection', (ws, req) => {
           enviar(j, { t:'auth_error', motivo:'usuário ou senha inválidos' });
           break;
         }
+        j.autenticando = true;
         (async () => {
           const conta = dbTipo === 'postgres' ? await carregarContaUsuarioAsync(usuario) : carregarContaUsuario(usuario);
           if (!conta || !senhaConfere(senha, conta.senhaSalt, conta.senhaHash)) {
+            j.autenticando = false;
             enviar(j, { t:'auth_error', motivo:'usuário ou senha inválidos' });
             return;
           }
           enviar(j, { t:'auth_ok', usuario:conta.usuario, nome:conta.nome, novo:false });
-          await ativarSessao(j, conta.chave, { usuario:conta.usuario, nome:conta.nome,
+          const ok = await ativarSessao(j, conta.chave, { usuario:conta.usuario, nome:conta.nome,
             aparelhoId:m.aparelhoId, avatarId:m.avatarId, sementeBase:m.sementeBase, falhaAuth:true });
+          if (!ok) j.autenticando = false;
         })().catch(e => {
+          j.autenticando = false;
           console.error('erro no login:', e.message);
           enviar(j, { t:'auth_error', motivo:'não foi possível entrar agora' });
         });
