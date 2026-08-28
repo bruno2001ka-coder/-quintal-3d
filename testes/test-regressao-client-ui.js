@@ -45,7 +45,7 @@ assert.match(html, /P\.mesh\.scale\.setScalar\(escalaPlantaCultivada\(progVis,P\
   'o visual online deve usar a escala compartilhada');
 assert.match(html, /lote\.producaoMarkers/,
   'a bancada de cada lote deve ter marcadores próprios de produção');
-assert.match(html, /if\(hit\)\{dist=Math\.max\(\.55,s-\.35\);break\}\}/,
+assert.match(html, /if\(hit\)\{dist=Math\.max\(CAMERA_MIN_DIST,s-\.35\);break\}\}/,
   'a câmera não deve manter distância mínima que atravesse muros');
 const objetivo = html.slice(html.indexOf('function objetivoAtual()'), html.indexOf('function atualizarRota'));
 assert.ok(objetivo.indexOf("G.lotes.some(l=>l.stage==='sec'||l.stage==='cura')") < objetivo.indexOf('const vazio=lote.plots.find'),

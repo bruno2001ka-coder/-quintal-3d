@@ -4334,15 +4334,18 @@ function tick(){
  /* câmera */
  const alt=aiming?1.5:1.45, dd=aiming?2.5:camDist;
  camT.set(player.position.x,player.position.y+alt,player.position.z);
- let dist=dd;
+ // O GLB tem escala humana; nunca deixamos o resolvedor encostar a câmera
+ // no avatar quando uma parede fica muito próxima do ponto de origem.
+ const CAMERA_MIN_DIST=aiming?1.35:1.75;
+ let dist=Math.max(CAMERA_MIN_DIST,dd);
  const cxf=Math.sin(camYaw)*Math.cos(camPitch),czf=Math.cos(camYaw)*Math.cos(camPitch);
- for(let s=1;s<=dist;s+=.4){
+ for(let s=CAMERA_MIN_DIST;s<=dist;s+=.4){
   const tx=camT.x+cxf*s,tz=camT.z+czf*s;let hit=false;
   for(const c of colliders) if(c.active!==false&&tx>c.minX-.2&&tx<c.maxX+.2&&tz>c.minZ-.2&&tz<c.maxZ+.2){hit=true;break}
   // Em espaços apertados, o piso de 1,5m colocava a câmera dentro do muro.
   // Mantemos distância suficiente para não colar no avatar, sem atravessar a
   // superfície que foi atingida pelo raio de visão.
-  if(hit){dist=Math.max(.55,s-.35);break}}
+  if(hit){dist=Math.max(CAMERA_MIN_DIST,s-.35);break}}
  const shoulder=aiming?.6:0;
  const cx=camT.x+cxf*dist+Math.cos(camYaw)*shoulder;
  const cz=camT.z+czf*dist-Math.sin(camYaw)*shoulder;
