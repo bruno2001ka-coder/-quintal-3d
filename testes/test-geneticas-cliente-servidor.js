@@ -50,11 +50,11 @@ function simulateGrowth(seed) {
   let prog = 0, agua = 1, saude = 1, stage = 0;
   const transitions = [];
   const ciclo = cycle(seed);
-  for (let second = 1; second <= 180 && stage < 4; second++) {
+  for (let second = 1; second <= 3600 && stage < 4; second++) {
     const luz = seed.auto ? Math.max(.82, 1.05) : 1.05; // grow room sem LED extra
     agua = Math.max(0, agua - .0045 * (.6 + (100 - seed.traits[2]) / 100 * .9) * (0.55 + luz * .85));
     const aguaF = .35 + Math.min(.65, Math.max(0, agua) * 1.7);
-    const taxa = (100 / ciclo) * 1.35 * luz * aguaF * (.55 + saude * .45);
+    const taxa = (100 / ciclo) * .15 * luz * aguaF * (.55 + saude * .45);
     prog = Math.min(100, prog + taxa);
     const next = stageFor(prog);
     if (next !== stage) { stage = next; transitions.push({ stage, second, prog:Number(prog.toFixed(2)) }); }

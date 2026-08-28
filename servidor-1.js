@@ -111,7 +111,7 @@ const GROW_MS           = 1000;                  // recalcula plantas a cada 1s
 // O valor anterior esvaziava o reservatório em cerca de 50s e travava prog.
 const PLANTA_DRENO_AGUA = 0.0045;
 const PLANTA_AGUA_SECA = 0.35;                    // cresce devagar mesmo sem rega
-const PLANTA_CRESCIMENTO_MULT = 1.35;            // ciclo jogável sem esperar horas
+const PLANTA_CRESCIMENTO_MULT = 0.15;            // ciclo mais lento: cerca de 5–23 min com água e saúde normais
 /* ───────── util ───────── */
 const num = (v, min, max, def = 0) => {
   const n = Number(v);

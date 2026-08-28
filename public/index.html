@@ -1767,7 +1767,7 @@ const casaNovaPlots=[];
 const STAGE=['semente','broto','jovem','adulta','pronta'];
 // A mesma regra do servidor é mantida no fallback local para não haver duas
 // experiências de crescimento diferentes. O servidor continua authoritative.
-const PLANTA_DRENO_AGUA=.0045,PLANTA_AGUA_SECA=.35,PLANTA_CRESCIMENTO_MULT=1.35;
+const PLANTA_DRENO_AGUA=.0045,PLANTA_AGUA_SECA=.35,PLANTA_CRESCIMENTO_MULT=.15;
 // limiares dos 5 estágios: 0 / 25 / 50 / 75 / 100 (igual a arte-conceito)
 function estagioDe(prog){return prog>=100?4:prog>=75?3:prog>=50?2:prog>=25?1:0}
 // ─── folíolo de verdade: contorno com serrilha, não mais um cone ───
