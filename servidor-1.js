@@ -2558,19 +2558,13 @@ wss.on('connection', (ws, req) => {
         const inputSeq = Number.isSafeInteger(Number(m.seq)) ? Math.max(0, Math.min(1e9, Number(m.seq))) : 0;
         if (inputSeq) j.ultimoInputSeq = Math.max(j.ultimoInputSeq || 0, inputSeq);
         /* O cliente envia posição prevista e intenção de salto. A altura
-           oficial nunca vem do cliente: ela é integrada aqui, com gravidade,
-           chão e um único salto por toque. */
+           oficial é integrada no tick fixo de 20 Hz abaixo; aqui o input só
+           registra o salto, evitando que a latência faça a gravidade avançar
+           em passos irregulares e corrija o jogador durante uma entrada. */
         const dtMov = Math.min(.25, Math.max(.001, (t - j.ultimoMov) / 1000));
         if (m.salto === true && j.onGround) {
           j.vy = 4.9;
           j.onGround = false;
-        }
-        j.vy = Math.max(-20, j.vy - 15 * dtMov);
-        const yAuthoritative = Math.max(0, j.y + j.vy * dtMov);
-        if (yAuthoritative <= 0) {
-          j.y = 0; j.vy = 0; j.onGround = true;
-        } else {
-          j.y = Math.min(3.5, yAuthoritative); j.onGround = false;
         }
         if (!j.posIniciada) {
           enviar(j, { t: 'recusado', motivo: 'lote ainda não atribuído' });
@@ -2586,7 +2580,7 @@ wss.on('connection', (ws, req) => {
         const limite = VEL_MAX * dtMov + 2;   // folga pra lag
         if (dist > limite) {
           metricas.rejeitadas++;
-          enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z });
+          enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z, motivo: 'limite_movimento' });
         } else {
           // COLISÃO NO SERVIDOR: antes só a velocidade era checada, então
           // um cliente modificado atravessava qualquer parede. Agora o
@@ -2604,14 +2598,14 @@ wss.on('connection', (ws, req) => {
           }
           if (Math.hypot(r.x - nx, r.z - nz) > .25) {
             metricas.rejeitadas++;
-            enviar(j, { t: 'correcao', seq: inputSeq, x: r.x, y: j.y, z: r.z });
+            enviar(j, { t: 'correcao', seq: inputSeq, x: r.x, y: j.y, z: r.z, motivo: 'colisao' });
           }
           j.x = r.x; j.z = r.z;
         }
         const yEnviado = num(m.y, 0, 20, 0);
         if (Math.abs(yEnviado - j.y) > .55) {
           metricas.rejeitadas++;
-          enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z });
+          enviar(j, { t: 'correcao', seq: inputSeq, x: j.x, y: j.y, z: j.z, motivo: 'altura_invalida' });
         }
         j.ry = num(m.ry, -Math.PI * 4, Math.PI * 4, j.ry);
         const armaSolicitada = ARMA_INDEX[num(m.arma, 0, ARMA_INDEX.length - 1, 0) | 0];
@@ -3313,6 +3307,18 @@ setInterval(() => {
   reconstruirGradeJogadores();
   reconstruirGradeDinamicos();
   for (const [id, j] of jogadores) {
+    // Física vertical authoritative independente da frequência de inputs.
+    // Sem isso, a queda do spawn só avançava quando o cliente enviava input,
+    // causando divergência de Y e correções repetidas nas portas.
+    if (j.posIniciada && !j.morto) {
+      j.vy = Math.max(-20, j.vy - 15 * dtTick);
+      const yAuthoritative = Math.max(0, j.y + j.vy * dtTick);
+      if (yAuthoritative <= 0) {
+        j.y = 0; j.vy = 0; j.onGround = true;
+      } else {
+        j.y = Math.min(20, yAuthoritative); j.onGround = false;
+      }
+    }
     if (j.ws.bufferedAmount > WS_BUFFER_LIMITE) {
       metricas.descartadas++;
       continue; // o próximo snapshot substitui este

@@ -3820,7 +3820,8 @@ function doAction(){
  pl.agua=1;G.watering=.5;splash(p.x,p.baseY,p.z);blip(240,.2,'sine',.05)}
 
 /* ═════════ COLISÃO ═════════ */
-const R=.34;
+// Deve coincidir com RAIO_JOGADOR do servidor para o mesmo vão ter a mesma folga.
+const R=.38;
 // zonas válidas do mundo (retângulos). Antes eu clampava por zona, o que
 // teleportava o jogador na fronteira. Agora testo união: se a posição nova
 // não está em nenhuma zona, aquele eixo simplesmente não anda.
@@ -5766,16 +5767,25 @@ function mpConnect(){
     if(seq&&seq<mpLastCorrectionSeq)return;
     if(seq)mpLastCorrectionSeq=seq;
     const dd=Math.hypot(player.position.x-msg.x,player.position.z-msg.z);
+    if(msg.motivo==='altura_invalida'){
+     // A altura authoritative também precisa ser aplicada; ignorá-la deixava
+     // o cliente em uma trajetória diferente durante o spawn/queda.
+     player.position.y=Number.isFinite(Number(msg.y))?Number(msg.y):player.position.y;
+     G.vy=0;G.onGround=player.position.y<=.05;return;
+    }
     if(dd<.42)return;
     // A saída de uma bancada não é jitter: é uma posição de recuperação.
     // Aplicar inteira evita que o input antigo continue empurrando o jogador
     // contra o mesmo colisor a cada snapshot.
-    if(msg.motivo==='posição liberada da bancada'){
+    if(msg.motivo==='posição liberada da bancada'||msg.motivo==='colisao'){
+     // Correção de bloqueio não deve ser interpolada: a previsão local continua
+     // tentando atravessar a porta e cria o efeito de vai-e-volta.
      player.position.set(msg.x,msg.y||0,msg.z);mpLastCorrectionSeq=seq||mpLastCorrectionSeq;return;
     }
     if(dd>6)player.position.set(msg.x,msg.y,msg.z);
     else{ player.position.x+=(msg.x-player.position.x)*.18;
-          player.position.z+=(msg.z-player.position.z)*.18; }
+          player.position.z+=(msg.z-player.position.z)*.18;
+          if(Number.isFinite(Number(msg.y)))player.position.y+=(Number(msg.y)-player.position.y)*.18; }
    } else if(msg.t==='nome'){
     const p=mpPlayers.get(msg.id);
     if(p){p.nome=msg.nome;if(msg.avatarId&&msg.avatarId!==p.avatarId){p.avatarId=AVATAR_CATALOGO[msg.avatarId]?msg.avatarId:'carmo';aplicarCoresAvatar(p.g,coresAvatar(p.avatarId))}}
@@ -5792,6 +5802,7 @@ function mpConnect(){
      if(lote){
       lote.donoNome=meuNome; lote.donoId=mpId;
       lote.entId=msg.lote&&msg.lote.id; lote.portaoId=msg.lote&&msg.lote.portaoId;
+      if(msg.lote&&msg.lote.portaoAberto!==undefined)aplicarPortao(lote,msg.lote.portaoAberto);
       // O servidor também informa a posição authoritative. Na reconexão,
       // ela pode ser a última posição válida antes da queda; aplicar aqui
       // evita que o navegador continue enviando a posição antiga e receba
