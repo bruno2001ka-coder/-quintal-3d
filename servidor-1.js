@@ -2310,7 +2310,8 @@ async function ativarSessao(j, chave, dados = {}) {
   const spawn = retomada || (loteInicial ? {
     x: loteInicial.x, y: 0, z: loteInicial.z + LOTE_D / 2 - 3.2, ry: 0
   } : spawnOficial(j));
-  j.x = spawn.x; j.y = 0; j.z = spawn.z; j.ry = spawn.ry || 0;
+  const spawnLivre = destravarPosicao(spawn.x, spawn.z, RAIO_JOGADOR) || spawn;
+  j.x = spawnLivre.x; j.y = 0; j.z = spawnLivre.z; j.ry = spawn.ry || 0;
   j.vy = 0; j.onGround = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
   enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: !!retomada,
     posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null,
@@ -3303,7 +3304,8 @@ setInterval(() => {
     }
     if (j.morto && agora() >= j.respawnEm) {
       const p = spawnOficial(j);
-      j.x = p.x; j.y = 0; j.z = p.z; j.vy = 0; j.onGround = true; j.hp = 100; j.saude = 100; j.armor = 0;
+      const pLivre = destravarPosicao(p.x, p.z, RAIO_JOGADOR) || p;
+      j.x = pLivre.x; j.y = 0; j.z = pLivre.z; j.vy = 0; j.onGround = true; j.hp = 100; j.saude = 100; j.armor = 0;
       j.morto = false; j.vivo = true; j.ultimoMov = agora() - 250; j.posIniciada = true; j.ultimoAlimento = 0;
       const c = sincronizarEquipamento(j); c.armor = 0; c.saude = j.saude;
       marcarSuja(j);

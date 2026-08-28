@@ -629,7 +629,8 @@ const Q={x0:-25,x1:9,z0:-13,z1:0};          // fundos — esticado a oeste pra b
 const C={x0:3.4,x1:9,z0:0,z1:10.5};        // corredor
 const CITY={x0:-62,x1:76,z0:11,z1:150};
 const FAZ={x0:-46,x1:46,z0:172,z1:268};   // área pública de circulação
-const SUPERMARKET={x:38,z:140}; // prédio existente no quarteirão norte, junto à estrada da fazenda
+const SUPERMARKET={x:38,z:140}; // ponto authoritative de compra, junto à estrada da fazenda
+const MERCADO_ENTRADA={x:38,z:138.4}; // porta física da loja
 const FARM_GATE_W=10;
 const FARM_LOT_PRICES=[26000,28000,30000,32000,34000,36000];
 const FARM_LOT_CATALOG=FARM_LOT_PRICES.map((custo,slotIndex)=>({slotIndex,nome:`Lote ${slotIndex+1} da fazenda`,custo,nivel:10}));
@@ -1211,7 +1212,9 @@ const RUAS_Z=[15,47,79,111,143],RUAS_X=[-50,-18,22,54];
  const ehReservado=(bx,bz)=>LOTE_SPOTS.some(([lx,lz])=>
    lx-5<bx[1] && lx+5>bx[0] && lz-5<bz[1] && lz+5>bz[0]) ||
    (CASA_NOVA_AREA.x-5<bx[1] && CASA_NOVA_AREA.x+5>bx[0] &&
-    CASA_NOVA_AREA.z-5<bz[1] && CASA_NOVA_AREA.z+5>bz[0]);
+    CASA_NOVA_AREA.z-5<bz[1] && CASA_NOVA_AREA.z+5>bz[0]) ||
+   (SUPERMARKET.x-10<bx[1] && SUPERMARKET.x+10>bx[0] &&
+    SUPERMARKET.z-23<bz[1] && SUPERMARKET.z+3>bz[0]);
  const g=new THREE.Group();
  blocosX.forEach(bx=>blocosZ.forEach(bz=>{
   if(ehReservado(bx,bz))return;   // quarteirão dos lotes: fica vazio
@@ -1243,15 +1246,40 @@ const RUAS_Z=[15,47,79,111,143],RUAS_X=[-50,-18,22,54];
   inst.instanceMatrix.needsUpdate=true;g.add(inst)}
  g.matrixAutoUpdate=false;g.updateMatrix();
  reg('predios',g);scene.add(g);
- // O supermercado reutiliza o bloco existente em x=38, z=117..137.
- // Apenas a fachada, marquise e placa são adicionadas; não há prédio duplicado.
+ // Supermercado físico no bloco existente: a construção antiga foi
+ // reservada acima para não nascer outro prédio por cima da loja.
  const mercado=new THREE.Group();
  const metal=new THREE.MeshStandardMaterial({color:0x315d46,roughness:.5,metalness:.15});
+ const parede=new THREE.MeshStandardMaterial({color:0x56685f,roughness:.82});
  const vidro=new THREE.MeshStandardMaterial({color:0x9bd9c4,roughness:.18,metalness:.1,transparent:true,opacity:.72});
- const marquise=new THREE.Mesh(new THREE.BoxGeometry(15,.24,2.3),metal);marquise.position.set(SUPERMARKET.x,3.2,137.7);marquise.castShadow=true;mercado.add(marquise);
- const vitrine=new THREE.Mesh(new THREE.BoxGeometry(10,2.4,.08),vidro);vitrine.position.set(SUPERMARKET.x,1.35,137.2);mercado.add(vitrine);
- const porta=new THREE.Mesh(new THREE.BoxGeometry(2.1,2.8,.12),new THREE.MeshStandardMaterial({color:0x25312e,roughness:.3,metalness:.25}));porta.position.set(SUPERMARKET.x,1.4,137.1);mercado.add(porta);
- const placaMercado=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('MERCADO · ALIMENTOS','#e8d264')),transparent:true,depthTest:false}));placaMercado.scale.set(5.8,.78,1);placaMercado.position.set(SUPERMARKET.x,4.15,137.35);mercado.add(placaMercado);
+ const madeiraMerc=new THREE.MeshStandardMaterial({color:0x805b36,roughness:.9});
+ const MX=SUPERMARKET.x,MZ=128,MW=18,MD=19,MF=MZ+MD/2,MB=MZ-MD/2;
+ const bloco=(w,h,d,x,y,z,m)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;mercado.add(o);return o};
+ // piso, paredes laterais e fundo; a frente tem uma porta central de 3,2m
+ bloco(MW,.12,MD,MX,.06,MZ,parede);
+ bloco(.35,5,MD,MX-MW/2,2.5,MZ,parede);bloco(.35,5,MD,MX+MW/2,2.5,MZ,parede);
+ bloco(MW,5,.35,MX,2.5,MB,parede);
+ bloco((MW-3.2)/2,5,.35,MX-(3.2/2+(MW-3.2)/4),2.5,MF,parede);
+ bloco((MW-3.2)/2,5,.35,MX+(3.2/2+(MW-3.2)/4),2.5,MF,parede);
+ bloco(MW+.5,.3,MD+.5,MX,5.15,MZ,metal);
+ // vitrine e marquise deixam a porta claramente identificável do lado de fora
+ const vitrineEsq=bloco((MW-3.2)/2-1.2,2.5,.08,MX-5.2,1.45,MF-.22,vidro);
+ const vitrineDir=bloco((MW-3.2)/2-1.2,2.5,.08,MX+5.2,1.45,MF-.22,vidro);
+ const marco=new THREE.MeshStandardMaterial({color:0x25312e,roughness:.3,metalness:.25});
+ bloco(.12,3.2,.16,MX-1.6,1.6,MF-.28,marco);bloco(.12,3.2,.16,MX+1.6,1.6,MF-.28,marco);
+ const marquise=bloco(15,.24,2.3,MX,3.2,MF+.7,metal);
+ const portaMercado=bloco(2.8,3.1,.08,MX,1.55,MF+.02,vidro);portaMercado.material=vidro;
+ const puxador=bloco(.08,.75,.08,MX+.85,1.45,MF-.12,metal);
+ const placaMercado=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('MERCADO · ALIMENTOS','#e8d264')),transparent:true,depthTest:false}));placaMercado.scale.set(5.8,.78,1);placaMercado.position.set(MX,4.15,MF+.15);mercado.add(placaMercado);
+ const placaEntrada=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote('ENTRAR / COMPRAR','#8fe063')),transparent:true,depthTest:false}));placaEntrada.scale.set(2.65,.42,1);placaEntrada.position.set(MX,3.45,MF+.2);mercado.add(placaEntrada);
+ // interior: balcão, prateleiras e placas de preço — compra acontece aqui
+ bloco(7,.9,1.1,MX,1.0,MB+3.4,madeiraMerc);
+ for(const x of[-6,-2,2,6]){bloco(1.7,2.4,.55,MX+x,1.2,MZ-2.2,metal);bloco(1.45,.08,.72,MX+x,2.3,MZ-2.2,madeiraMerc)}
+ ['LANCHE  R$45','REFEIÇÃO  R$95','KIT  R$180'].forEach((txt,i)=>{const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote(txt,'#e8d264')),transparent:true,depthTest:false}));sp.scale.set(2.1,.34,1);sp.position.set(MX-5.8+i*5.8,3.05,MB+.25);mercado.add(sp)});
+ // colisores dos muros, deixando a porta central realmente atravessável
+ col(MX-MW/2-.2,MX-MW/2+.2,MB,MF);col(MX+MW/2-.2,MX+MW/2+.2,MB,MF);col(MX-MW/2,MX+MW/2,MB-.2,MB+.2);
+ col(MX-MW/2,MX-1.6,MF-.2,MF+.2);col(MX+1.6,MX+MW/2,MF-.2,MF+.2);
+ mercado.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
  reg('supermercado',mercado);scene.add(mercado);
 })();
 // postes
@@ -2568,28 +2596,30 @@ function atualizarMarcadoresBancada(lote){
 let bancaTab='sem',crossPick=[];
 function renderBanca(){
  const b=$('bancaBody');b.innerHTML='';
- // resumo sempre visível, independente da aba — é a parte "inventário" da tela
- const a0=armaAtual(),mu0=G.municao[a0.k];
+ if(bancaTab!=='food'){
+  // Inventário: resumo, sementes e produção aparecem somente na bancada.
+  const a0=armaAtual(),mu0=G.municao[a0.k];
   const producao=linhasProducao(G.lotes,6)||'<span class="sub">sem produção</span>';
   b.innerHTML+=`<div class="want productionSummary" style="margin-bottom:12px">
    <b>R$ ${Math.floor(G.cash)}</b> em caixa<br>
    arma: <b>${a0.nome}</b>${mu0?` · ${mu0.pente}/${mu0.reserva}`:''} · colete ${G.armor}%<br>
    <b>produção na bancada do seu lote:</b><br>${producao}</div>`;
- // minhas sementes — escolher qual plantar, direto do inventário
- if(G.bank.length){
-  b.innerHTML+='<h2 class="mt">MINHAS SEMENTES</h2><div class="sub">Toque pra escolher qual vai plantar.</div>';
-  G.bank.forEach((e,i)=>{
-   const d=document.createElement('div');
-   d.className='pick'+(G.sel===i?' on':'');
-   const _r=RARIDADES[e.s.rar]||RARIDADES.comum;
-   const _tag=e.s.rar&&e.s.rar!=='comum'
-    ?` <small style="color:${hex(_r.cor)};font-weight:700">${_r.nome}</small>`:'';
-   d.innerHTML=`${artGenetica(e.s,'seedArt')}<span class="seedPickText"><span style="color:${hex(_r.bud)}">●</span> ${escaparHTML(e.s.nome)}${_tag} <b style="color:#8fe063">${e.qtd}x</b></span>`;
-   d.onclick=()=>{G.sel=i;renderSeeds();renderBanca();toast('vai plantar '+e.s.nome)};
-   b.appendChild(d)})}
- else b.innerHTML+='<div class="sub">Você não tem sementes. Compra abaixo.</div>';
+  // Minhas sementes — escolher qual plantar, direto do inventário.
+  if(G.bank.length){
+   b.innerHTML+='<h2 class="mt">MINHAS SEMENTES</h2><div class="sub">Toque pra escolher qual vai plantar.</div>';
+   G.bank.forEach((e,i)=>{
+    const d=document.createElement('div');
+    d.className='pick'+(G.sel===i?' on':'');
+    const _r=RARIDADES[e.s.rar]||RARIDADES.comum;
+    const _tag=e.s.rar&&e.s.rar!=='comum'
+     ?` <small style="color:${hex(_r.cor)};font-weight:700">${_r.nome}</small>`:'';
+    d.innerHTML=`${artGenetica(e.s,'seedArt')}<span class="seedPickText"><span style="color:${hex(_r.bud)}">●</span> ${escaparHTML(e.s.nome)}${_tag} <b style="color:#8fe063">${e.qtd}x</b></span>`;
+    d.onclick=()=>{G.sel=i;renderSeeds();renderBanca();toast('vai plantar '+e.s.nome)};
+    b.appendChild(d)})}
+  else b.innerHTML+='<div class="sub">Você não tem sementes. Compra abaixo.</div>';
+ }
   if(bancaTab==='food'){
-   b.innerHTML+='<h2 class="mt">SUPERMERCADO</h2><div class="sub">Compre alimentos para recuperar vida e saúde. O servidor confirma cada compra e consumo.</div>';
+   b.innerHTML+='<h2 class="mt">MERCADO · CAIXA</h2><div class="sub">Você está dentro do supermercado. Compre alimentos aqui; eles ficam no seu inventário e recuperam vida e saúde quando consumidos.</div>';
    ALIMENTOS.forEach(a=>{
     const have=G.alimentos.filter(v=>v.k===a.k).reduce((n,v)=>n+Number(v.qtd||0),0);
     const r=document.createElement('div');r.className='row';r.innerHTML=`<div class="sw" style="background:#e8d264"></div><div class="info"><b>${escaparHTML(a.nome)}</b><small>${escaparHTML(a.d)} · +${a.cura} vida · +${a.saude} saúde · ${have} no inventário</small></div>`;
@@ -3412,7 +3442,7 @@ function findFocus(){
  }
   const cli=G.clientes.find(c=>c.phase==='atendendo'&&!c.done);
  if(!mpConnected&&Math.hypot(p.x-COUNTER.x,p.z-COUNTER.z)<2.3)return cli?{t:'venda',cli}:{t:'balcao'};
-  if(Math.hypot(p.x-SUPERMARKET.x,p.z-SUPERMARKET.z)<2.6)return{t:'supermercado'};
+  if(Math.hypot(p.x-MERCADO_ENTRADA.x,p.z-MERCADO_ENTRADA.z)<4.2)return{t:'supermercado'};
   if(Math.hypot(p.x-SHOP.x,p.z-SHOP.z)<2.2)return{t:'banca'};
  if(!mpConnected&&Math.hypot(p.x-DRY.x,p.z-DRY.z)<2.1)return{t:'estacao'};
  let best=null,bd=1.7;
