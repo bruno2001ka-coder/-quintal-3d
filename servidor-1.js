@@ -3259,9 +3259,11 @@ wss.on('connection', (ws, req) => {
   ws.on('error', () => {});
 });
 
-/* ───────── tick fixo: um snapshot por tick, só de quem está perto ───────── */
+/* ───────── tick fixo: física a 20 Hz, snapshots a 10 Hz ───────── */
+let snapshotTick = 0;
 setInterval(() => {
   const tickInicio = performance.now();
+  const deveEnviarSnapshot = (++snapshotTick % 2) === 0;
   tickAtual++;
   const agoraTick = agora();
   for (const [chave, p] of posicoesRetomada) if (p.expira <= agoraTick) posicoesRetomada.delete(chave);
@@ -3326,6 +3328,9 @@ setInterval(() => {
       enviar(j, { t:'respawn', x:j.x, y:j.y, z:j.z, hp:j.hp, saude:j.saude, armor:j.armor });
       enviarEstado(j);
     }
+    // A física, respawn e validação continuam em todos os ticks. O pacote
+    // visual é limitado a 10 Hz para não duplicar JSON/AOI a cada 50 ms.
+    if (!deveEnviarSnapshot) continue;
     const perto = [];
     for (const o of jogadoresNaArea(j.x, j.z)) {
       if (o.id === id) continue;
