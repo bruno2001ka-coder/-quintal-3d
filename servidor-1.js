@@ -1132,16 +1132,14 @@ function aplicarDiariaServidor() {
     }
   }
 }
+function spawnNaPortaDoLote(lote) {
+  // Frente do lote: portão central voltado para a rua, fora da madeira.
+  // O recuo de 2.4m deixa o jogador na calçada/entrada frontal.
+  return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 2.4, ry: 0 };
+}
 function spawnOficial(j) {
   const lote = loteDoJogador(j);
-  if (lote) {
-    return {
-      x: lote.x + LOTE_W / 2 + 3.5,
-      y: 12,
-      z: lote.z + LOTE_D / 2 + 4.5,
-      ry: 0
-    };
-  }
+  if (lote) return spawnNaPortaDoLote(lote);
   return { x: 5, y: 12, z: 25, ry: 0 };
 }
 function posicaoCarteira(c) {
@@ -2318,14 +2316,14 @@ async function ativarSessao(j, chave, dados = {}) {
   const retomada = retomadaLegada ? null : (retomadaBruta ? {
     x: retomadaBruta.x, y: 12, z: retomadaBruta.z, ry: retomadaBruta.ry || 0
   } : null);
-  const spawn = retomada || (loteInicial ? {
-    x: loteInicial.x + LOTE_W / 2 + 3.5,
-    y: 12,
-    z: loteInicial.z + LOTE_D / 2 + 4.5,
-    ry: 0
-  } : spawnOficial(j));
+  const portaSpawn = loteInicial ? spawnNaPortaDoLote(loteInicial) : spawnOficial(j);
+  // Retomada válida preserva X/Z. Se a posição salva estiver presa dentro
+  // de balcão, parede ou móvel, cai para a porta frontal do próprio lote.
+  const retomadaPresa = retomada && dentroDeParede(retomada.x, retomada.z, RAIO_JOGADOR);
+  const spawn = retomadaPresa ? portaSpawn : (retomada || portaSpawn);
   const spawnLivre = destravarPosicao(spawn.x, spawn.z, RAIO_JOGADOR) || spawn;
-  j.x = spawnLivre.x; j.y = 12; j.z = spawnLivre.z; j.ry = spawn.ry || 0;
+  const spawnFinal = dentroDeParede(spawnLivre.x, spawnLivre.z, RAIO_JOGADOR) ? portaSpawn : spawnLivre;
+  j.x = spawnFinal.x; j.y = 12; j.z = spawnFinal.z; j.ry = spawnFinal.ry || 0;
   j.vy = 0; j.onGround = true; j.ultimoMov = agora() - 250; j.posIniciada = true;
   enviar(j, { t: 'lote_atribuido', loteIndex: idx, retomada: !!retomada,
     posicao: { x:j.x, y:j.y, z:j.z, ry:j.ry }, lote: loteInicial ? resumoLote(loteInicial, true) : null,
@@ -3319,7 +3317,8 @@ setInterval(() => {
     if (j.morto && agora() >= j.respawnEm) {
       const p = spawnOficial(j);
       const pLivre = destravarPosicao(p.x, p.z, RAIO_JOGADOR) || p;
-      j.x = pLivre.x; j.y = 0; j.z = pLivre.z; j.vy = 0; j.onGround = true; j.hp = 100; j.saude = 100; j.armor = 0;
+      const pFinal = dentroDeParede(pLivre.x, pLivre.z, RAIO_JOGADOR) ? spawnOficial(j) : pLivre;
+      j.x = pFinal.x; j.y = 12; j.z = pFinal.z; j.vy = 0; j.onGround = true; j.hp = 100; j.saude = 100; j.armor = 0;
       j.morto = false; j.vivo = true; j.ultimoMov = agora() - 250; j.posIniciada = true; j.ultimoAlimento = 0;
       const c = sincronizarEquipamento(j); c.armor = 0; c.saude = j.saude;
       marcarSuja(j);
