@@ -662,8 +662,8 @@ function mat(canvas,rx,ry,o){return new THREE.MeshStandardMaterial(Object.assign
 const scene=new THREE.Scene();
 // Distância visual menor reduz o custo de fragmentos e sombras no celular.
 // Colisão, AOI e simulação continuam independentes desta camada.
-scene.fog=new THREE.FogExp2(0xcfd6dd,.058);
-const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,68);
+scene.fog=new THREE.FogExp2(0xcfd6dd,.085);
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,58);
 const qualidadeCfg={alto:{pixel:1.35,sombras:true,tipo:THREE.PCFSoftShadowMap,mapa:1024},medio:{pixel:1.1,sombras:true,tipo:THREE.PCFShadowMap,mapa:768},baixo:{pixel:1,sombras:false,tipo:THREE.BasicShadowMap,mapa:512}};
 let qualidade=matchMedia('(pointer:coarse)').matches?'baixo':'medio';
 try{qualidade=localStorage.getItem('quintal3d-qualidade')||qualidade}catch(e){}
@@ -5315,17 +5315,17 @@ function atualizarCullingVisual(dt){
  };
  // Prédios inteiros podem desaparecer no horizonte; perto do jogador ficam intactos.
  const predios=scene.getObjectByName('predios');
- if(predios)predios.traverse(o=>{if(o.isMesh){const wp=o.getWorldPosition(new THREE.Vector3());o.visible=Math.hypot(wp.x-px,wp.z-pz)<64}});
+ if(predios)predios.traverse(o=>{if(o.isMesh){const wp=o.getWorldPosition(new THREE.Vector3());o.visible=Math.hypot(wp.x-px,wp.z-pz)<45}});
  for(const nome of ['condominioFrente','frenteCasa','casaNova','fazendaVisualDetalhada']){
-  const g=scene.getObjectByName(nome);if(g)aplicar(g,62,nome==='frenteCasa'&&Math.hypot(px-4,pz-6)<28);
+  const g=scene.getObjectByName(nome);if(g)aplicar(g,50,nome==='frenteCasa'&&Math.hypot(px-4,pz-6)<28);
  }
  for(const p of mpPlayers.values()){
   const d=Math.hypot(p.g.position.x-px,p.g.position.z-pz);
-  p.g.visible=d<58 && (d<20||!bloqueadoPorPredio(p.g,oclusores));
+  p.g.visible=d<42 && (d<20||!bloqueadoPorPredio(p.g,oclusores));
  }
  for(const c of mpClientes.values()){
   const d=Math.hypot(c.g.position.x-px,c.g.position.z-pz);
-  c.g.visible=d<48 && (d<16||!bloqueadoPorPredio(c.g,oclusores));
+  c.g.visible=d<36 && (d<16||!bloqueadoPorPredio(c.g,oclusores));
  }
 }
 const mpPlayers=new Map(); // id -> {g,L,nome,tx,ty,tz,tr,walk,label}
