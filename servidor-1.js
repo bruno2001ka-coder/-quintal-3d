@@ -2319,7 +2319,15 @@ async function ativarSessao(j, chave, dados = {}) {
   const portaSpawn = loteInicial ? spawnNaPortaDoLote(loteInicial) : spawnOficial(j);
   // Retomada válida preserva X/Z. Se a posição salva estiver presa dentro
   // de balcão, parede ou móvel, cai para a porta frontal do próprio lote.
-  const retomadaPresa = retomada && dentroDeParede(retomada.x, retomada.z, RAIO_JOGADOR);
+  const retomadaDentroDoProprioLote = retomada && loteInicial &&
+    dentroDePropriedade(retomada.x, retomada.z) === idx;
+  const retomadaPresa = retomada && (
+    dentroDeParede(retomada.x, retomada.z, RAIO_JOGADOR) ||
+    // Mesas/móveis visuais antigos podem não existir na lista authoritative
+    // de colisores. Dentro do próprio lote, longe do portão, a retomada é
+    // considerada potencialmente presa e cai para a porta segura.
+    retomadaDentroDoProprioLote
+  );
   const spawn = retomadaPresa ? portaSpawn : (retomada || portaSpawn);
   const spawnLivre = destravarPosicao(spawn.x, spawn.z, RAIO_JOGADOR) || spawn;
   const spawnFinal = dentroDeParede(spawnLivre.x, spawnLivre.z, RAIO_JOGADOR) ? portaSpawn : spawnLivre;
