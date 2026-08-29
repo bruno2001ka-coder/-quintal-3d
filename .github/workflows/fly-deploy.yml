@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: fly-deploy-production
@@ -21,6 +21,53 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Stabilize CesiumMan character integration
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('public/index.html')
+          s = p.read_text(encoding='utf-8')
+          original = s
+
+          old = "modelo.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true}});"
+          new = "modelo.traverse(o=>{if(o.isMesh){o.visible=true;o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}});"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          old = "bossVisualPivot.visible=true;\n  bossVisualPivot.add(modelo);\n  bossMixer=new THREE.AnimationMixer(modelo);"
+          new = "bossVisualPivot.visible=true;\n  bossVisualPivot.add(modelo);\n  bossVisualPivot.updateMatrixWorld(true);\n  modelo.updateMatrixWorld(true);\n  bossMixer=new THREE.AnimationMixer(modelo);"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          old = "  if(bossModeloPronto)for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;"
+          new = "  if(bossModeloPronto){\n   requestAnimationFrame(()=>{\n    if(bossModelo===modelo&&bossVisualPivot.visible&&modelo.visible){\n     for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;\n    }\n   });\n  }"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          old = "modelo.visible=true; bossVisualPivot.visible=true;\n  window.__quintalBoss.meshes=bossMeshCount;"
+          new = "modelo.visible=true; bossVisualPivot.visible=true;\n  modelo.matrixAutoUpdate=true;\n  bossVisualPivot.matrixAutoUpdate=true;\n  window.__quintalBoss.meshes=bossMeshCount;"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+          if s == original:
+              print('CesiumMan já estava estabilizado; nenhum patch necessário.')
+          else:
+              print('Patch do CesiumMan aplicado.')
+
+      - name: Commit character fix back to main
+        shell: bash
+        run: |
+          if git diff --quiet -- public/index.html; then
+            echo "Nenhuma alteração do personagem para commitar."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/index.html
+          git commit -m "fix: stabilize CesiumMan character integration"
+          git push origin HEAD:main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
