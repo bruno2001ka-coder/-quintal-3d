@@ -26,14 +26,14 @@ assert.ok(sobrepoe(C.z1 - .4, C.z1 + 2.0, C.z1 + 1.2, CITY.z1 - 1), 'portão e c
 assert.ok(sobrepoe(CITY.z1 - 1, FAZ.z0 + 1, CITY.z1, FAZ.z0), 'estrada não liga cidade e fazenda');
 assert.ok(C.x0 < C.x1 && CITY.x0 < CITY.x1 && FAZ.x0 < FAZ.x1, 'eixos principais inválidos');
 
-assert.equal(LOTES.length, 10, 'o mapa deve ter dez lotes multiplayer');
+assert.equal(LOTES.length, 8, 'o mapa deve ter oito lotes multiplayer compactos');
 assert.ok(html.includes('id="mapBtn"'), 'o HUD mobile deve ter botão MAPA');
 assert.ok(html.includes('id="mapPanel"'), 'o HTML deve ter painel de mapa');
 assert.ok(html.includes('body.touch #mapPanel'), 'o painel de mapa deve ter layout touch');
 assert.ok(html.includes('function drawWorldMap'), 'o mapa deve ser desenhado no cliente');
 for (const [x, z] of LOTES) {
   assert.ok(centroDentro(x, z, CITY), `lote fora da cidade: ${x},${z}`);
-  assert.ok(x - 10 > CITY.x0 && x + 10 < CITY.x1, `lote encosta no limite lateral: ${x},${z}`);
+  assert.ok(x - 4 > CITY.x0 && x + 4 < CITY.x1, `lote encosta no limite lateral: ${x},${z}`);
   assert.ok(!ruasZ.some(rz => Math.abs(z - rz) < 12), `lote invade rua: ${x},${z}`);
 }
 

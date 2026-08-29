@@ -98,8 +98,8 @@ assert.match(html, /new THREE\.CylinderGeometry\(\.14,\.16,\.30,12\)/,
   'a estação de cura deve criar a geometria 3D do pote');
 assert.match(html, /lote\.embalagemCaixas=\[\]/,
   'a estação de embalagem deve ter caixas próprias');
-assert.match(html, /const estacoes=\{secagem:\{x:6\.8,z:3\.6\},cura:\{x:3\.8,z:3\.6\},embalagem:\{x:\.8,z:3\.6\}\}/,
-  'as três estações devem ter posições distintas');
+assert.match(html, /const estacoes=\{secagem:\{x:2\.6,z:2\.15\},cura:\{x:0,z:2\.15\},embalagem:\{x:-2\.6,z:2\.15\}\}/,
+  'as três estações devem ter posições distintas dentro do lote compacto');
 assert.match(html, /slot\.g\.visible=true/,
   'a atualização do estoque deve tornar visível o pote da cura');
 assert.match(html, /lote\.curaPotes=null/,
@@ -120,12 +120,12 @@ assert.match(html, /if\(f\.estado==='trabalhando'\)/,
  'o estado authoritative trabalhando deve acionar animação visível');
 assert.match(html, /mpTickFuncs\(dt\)/,
  'o loop principal deve atualizar funcionários a cada frame');
-assert.match(html, /const vaoEstufa=1\.4,ladoEstufa=\(ew-vaoEstufa\)\/2/,
-  'cada estufa deve reservar uma abertura de entrada');
-assert.match(html, /addColLocal\(ex-ew\/2,ex-vaoEstufa\/2,ez\+ed\/2-\.1,ez\+ed\/2\+\.1\)/,
-  'o colisor esquerdo da frente deve terminar antes da porta');
-assert.match(html, /addColLocal\(ex\+vaoEstufa\/2,ex\+ew\/2,ez\+ed\/2-\.1,ez\+ed\/2\+\.1\)/,
-  'o colisor direito da frente deve começar depois da porta');
+assert.match(html, /if\(lote\.index===0\)\{[\s\S]*Grow room de alvenaria única/,
+ 'somente o primeiro lote deve construir a estufa grow urbana');
+assert.match(html, /const off=\[[\s\S]*oito pontos urbanos compactos/,
+ 'o núcleo residencial deve registrar oito pontos de plantio compactos');
+assert.doesNotMatch(html, /const vaoEstufa=1\.4/,
+ 'não deve haver uma estufa duplicada em cada casa');
 assert.match(html, /fazendaVisualDetalhada/,
   'a fazenda deve possuir uma camada visual procedural identificável');
 assert.match(html, /detalheCanteiro/,

@@ -263,7 +263,7 @@ function closeClient(client) {
     assert.ok(ownFuncSnap.funcs.some(f => f.id === contratado.func.id), 'a entidade do funcionário deve aparecer nos snapshots AOI');
 
     // A posição inicial fica dentro do lote; mover até a bancada respeita a validação de velocidade.
-    const bench = { x: loteMain.x + 6.8, z: loteMain.z + 3.6 };
+    const bench = { x: loteMain.x + 2.6, z: loteMain.z + 2.15 };
     await moveTo(client, afterRestart.lote.posicao, bench);
     const cashBeforeSale = afterSameCross.cash;
     const xpBeforeSale = afterSameCross.xp;

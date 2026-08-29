@@ -76,14 +76,12 @@ const RATE_BURST        = 60;                    // balde de tokens
 const RATE_RECARGA      = 40;                    // tokens por segundo
 const VEL_MAX           = 14;                    // m/s — corrida é ~6, folga pra lag
 const RETOMADA_POS_MS    = 15000;                 // reconexão curta retoma o último ponto
-const NUM_LOTES         = 10;
+const NUM_LOTES         = 8;
 // ETAPA D — cada propriedade tem os MESMOS ambientes do quintal original:
 // 6 canteiros no sol, 4 na estufa de lona e 6 no grow room de alvenaria.
-const PLOTS_POR_LOTE    = 16;
+const PLOTS_POR_LOTE    = 8;
 const TIPO_PLOT = [
-  'sol','sol','sol','sol','sol','sol',
-  'estufa','estufa','estufa','estufa',
-  'grow','grow','grow','grow','grow','grow'
+  'grow','grow','grow','grow','grow','grow','grow','grow'
 ];
 // Fazenda multiplayer: cada conta pode ter um setor persistente com 12
 // canteiros. O limite de seis é da fazenda, não do servidor inteiro.
@@ -1470,15 +1468,14 @@ function carregarTerritoriosPersistidos() {
    o servidor mandou. Agora as propriedades existem aqui também.
    Estes números vêm do cliente (LOTE_SPOTS, LOTE_W, LOTE_D) — se mudarem
    lá, precisam mudar aqui. */
-const LOTE_W = 20, LOTE_D = 16;
+const LOTE_W = 8, LOTE_D = 7;
 const LOTE_SPOTS = [
-  [-34,31],[2,31],[38,31],[-34,63],[2,63],
-  [38,63],[-34,95],[2,95],[38,95],[-34,127]
+  [-16,27],[-6,27],[4,27],[14,27],
+  [-16,35],[-6,35],[4,35],[14,35]
 ];
 const PLOT_OFFSETS = [
-  [-7,-4],[-4.6,-4],[-2.2,-4],[-7,-1.4],[-4.6,-1.4],[-2.2,-1.4],
-  [3.2,-4.4],[5.2,-4.4],[3.2,-2.4],[5.2,-2.4],
-  [-6.6,3.4],[-4.6,3.4],[-2.6,3.4],[-6.6,5.4],[-4.6,5.4],[-2.6,5.4]
+  [-2.8,-2.2],[-.9,-2.2],[1,-2.2],[2.8,-2.2],
+  [-2.8,-.6],[-.9,-.6],[1,-.6],[2.8,-.6]
 ];
 function loteDoJogador(j) {
   if (!j.autenticado || !j.chave || !loteDe.has(j.chave)) return null;
@@ -1505,9 +1502,9 @@ const ESTACOES_PUBLICAS = {
 // offsets são usados pelo cliente para que a interação nunca fique em um
 // ponto visual diferente do ponto validado pelo servidor.
 const ESTACOES_CASA_REL = Object.freeze({
-  secagem: { x: 6.8, z: 3.6, raio: 2.35 },
-  cura: { x: 3.8, z: 3.6, raio: 2.35 },
-  embalagem: { x: .8, z: 3.6, raio: 2.35 }
+  secagem: { x: 2.6, z: 2.15, raio: 1.7 },
+  cura: { x: 0, z: 2.15, raio: 1.7 },
+  embalagem: { x: -2.6, z: 2.15, raio: 1.7 }
 });
 function posEstacaoCasa(lote, nome) {
   const e = ESTACOES_CASA_REL[nome];

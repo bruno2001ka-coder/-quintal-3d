@@ -750,15 +750,12 @@ const FARM_LOT_CATALOG=FARM_LOT_PRICES.map((custo,slotIndex)=>({slotIndex,nome:`
 // preso ao cruzar a transição cidade -> fazenda fora do vão central.
 const FARM_APPROACH_W=16;
 const INT={x0:-160,x1:160,z0:-340,z1:-300}; // faixa dos interiores das casas
-// espalhados pela cidade de propósito: juntos demais, o streaming não
-// adianta nada (testei — as 10 montavam ao mesmo tempo). Assim o pior
-// caso cai pra 3 casas montadas simultaneamente.
-// ETAPA D — 10 propriedades de 20x16m, uma por bloco, posições conferidas
-// por cálculo (nenhuma bate em rua).
-const LOTE_W=20, LOTE_D=16;
+// Núcleo residencial compacto: oito lotes menores em duas quadras,
+// quatro casas por quadra. A fazenda multiplayer permanece separada.
+const LOTE_W=8, LOTE_D=7;
 const LOTE_SPOTS=[
- [-34,31],[2,31],[38,31],[-34,63],[2,63],
- [38,63],[-34,95],[2,95],[38,95],[-34,127]];
+ [-16,27],[-6,27],[4,27],[14,27],
+ [-16,35],[-6,35],[4,35],[14,35]];
 // A Casa Nova é um ponto fixo de demonstração e precisa ficar livre de
 // prédios procedurais. Esta constante vem antes da geração da cidade para
 // evitar referência temporal à declaração `CN`, que só é criada mais abaixo.
@@ -4784,7 +4781,7 @@ function tick(){
    informação: o que está plantado aqui não é decidido aqui, vem de lá.
    Por isso esses canteiros NÃO entram no array `plots` local — se
    entrassem, a lógica offline mexeria neles e brigaria com o servidor. */
-const NUM_LOTES_ONLINE=10;
+const NUM_LOTES_ONLINE=8;
 const lotesOnline=[];
 let meuLoteIndex=null;
 // Fazenda multiplayer: as posições são iguais às do servidor. Cada setor
@@ -4891,9 +4888,8 @@ const PAL_PORTAO=[0x8f4a34,0x6b6b6b,0x4a5a3c,0x7a4a33,0x5a6470];
   // A ordem bate com TIPO_PLOT do servidor: ele decide luz e crescimento
   // por ambiente, então a posição de cada índice importa.
   const off=[
-   [-7,-4],[-4.6,-4],[-2.2,-4],[-7,-1.4],[-4.6,-1.4],[-2.2,-1.4],   // 0-5 sol
-   [3.2,-4.4],[5.2,-4.4],[3.2,-2.4],[5.2,-2.4],                     // 6-9 estufa
-   [-6.6,3.4],[-4.6,3.4],[-2.6,3.4],[-6.6,5.4],[-4.6,5.4],[-2.6,5.4] // 10-15 grow
+   [-2.8,-2.2],[-.9,-2.2],[1,-2.2],[2.8,-2.2],
+   [-2.8,-.6],[-.9,-.6],[1,-.6],[2.8,-.6] // oito pontos urbanos compactos
   ];
   off.forEach((pp,j)=>{
    lotesOnline[i].plots.push({x:LX+pp[0],z:LZ+pp[1],baseY:.15,
@@ -5029,41 +5025,13 @@ function montarLote(lote){
   g.add(o);
  }
 
- // ═══ ETAPA D — ambientes próprios de cada propriedade ═══
- // Estufa de lona (canteiros 6-9)
+ // ═══ ETAPA D — ambientes do núcleo residencial ═══
+ // A única estufa grow urbana é construída no primeiro lote. Os outros
+ // sete lotes têm apenas os oito canteiros compactos a céu aberto.
+ if(lote.index===0){
+ // Grow room de alvenaria única
  (function(){
-  const ex=4.2, ez=-3.4, ew=4.4, ed=3.4, eh=2.5;
-  const tuboM=new THREE.MeshStandardMaterial({color:0xb8bcc0,roughness:.5,metalness:.6});
-  for(const sx of[-1,1])for(const sz of[-1,1]){
-   const t=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,eh,6),tuboM);
-   t.position.set(ex+sx*ew/2,eh/2,ez+sz*ed/2);t.castShadow=true;g.add(t)}
-  const lona=new THREE.MeshStandardMaterial({color:0xd8d4c6,roughness:.85,
-   transparent:true,opacity:.55,side:THREE.DoubleSide});
-  const teto=new THREE.Mesh(new THREE.BoxGeometry(ew+.2,.06,ed+.2),lona);
-  teto.position.set(ex,eh,ez);teto.castShadow=true;g.add(teto);
-  const vaoEstufa=1.4,ladoEstufa=(ew-vaoEstufa)/2;
-  [[0,-ed/2,ew,.05],[-ew/2,0,.05,ed],[ew/2,0,.05,ed],
-   [-(vaoEstufa/2+ladoEstufa/2),ed/2,ladoEstufa,.05],
-   [vaoEstufa/2+ladoEstufa/2,ed/2,ladoEstufa,.05]].forEach(w=>{
-   const p2=new THREE.Mesh(new THREE.BoxGeometry(w[2],eh,w[3]),lona);
-   p2.position.set(ex+w[0],eh/2,ez+w[1]);g.add(p2)});
-  // Marco aberto da porta: a passagem fica igual em todas as estufas.
-  [-vaoEstufa/2,vaoEstufa/2].forEach(px=>{
-   const p2=new THREE.Mesh(new THREE.BoxGeometry(.08,eh,.08),tuboM);
-   p2.position.set(ex+px,eh/2,ez+ed/2);p2.castShadow=true;g.add(p2)});
-  const verga=new THREE.Mesh(new THREE.BoxGeometry(vaoEstufa+.16,.08,.08),tuboM);
-  verga.position.set(ex,eh-.08,ez+ed/2);verga.castShadow=true;g.add(verga);
-  addColLocal(ex-ew/2-.1,ex-ew/2+.1,ez-ed/2,ez+ed/2);
-  addColLocal(ex+ew/2-.1,ex+ew/2+.1,ez-ed/2,ez+ed/2);
-  addColLocal(ex-ew/2,ex+ew/2,ez-ed/2-.1,ez-ed/2+.1);
-  // A frente tem uma abertura central de 1,4m para o jogador entrar.
-  addColLocal(ex-ew/2,ex-vaoEstufa/2,ez+ed/2-.1,ez+ed/2+.1);
-  addColLocal(ex+vaoEstufa/2,ex+ew/2,ez+ed/2-.1,ez+ed/2+.1);
- })();
-
- // Grow room de alvenaria (canteiros 10-15)
- (function(){
-  const gx=-4.6, gz=4.4, gw=6.2, gd=4.4, gh=2.6;
+  const gx=0, gz=-.35, gw=5.2, gd=4.2, gh=2.6;
   const parede=new THREE.MeshStandardMaterial({color:corMuro,roughness:.94});
   [[0,-gd/2,gw,.25],[-gw/2,0,.25,gd],[gw/2,0,.25,gd]].forEach(w=>{
    const p2=new THREE.Mesh(new THREE.BoxGeometry(w[2],gh,w[3]),parede);
@@ -5092,6 +5060,7 @@ function montarLote(lote){
   addColLocal(gx-gw/2,gx-1.4/2,gz+gd/2-.15,gz+gd/2+.15);
   addColLocal(gx+1.4/2,gx+gw/2,gz+gd/2-.15,gz+gd/2+.15);
  })();
+ }
 
  // Três estações domésticas: os offsets são iguais aos enviados pelo
  // servidor em lote.estacoes. Cada etapa tem bancada e placa próprios.
@@ -5100,7 +5069,7 @@ function montarLote(lote){
   const metal=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.6});
   const curaMat=new THREE.MeshStandardMaterial({color:0x936ec1,roughness:.82});
   const embalagemMat=new THREE.MeshStandardMaterial({color:0x9a713c,roughness:.86});
-  const estacoes={secagem:{x:6.8,z:3.6},cura:{x:3.8,z:3.6},embalagem:{x:.8,z:3.6}};
+  const estacoes={secagem:{x:2.6,z:2.15},cura:{x:0,z:2.15},embalagem:{x:-2.6,z:2.15}};
   lote.estacoes={};
   Object.keys(estacoes).forEach(nome=>{const e=estacoes[nome];lote.estacoes[nome]={x:LX+e.x,z:LZ+e.z};});
   lote.bancadaPos=lote.estacoes.secagem;

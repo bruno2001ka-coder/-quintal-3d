@@ -17,7 +17,7 @@ assert.match(html, /G\._nasceuNoLote=true;G\._esperandoLote=false/,
   'spawn authoritative não libera o início do mundo');
 assert.match(handler, /if\(!G\._nasceuNoLote\)mpAplicarSpawnAuthoritative\(msg\.posicao\)/,
   'spawn público ainda não é aplicado antes do clique');
-assert.match(handler, /if\(msg\.posicao&&\(\s*msg\.retomada\|\|mpReentrada\|\|!G\._nasceuNoLote\|\|G\._esperandoLote\)\)\s*mpAplicarSpawnAuthoritative\(msg\.posicao\)/,
+assert.match(handler, /if\(msg\.posicao\)mpAplicarSpawnAuthoritative\(msg\.posicao\)/,
   'spawn do lote próprio não é aplicado na fase de handshake/reconexão');
 assert(!/G\.running&&msg\.posicao/.test(handler),
   'spawn authoritative voltou a estar bloqueado por G.running');

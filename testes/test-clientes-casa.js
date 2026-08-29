@@ -20,8 +20,8 @@ let ws = null;
   await until(m => m.t === 'portao_estado' && m.aberto === true);
   assert.equal(typeof lote.lote.x, 'number');
   assert.equal(typeof lote.lote.z, 'number');
-  const bx = lote.lote.x + 6.8;
-  const bz = lote.lote.z + 3.6;
+  const bx = lote.lote.x + 2.6;
+  const bz = lote.lote.z + 2.15;
   let chegou = null;
   const fim = Date.now() + 12000;
   while (Date.now() < fim) {
