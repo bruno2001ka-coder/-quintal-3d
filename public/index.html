@@ -2327,7 +2327,7 @@ let bossCameraFocusY=1.18;
 // Personagem principal importado: a física continua usando o mesmo grupo
 // `player`, posição, colisores, câmera e arma. O boneco low-poly antigo fica
 // como fallback caso o GLB ou o CDN do loader não carregue.
-let bossMixer=null,bossActions={},bossAction=null,bossModeloPronto=false;
+let bossMixer=null,bossActions={},bossAction=null,bossModeloPronto=false,bossLoadState='loading';
 function bossTocar(nome,fade=.16){
  if(!bossMixer||!bossActions[nome])return;
  const proxima=bossActions[nome];if(bossAction===proxima)return;
@@ -2361,8 +2361,13 @@ function carregarPersonagemPrincipal(){
    if(['Idle','Walk','Run','Reload','WalkBackwards'].includes(nome))bossActions[nome]=bossMixer.clipAction(clip);
   }
   bossModeloPronto=!!bossActions.Idle;
+  bossLoadState=bossModeloPronto?'loaded':'missing_idle';
   if(bossModeloPronto)bossTocar('Idle',0);
- },undefined,()=>{ /* fallback low-poly permanece ativo */ });
+ },undefined,erro=>{
+  bossLoadState='error';
+  console.error('ERRO AO CARREGAR THEBOSS:',erro);
+  if(typeof toast==='function')toast('TheBoss não carregou — usando personagem reserva');
+ });
 }
 carregarPersonagemPrincipal();
 const pShadow=contact(0,0,.55,.5);
