@@ -4919,11 +4919,25 @@ function montarLote(lote){
   });
 
   // Frente dividida em dois trechos, com vão central de 2.2m.
-  const vao=2.2,lado=(W-vao)/2;
+  const vao=2.8,lado=(W-vao)/2;
   [-1,1].forEach(sign=>{
     const mu=new THREE.Mesh(new THREE.BoxGeometry(lado,.95,.20),muroM);
     mu.position.set(sign*(vao/2+lado/2),.48,D/2); g.add(mu);
   });
+
+  // Entrada frontal única: a abertura do muro, o portão e o caminho
+  // usam exatamente o mesmo eixo. O caminho não recebe colisor.
+  const caminho=new THREE.Mesh(new THREE.BoxGeometry(vao-.25,.035,D-1.0),
+    new THREE.MeshStandardMaterial({color:0x8b8375,roughness:1}));
+  caminho.position.set(0,.025,.20); caminho.receiveShadow=true; g.add(caminho);
+  const postes=new THREE.MeshStandardMaterial({color:0x66584b,roughness:.9});
+  [-1,1].forEach(sign=>{
+    const p=new THREE.Mesh(new THREE.BoxGeometry(.12,1.18,.12),postes);
+    p.position.set(sign*(vao/2+.06),.59,D/2); p.castShadow=true; g.add(p);
+  });
+  const placaEntrada=new THREE.Mesh(new THREE.BoxGeometry(1.35,.28,.05),
+    new THREE.MeshStandardMaterial({color:0x23311d,roughness:.8,emissive:0x081008}));
+  placaEntrada.position.set(0,1.55,D/2+.03); g.add(placaEntrada);
 
   // Pequeno abrigo, completamente dentro do lote e separado dos canteiros.
   const shed=new THREE.Mesh(new THREE.BoxGeometry(2.0,1.7,1.5),madeira);
