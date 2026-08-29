@@ -16,8 +16,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Reconcile compact map baseline
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
           import re
 
@@ -26,24 +27,24 @@ jobs:
 
           spawn_pattern = re.compile(r"function spawnNaPortaDoLote\(lote\) \{.*?\n\}", re.S)
           spawn_repl = """function spawnNaPortaDoLote(lote) {
-  // Spawn on the sidewalk immediately outside the front gate.
-  // The visual map uses compact 8x7m lots.
-  return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 1.25, ry: 0 };
-}"""
+            // Spawn on the sidewalk immediately outside the front gate.
+            // The visual map uses compact 8x7m lots.
+            return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 1.25, ry: 0 };
+          }"""
           s, n_spawn = spawn_pattern.subn(spawn_repl, s, count=1)
           if n_spawn != 1:
               raise SystemExit('ERRO: spawnNaPortaDoLote não encontrado')
 
           coll_pattern = re.compile(r"const COL_LOTE_REL = \[.*?\n\];\nconst IDX_PORTAO = 5;", re.S)
           coll_repl = """const COL_LOTE_REL = [
-  [-4.0, 4.0, -3.625, -3.375], // fundo
-  [-4.0, -3.75, -3.5, 3.5],     // lateral esquerda
-  [3.75, 4.0, -3.5, 3.5],       // lateral direita
-  [-4.0, -1.6, 3.375, 3.625],   // frente esquerda
-  [1.6, 4.0, 3.375, 3.625],     // frente direita
-  [-1.6, 1.6, 3.375, 3.625]     // portão central
-];
-const IDX_PORTAO = 5;"""
+            [-4.0, 4.0, -3.625, -3.375], // fundo
+            [-4.0, -3.75, -3.5, 3.5],     // lateral esquerda
+            [3.75, 4.0, -3.5, 3.5],       // lateral direita
+            [-4.0, -1.6, 3.375, 3.625],   // frente esquerda
+            [1.6, 4.0, 3.375, 3.625],     // frente direita
+            [-1.6, 1.6, 3.375, 3.625]     // portão central
+          ];
+          const IDX_PORTAO = 5;"""
           s, n_coll = coll_pattern.subn(coll_repl, s, count=1)
           if n_coll != 1:
               raise SystemExit('ERRO: COL_LOTE_REL não encontrado')
@@ -66,12 +67,13 @@ O mapa visual atual é a referência. A camada authoritative deve usar as mesmas
 ## Próximo passo
 Validar cada lote, construção, portão e ponto de interação contra o mapa visual atual antes de promover a branch para `main`.
 """, encoding='utf-8')
+          PY
 
       - name: Validate baseline
         shell: bash
         run: |
           node --check servidor-1.js
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           s = Path('servidor-1.js').read_text(encoding='utf-8')
           assert 'lote.z + LOTE_D / 2 + 1.25' in s
