@@ -2414,7 +2414,10 @@ function adicionarArmaGLB(k,modeloBase){
  const alvo=k==='rifle'?.92:.68;
  const maior=Math.max(tamanho.x,tamanho.y,tamanho.z);
  if(maior>0&&Number.isFinite(maior))modelo.scale.setScalar(alvo/maior);
- modelo.position.set(0,0,0);
+ // Os assets do GitHub têm o comprimento no eixo X; o gunMesh do jogo usa +Z como frente.
+ modelo.rotation.set(0,-Math.PI/2,0);
+ const ajuste=k==='rifle'?{x:0,y:-.02,z:.08}:{x:0,y:-.01,z:.05};
+ modelo.position.set(ajuste.x,ajuste.y,ajuste.z);
  armaGLBCache[k]=modelo;
  if(gunAtualK===k){
   while(gunMesh.children.length)gunMesh.remove(gunMesh.children[0]);
