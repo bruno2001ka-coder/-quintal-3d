@@ -2395,12 +2395,50 @@ carregarPersonagemPrincipal();
 const pShadow=contact(0,0,.55,.5);
 
 // arma na mão
-// ─── modelo de arma por tipo: cada uma tem silhueta própria ───
+// Modelos externos: mantemos o fallback procedural até cada GLB terminar de carregar.
 const gunMesh=new THREE.Group();
 scene.add(gunMesh);
 let gunAtualK=null;
+const armaGLBPorTipo={
+ smg:'assets/weapons/submachine-gun.glb',
+ rifle:'assets/weapons/assault-rifle.glb'
+};
+const armaGLBCache={},armaGLBEmCarga={};
+const armaGLBLoader=window.THREE&&THREE.GLTFLoader?new THREE.GLTFLoader():null;
+function adicionarArmaGLB(k,modeloBase){
+ const modelo=modeloBase.clone(true);
+ modelo.name='arma-glb-'+k;
+ modelo.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
+ const caixa=new THREE.Box3().setFromObject(modelo);
+ const tamanho=caixa.getSize(new THREE.Vector3());
+ const alvo=k==='rifle'?.92:.68;
+ const maior=Math.max(tamanho.x,tamanho.y,tamanho.z);
+ if(maior>0&&Number.isFinite(maior))modelo.scale.setScalar(alvo/maior);
+ modelo.position.set(0,0,0);
+ armaGLBCache[k]=modelo;
+ if(gunAtualK===k){
+  while(gunMesh.children.length)gunMesh.remove(gunMesh.children[0]);
+  gunMesh.add(modelo.clone(true));
+ }
+}
+function solicitarArmaGLB(k){
+ if(!armaGLBLoader||!armaGLBPorTipo[k]||armaGLBCache[k]||armaGLBEmCarga[k])return;
+ armaGLBEmCarga[k]=true;
+ armaGLBLoader.load(armaGLBPorTipo[k],gltf=>{
+  delete armaGLBEmCarga[k];
+  adicionarArmaGLB(k,gltf.scene);
+ },undefined,erro=>{
+  delete armaGLBEmCarga[k];
+  console.warn('GLB de arma não carregou; mantendo fallback:',k,erro);
+ });
+}
 function buildGun(k){
  while(gunMesh.children.length)gunMesh.remove(gunMesh.children[0]);
+ if(armaGLBCache[k]){
+  gunMesh.add(armaGLBCache[k].clone(true));
+  gunAtualK=k;
+  return;
+ }
  const met=new THREE.MeshStandardMaterial({color:0x24272b,roughness:.4,metalness:.75});
  const pol=new THREE.MeshStandardMaterial({color:0x1a1c1f,roughness:.85});
  const mad=new THREE.MeshStandardMaterial({color:0x4a3624,roughness:.8});
@@ -2411,25 +2449,26 @@ function buildGun(k){
   add(new THREE.BoxGeometry(.075,.12,.26),met,0,0,.02);
   add(new THREE.CylinderGeometry(.019,.019,.16,8),met,0,.015,.2,Math.PI/2);
   add(new THREE.BoxGeometry(.065,.17,.09),pol,0,-.13,-.05,.22);
-  add(new THREE.BoxGeometry(.05,.06,.04),pol,0,-.05,-.02);           // gatilho
+  add(new THREE.BoxGeometry(.05,.06,.04),pol,0,-.05,-.02);
  } else if(k==='smg'){
   add(new THREE.BoxGeometry(.08,.13,.34),met,0,0,.04);
   add(new THREE.CylinderGeometry(.017,.017,.26,8),met,0,.02,.3,Math.PI/2);
-  add(new THREE.BoxGeometry(.055,.26,.07),pol,0,-.17,-.02);          // pente reto longo
-  add(new THREE.BoxGeometry(.06,.15,.08),pol,0,-.11,-.14,.3);        // cabo
-  add(new THREE.BoxGeometry(.045,.05,.22),met,0,.02,-.26);           // coronha retrátil
-  add(new THREE.BoxGeometry(.02,.05,.02),met,0,.09,.18);             // alça de mira
+  add(new THREE.BoxGeometry(.055,.26,.07),pol,0,-.17,-.02);
+  add(new THREE.BoxGeometry(.06,.15,.08),pol,0,-.11,-.14,.3);
+  add(new THREE.BoxGeometry(.045,.05,.22),met,0,.02,-.26);
+  add(new THREE.BoxGeometry(.02,.05,.02),met,0,.09,.18);
  } else if(k==='rifle'){
   add(new THREE.BoxGeometry(.075,.14,.5),met,0,0,.06);
   add(new THREE.CylinderGeometry(.016,.016,.44,8),met,0,.025,.48,Math.PI/2);
-  add(new THREE.CylinderGeometry(.028,.028,.09,8),met,0,.025,.72,Math.PI/2); // freio de boca
-  add(new THREE.BoxGeometry(.06,.3,.09),pol,0,-.2,-.02,-.16);        // pente curvo
+  add(new THREE.CylinderGeometry(.028,.028,.09,8),met,0,.025,.72,Math.PI/2);
+  add(new THREE.BoxGeometry(.06,.3,.09),pol,0,-.2,-.02,-.16);
   add(new THREE.BoxGeometry(.065,.16,.08),pol,0,-.12,-.16,.28);
-  add(new THREE.BoxGeometry(.06,.13,.3),mad,0,-.02,-.36);            // coronha
-  add(new THREE.BoxGeometry(.05,.05,.2),mad,0,-.06,.26);             // guarda-mão
-  add(new THREE.CylinderGeometry(.03,.03,.16,10),pol,0,.13,.02,0,0,Math.PI/2); // luneta
+  add(new THREE.BoxGeometry(.06,.13,.3),mad,0,-.02,-.36);
+  add(new THREE.BoxGeometry(.05,.05,.2),mad,0,-.06,.26);
+  add(new THREE.CylinderGeometry(.03,.03,.16,10),pol,0,.13,.02,0,0,Math.PI/2);
  }
  gunAtualK=k;
+ solicitarArmaGLB(k);
 }
 const muzzle=new THREE.Mesh(new THREE.SphereGeometry(.13,8,6),
  new THREE.MeshBasicMaterial({color:0xffd070,transparent:true,opacity:0}));
