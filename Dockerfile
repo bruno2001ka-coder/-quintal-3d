@@ -10,10 +10,15 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY servidor-1.js ./
+COPY scripts/reconcile-map.js ./scripts/reconcile-map.js
 COPY public ./public
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
-RUN chmod +x ./docker-entrypoint.sh \
+# Aplica a reconciliação do mapa dentro da imagem, sem substituir manualmente
+# o servidor inteiro pela API de edição de arquivos.
+RUN node ./scripts/reconcile-map.js \
+  && node --check ./servidor-1.js \
+  && chmod +x ./docker-entrypoint.sh \
   && mkdir -p /data \
   && chown -R node:node /app /data
 

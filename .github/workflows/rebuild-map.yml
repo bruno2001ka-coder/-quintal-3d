@@ -1,0 +1,71 @@
+name: Rebuild map integration
+
+on:
+  push:
+    branches:
+      - rebuild/map-integration-2026-08-29
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconcile compact map baseline
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('servidor-1.js')
+          s = p.read_text(encoding='utf-8')
+          s2, n1 = re.subn(r"function spawnNaPortaDoLote\(lote\) \{.*?\n\}", """function spawnNaPortaDoLote(lote) {
+  return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 1.25, ry: 0 };
+}""", s, count=1, flags=re.S)
+          if n1 != 1:
+              raise SystemExit('spawnNaPortaDoLote não encontrado')
+          s2, n2 = re.subn(r"const COL_LOTE_REL = \[.*?\n\];\nconst IDX_PORTAO = 5;", """const COL_LOTE_REL = [
+  [-4.0, 4.0, -3.625, -3.375],
+  [-4.0, -3.75, -3.5, 3.5],
+  [3.75, 4.0, -3.5, 3.5],
+  [-4.0, -1.6, 3.375, 3.625],
+  [1.6, 4.0, 3.375, 3.625],
+  [-1.6, 1.6, 3.375, 3.625]
+];
+const IDX_PORTAO = 5;""", s2, count=1, flags=re.S)
+          if n2 != 1:
+              raise SystemExit('COL_LOTE_REL não encontrado')
+          p.write_text(s2, encoding='utf-8')
+          Path('MAP_REBUILD_STATUS.md').write_text('''# Quintal 3D — reconstrução da integração do mapa\n\nBranch de trabalho: rebuild/map-integration-2026-08-29\n\nBaseline: mapa visual compacto 8x7m, colisores compactos e spawn na calçada a 1,25m da frente. O `main` não é alterado por esta branch.\n''', encoding='utf-8')
+          PY
+
+      - name: Validate
+        shell: bash
+        run: |
+          node --check servidor-1.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('servidor-1.js').read_text(encoding='utf-8')
+          assert 'lote.z + LOTE_D / 2 + 1.25' in s
+          assert '[-4.0, 4.0, -3.625, -3.375]' in s
+          assert '[-1.6, 1.6, 3.375, 3.625]' in s
+          print('MAP_BASELINE_OK')
+          PY
+          git diff --check
+
+      - name: Commit rebuild baseline
+        shell: bash
+        run: |
+          if git diff --quiet -- servidor-1.js MAP_REBUILD_STATUS.md; then
+            echo 'Baseline already applied'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add servidor-1.js MAP_REBUILD_STATUS.md
+          git commit -m 'fix: align compact map spawn and colliders'
+          git push origin HEAD:rebuild/map-integration-2026-08-29
