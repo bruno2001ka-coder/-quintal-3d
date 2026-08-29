@@ -2359,8 +2359,8 @@ function carregarPersonagemPrincipal(){
   bossVisualPivot.position.set(0,0,0);
   bossCameraFocusY=Math.max(.9,Math.min(1.25,caixaFinal.min.y+(caixaFinal.max.y-caixaFinal.min.y)*.58));
   modelo.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true}});
-  // Não esconder o pivô novo: ele também é filho de `player`.
-  for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;
+  // O fallback antigo permanece visível até toda a configuração do GLB terminar.
+  // Assim, qualquer erro intermediário nunca deixa o jogador invisível.
   bossVisualPivot.visible=true;
   bossVisualPivot.add(modelo);
   bossMixer=new THREE.AnimationMixer(modelo);
@@ -2373,6 +2373,8 @@ function carregarPersonagemPrincipal(){
   modelo.visible=true; bossVisualPivot.visible=true;
   window.__quintalBoss.meshes=bossMeshCount; window.__quintalBoss.animations=(gltf.animations||[]).map(a=>a.name);
   if(bossModeloPronto)bossTocar('Idle',0);
+  // Só agora, depois de escala, pivô, malhas, mixer e animações, ocultamos o fallback.
+  if(bossModeloPronto)for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;
  },undefined,erro=>{
   bossLoadState='error'; window.__quintalBoss.error=String(erro&&erro.message||erro);
   console.error('ERRO AO CARREGAR THEBOSS:',erro);
