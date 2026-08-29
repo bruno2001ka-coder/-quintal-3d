@@ -1,0 +1,40 @@
+name: Apply map entry fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/map-doors-entries-2026-08-29]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply patch
+        run: node scripts/fix-map-entries.mjs
+      - name: Validate server
+        run: node --check servidor-1.js
+      - name: Validate client script blocks
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('public/index.html','utf8');
+          if(!s.includes('const vao=2.8,lado=(W-vao)/2;')) throw new Error('client opening not applied');
+          if(!s.includes('caminho')) throw new Error('entry walkway not applied');
+          console.log('CLIENT_ENTRY_VALIDATION_OK');
+          NODE
+      - name: Commit patched game files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/index.html servidor-1.js scripts/fix-map-entries.mjs .github/workflows/apply-map-entry-fix.yml
+          git commit -m 'fix: align house entrances doors and colliders' || exit 0
+          git push
