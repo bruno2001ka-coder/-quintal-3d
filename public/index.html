@@ -2372,18 +2372,16 @@ function carregarPersonagemPrincipal(){
    if(['Idle','Walk','Run','Reload','WalkBackwards'].includes(nome))bossActions[nome]=bossMixer.clipAction(clip);
   }
   // O CesiumMan tem um clip de demonstração, não um Walk separado.
-  // Ele fica como Idle e também como movimento, mas o Idle é congelado;
-  // assim o jogador não parece caminhar sem sair do lugar quando parado.
-  if(!bossActions.Idle&&clips[0])bossActions.Idle=bossMixer.clipAction(clips[0]);
-  if(!bossActions.Walk&&clips[0])bossActions.Walk=bossMixer.clipAction(clips[0]);
-  if(!bossActions.Run&&clips[0])bossActions.Run=bossMixer.clipAction(clips[0]);
-  bossModeloPronto=!!bossActions.Idle;
-  bossLoadState=bossModeloPronto?'loaded':'missing_idle';
+  // Ele fica exclusivamente na ação Move; a pose parada não usa uma ação
+  // compartilhada e é congelada/resetada separadamente.
+  if(!bossActions.Move&&clips[0])bossActions.Move=bossMixer.clipAction(clips[0]);
+  bossModeloPronto=!!bossActions.Move;
+  bossLoadState=bossModeloPronto?'loaded':'missing_animation';
   modelo.visible=true; bossVisualPivot.visible=true;
   window.__quintalBoss.meshes=bossMeshCount; window.__quintalBoss.animations=(gltf.animations||[]).map(a=>a.name);
   if(bossModeloPronto){
-   bossTocar('Idle',0);
-   bossActions.Idle.paused=true;
+   bossAction=null;
+   bossActions.Move.stop().reset();
   }
   // Só agora, depois de escala, pivô, malhas, mixer e animações, ocultamos o fallback.
   if(bossModeloPronto)for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;
@@ -4320,15 +4318,12 @@ function tick(){
  if(bossModeloPronto){
   const andando=mag>.05&&!modalOpen()&&!aguardandoPrimeiroLote;
   if(andando){
-   bossTocar(run?'Run':'Walk');
-  } else if(bossActions.Idle){
-   // O CesiumMan não tem Idle separado: resetamos e congelamos a pose
-   // para ele não continuar andando no lugar quando o jogador para.
-   if(bossAction!==bossActions.Idle){
-    bossTocar('Idle',.08);
-    bossActions.Idle.reset().play();
-   }
-   bossActions.Idle.paused=true;
+   bossTocar('Move');
+  } else if(bossActions.Move){
+   // Pose estática: a ação de movimento é interrompida e resetada somente
+   // ao parar, sem compartilhar estado pausado com o próximo deslocamento.
+   if(bossAction){bossAction.fadeOut(.08);bossAction=null}
+   bossActions.Move.stop().reset();
   }
   if(bossMixer)bossMixer.update(dt);
  }
