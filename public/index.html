@@ -755,10 +755,8 @@ const INT={x0:-160,x1:160,z0:-340,z1:-300}; // faixa dos interiores das casas
 // caso cai pra 3 casas montadas simultaneamente.
 // ETAPA D — 10 propriedades de 20x16m, uma por bloco, posições conferidas
 // por cálculo (nenhuma bate em rua).
-const LOTE_W=20, LOTE_D=16;
-const LOTE_SPOTS=[
- [-34,31],[2,31],[38,31],[-34,63],[2,63],
- [38,63],[-34,95],[2,95],[38,95],[-34,127]];
+const LOTE_W=8, LOTE_D=7;
+const LOTE_SPOTS=[[-44,27],[-34,27],[-24,27],[-14,27],[-4,27],[6,27],[16,27],[26,27],[36,27],[46,27]];
 // A Casa Nova é um ponto fixo de demonstração e precisa ficar livre de
 // prédios procedurais. Esta constante vem antes da geração da cidade para
 // evitar referência temporal à declaração `CN`, que só é criada mais abaixo.
@@ -4891,9 +4889,10 @@ const PAL_PORTAO=[0x8f4a34,0x6b6b6b,0x4a5a3c,0x7a4a33,0x5a6470];
   // A ordem bate com TIPO_PLOT do servidor: ele decide luz e crescimento
   // por ambiente, então a posição de cada índice importa.
   const off=[
-   [-7,-4],[-4.6,-4],[-2.2,-4],[-7,-1.4],[-4.6,-1.4],[-2.2,-1.4],   // 0-5 sol
-   [3.2,-4.4],[5.2,-4.4],[3.2,-2.4],[5.2,-2.4],                     // 6-9 estufa
-   [-6.6,3.4],[-4.6,3.4],[-2.6,3.4],[-6.6,5.4],[-4.6,5.4],[-2.6,5.4] // 10-15 grow
+   [-2.4,-1.7],[-0.8,-1.7],[0.8,-1.7],[2.4,-1.7],
+   [-2.4,-0.4],[-0.8,-0.4],[0.8,-0.4],[2.4,-0.4],
+   [-2.4,0.9],[-0.8,0.9],[0.8,0.9],[2.4,0.9],
+   [-2.4,2.2],[-0.8,2.2],[0.8,2.2],[2.4,2.2]
   ];
   off.forEach((pp,j)=>{
    lotesOnline[i].plots.push({x:LX+pp[0],z:LZ+pp[1],baseY:.15,
@@ -4904,287 +4903,49 @@ const PAL_PORTAO=[0x8f4a34,0x6b6b6b,0x4a5a3c,0x7a4a33,0x5a6470];
 })();
 // ═══ monta a casa de um lote: layout, cores, árvores e tralha sorteados ═══
 function montarLote(lote){
- if(lote.montado)return;
- const R=semente(lote.seed);
- const g=new THREE.Group();
- const LX=lote.x, LZ=lote.z;
- // colisores das estruturas internas, em coordenada relativa ao lote
- lote.cols=lote.cols||[];
- const addColLocal=(x0,x1,z0,z1)=>{
-  const c={minX:LX+x0,maxX:LX+x1,minZ:LZ+z0,maxZ:LZ+z1,active:true};
-  colliders.push(c);lote.cols.push(c);};
- const W=LOTE_W, D=LOTE_D;             // ETAPA D — propriedade de verdade
- const corMuro=PAL_MURO[(R()*PAL_MURO.length)|0];
- const corCasa=PAL_CASA[(R()*PAL_CASA.length)|0];
- const corTelha=PAL_TELHA[(R()*PAL_TELHA.length)|0];
- const corPortao=PAL_PORTAO[(R()*PAL_PORTAO.length)|0];
+  if(lote.montado)return;
+  const W=LOTE_W,D=LOTE_D,alt=2.45;
+  const g=new THREE.Group(); g.position.set(lote.x,0,lote.z);
+  const muroM=new THREE.MeshStandardMaterial({color:corMuro,roughness:.94});
+  const pisoM=new THREE.MeshStandardMaterial({color:0x706b5f,roughness:.98});
+  const madeira=new THREE.MeshStandardMaterial({color:0x6c4833,roughness:.88});
 
- // chão de terra batida
- const ch=new THREE.Mesh(new THREE.PlaneGeometry(W,D),
-  mat(cTerra(),3,3,{bumpScale:.05,roughness:1}));
- ch.rotation.x=-Math.PI/2;ch.position.y=.03;ch.receiveShadow=true;g.add(ch);
-
- // muro nos 3 lados fechados (a frente tem portão)
- const muroM=new THREE.MeshStandardMaterial({color:corMuro,roughness:.95});
- const alt=1.7+R()*.7;
- [[0,-D/2,W,.25],[-W/2,0,.25,D],[W/2,0,.25,D]].forEach(m=>{
-  const mu=new THREE.Mesh(new THREE.BoxGeometry(m[2],alt,m[3]),muroM);
-  mu.position.set(m[0],alt/2,m[1]);mu.castShadow=true;mu.receiveShadow=true;g.add(mu)});
- // Frente da casa com dois trechos laterais e vão central do portão.
- // Não existe uma parede atrás da entrada: a folha é a única barreira do vão.
- const vao=3.2, lado=(W-vao)/2;
- [[-(vao/2+lado/2)],[vao/2+lado/2]].forEach(px=>{
-  const mu=new THREE.Mesh(new THREE.BoxGeometry(lado,alt,.25),muroM);
-  mu.position.set(px[0],alt/2,D/2);mu.castShadow=true;mu.receiveShadow=true;g.add(mu)});
-
- // casinha: posição e tamanho sorteados dentro do terreno
- // casa menor: é só marcação de propriedade, não precisa dominar o terreno
- const cw=1.9+R()*.8, cd=1.7+R()*.7, cx=(R()-.5)*2.6, cz=-D/2+cd/2+.5;
- const corpo=new THREE.Mesh(new THREE.BoxGeometry(cw,2.05,cd),
-  new THREE.MeshStandardMaterial({color:corCasa,roughness:.88}));
- corpo.position.set(cx,1.03,cz);corpo.castShadow=true;corpo.receiveShadow=true;g.add(corpo);
- const tel=new THREE.Mesh(new THREE.BoxGeometry(cw+.5,.14,cd+.5),
-  new THREE.MeshStandardMaterial({map:T(cTelha(),3,2),color:corTelha,roughness:.8}));
- tel.position.set(cx,2.13,cz);tel.rotation.z=(R()-.5)*.16;tel.castShadow=true;g.add(tel);
- // porta e janela
- const porta=new THREE.Mesh(new THREE.BoxGeometry(.72,1.75,.07),
-  new THREE.MeshStandardMaterial({color:0x5a4530,roughness:.9}));
- porta.position.set(cx,.9,cz+cd/2+.02);g.add(porta);
- lote.portaPos={x:LX+cx,z:LZ+cz+cd/2+.6};
- const jan=new THREE.Mesh(new THREE.BoxGeometry(.5,.45,.06),
-  new THREE.MeshStandardMaterial({color:0x2a3038,roughness:.25,metalness:.4}));
- jan.position.set(cx+cw/2-.42,1.35,cz+cd/2+.02);g.add(jan);
-
- // portão da frente
- // PORTÃO: nasce FECHADO. Só o dono abre — os outros ficam do lado de fora.
- const pm=new THREE.MeshStandardMaterial({color:corPortao,roughness:.7,metalness:.35});
- const folha=new THREE.Group();
- const nbar=6+((R()*6)|0);
- for(let k=0;k<nbar;k++){
-  const b=new THREE.Mesh(new THREE.BoxGeometry(.05,alt*.95,.05),pm);
-  b.position.set(.15+k*(vao-.3)/(nbar-1),alt*.48,0);folha.add(b)}
- [alt*.15,alt*.9].forEach(y=>{
-  const t=new THREE.Mesh(new THREE.BoxGeometry(vao,.08,.07),pm);
-  t.position.set(vao/2,y,0);folha.add(t)});
- folha.traverse(o=>{if(o.isMesh)o.castShadow=true});
- folha.position.set(-vao/2,0,D/2);g.add(folha);
- lote.portaoFolha=folha;
- // BUG CORRIGIDO: aqui tinha 'lote.portaoAberto=false', que apagava o
- // estado que o servidor mandou. Ao andar e voltar (streaming remonta a
- // casa), o portão voltava a "fechado" sem o servidor saber — e o colisor
- // e a folha ficavam brigando. Agora o estado do servidor é preservado.
- if(lote.portaoAberto===undefined)lote.portaoAberto=false;
- // a folha nasce já na posição certa, sem animar do zero
- folha.rotation.y=lote.portaoAberto?-1.35:0;
- lote.portaoPos={x:LX,z:LZ+D/2};
-
- // 1 a 3 árvores, espécie e posição sorteadas
- const nArv=1+((R()*3)|0);
- for(let k=0;k<nArv;k++){
-  const esp=(R()*2)|0;
-  const ax=(R()-.5)*(W-2.4), az=(R()-.5)*(D-3)+1;
-  const t=new THREE.Group();
-  const h=2.2+R()*2.4;
-  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.1+R()*.08,.18+R()*.1,h,7),
-   new THREE.MeshStandardMaterial({color:0x6e5a44+((R()*0x101010)|0),roughness:.94}));
-  tr.position.y=h/2;tr.castShadow=true;t.add(tr);
-  const verde=[0x3d7527,0x2f5f22,0x4f8a30,0x356b25][(R()*4)|0];
-  const lm=new THREE.MeshStandardMaterial({color:verde,roughness:.9,flatShading:true});
-  if(esp===0){ // copa redonda
-   for(let f=0;f<5;f++){
-    const fo=new THREE.Mesh(new THREE.IcosahedronGeometry(.6+R()*.6,0),lm);
-    fo.position.set((R()-.5)*1.4,h+(R()-.5)*.9,(R()-.5)*1.4);fo.castShadow=true;t.add(fo)}
-  } else { // palmeira
-   for(let f=0;f<4;f++){
-    const fo=new THREE.Mesh(new THREE.IcosahedronGeometry(.4+R()*.25,0),lm);
-    fo.position.set((R()-.5)*.8,h-R()*.5,(R()-.5)*.8);fo.scale.y=1.7;
-    fo.castShadow=true;t.add(fo)}
-  }
-  t.position.set(ax,0,az);g.add(t);
- }
-
- // tralha de quintal: cada casa recebe um punhado diferente
- // só o que faz sentido num quintal de cultivo — tambor, pneu e caixote
- // saíram, não tinham nada a ver
- const tralhas=[
-  ()=>{ // regador
-   const b=new THREE.Mesh(new THREE.CylinderGeometry(.15,.12,.28,10),
-    new THREE.MeshStandardMaterial({color:[0x3a7fbf,0x4a9c4a,0xc44a3a][(R()*3)|0],roughness:.7}));
-   b.position.y=.14;b.castShadow=true;return b},
-  ()=>{ // saco de terra
-   const b=new THREE.Mesh(new THREE.BoxGeometry(.42,.26,.3),
-    new THREE.MeshStandardMaterial({color:0x6b5a44,roughness:.98}));
-   b.position.y=.13;b.rotation.z=(R()-.5)*.2;b.castShadow=true;return b},
-  ()=>{ // vaso vazio de reserva
-   const b=new THREE.Mesh(new THREE.CylinderGeometry(.19,.15,.26,10),
-    new THREE.MeshStandardMaterial({color:0x8a5a42,roughness:.9}));
-   b.position.y=.13;b.castShadow=true;return b},
- ];
- const nTralha=1+((R()*2)|0);
- for(let k=0;k<nTralha;k++){
-  const o=tralhas[(R()*tralhas.length)|0]();
-  o.position.x=(R()-.5)*(W-1.4);
-  o.position.z=(R()-.5)*(D-1.4);
-  o.rotation.y=R()*6.283;
-  g.add(o);
- }
-
- // ═══ ETAPA D — ambientes próprios de cada propriedade ═══
- // Estufa de lona (canteiros 6-9)
- (function(){
-  const ex=4.2, ez=-3.4, ew=4.4, ed=3.4, eh=2.5;
-  const tuboM=new THREE.MeshStandardMaterial({color:0xb8bcc0,roughness:.5,metalness:.6});
-  for(const sx of[-1,1])for(const sz of[-1,1]){
-   const t=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,eh,6),tuboM);
-   t.position.set(ex+sx*ew/2,eh/2,ez+sz*ed/2);t.castShadow=true;g.add(t)}
-  const lona=new THREE.MeshStandardMaterial({color:0xd8d4c6,roughness:.85,
-   transparent:true,opacity:.55,side:THREE.DoubleSide});
-  const teto=new THREE.Mesh(new THREE.BoxGeometry(ew+.2,.06,ed+.2),lona);
-  teto.position.set(ex,eh,ez);teto.castShadow=true;g.add(teto);
-  const vaoEstufa=1.4,ladoEstufa=(ew-vaoEstufa)/2;
-  [[0,-ed/2,ew,.05],[-ew/2,0,.05,ed],[ew/2,0,.05,ed],
-   [-(vaoEstufa/2+ladoEstufa/2),ed/2,ladoEstufa,.05],
-   [vaoEstufa/2+ladoEstufa/2,ed/2,ladoEstufa,.05]].forEach(w=>{
-   const p2=new THREE.Mesh(new THREE.BoxGeometry(w[2],eh,w[3]),lona);
-   p2.position.set(ex+w[0],eh/2,ez+w[1]);g.add(p2)});
-  // Marco aberto da porta: a passagem fica igual em todas as estufas.
-  [-vaoEstufa/2,vaoEstufa/2].forEach(px=>{
-   const p2=new THREE.Mesh(new THREE.BoxGeometry(.08,eh,.08),tuboM);
-   p2.position.set(ex+px,eh/2,ez+ed/2);p2.castShadow=true;g.add(p2)});
-  const verga=new THREE.Mesh(new THREE.BoxGeometry(vaoEstufa+.16,.08,.08),tuboM);
-  verga.position.set(ex,eh-.08,ez+ed/2);verga.castShadow=true;g.add(verga);
-  addColLocal(ex-ew/2-.1,ex-ew/2+.1,ez-ed/2,ez+ed/2);
-  addColLocal(ex+ew/2-.1,ex+ew/2+.1,ez-ed/2,ez+ed/2);
-  addColLocal(ex-ew/2,ex+ew/2,ez-ed/2-.1,ez-ed/2+.1);
-  // A frente tem uma abertura central de 1,4m para o jogador entrar.
-  addColLocal(ex-ew/2,ex-vaoEstufa/2,ez+ed/2-.1,ez+ed/2+.1);
-  addColLocal(ex+vaoEstufa/2,ex+ew/2,ez+ed/2-.1,ez+ed/2+.1);
- })();
-
- // Grow room de alvenaria (canteiros 10-15)
- (function(){
-  const gx=-4.6, gz=4.4, gw=6.2, gd=4.4, gh=2.6;
-  const parede=new THREE.MeshStandardMaterial({color:corMuro,roughness:.94});
-  [[0,-gd/2,gw,.25],[-gw/2,0,.25,gd],[gw/2,0,.25,gd]].forEach(w=>{
-   const p2=new THREE.Mesh(new THREE.BoxGeometry(w[2],gh,w[3]),parede);
-   p2.position.set(gx+w[0],gh/2,gz+w[1]);p2.castShadow=true;p2.receiveShadow=true;g.add(p2)});
-  // frente com vão de porta
-  const meia=(gw-1.4)/2;
-  [-1,1].forEach(sx=>{
-   const p2=new THREE.Mesh(new THREE.BoxGeometry(meia,gh,.25),parede);
-   p2.position.set(gx+sx*(1.4/2+meia/2),gh/2,gz+gd/2);p2.castShadow=true;g.add(p2)});
-  const laje=new THREE.Mesh(new THREE.BoxGeometry(gw+.3,.16,gd+.3),
-   new THREE.MeshStandardMaterial({color:0x9a948a,roughness:.95}));
-  laje.position.set(gx,gh+.08,gz);laje.castShadow=true;g.add(laje);
-  // barra de LED
-  const led=new THREE.Mesh(new THREE.BoxGeometry(gw-1,.09,.22),
-   new THREE.MeshBasicMaterial({color:0xff8ad8}));
-  led.position.set(gx,gh-.3,gz);g.add(led);
-  const luz=new THREE.PointLight(0xff6ad0,1.5,7,2);
-  luz.position.set(gx,gh-.5,gz);g.add(luz);
-  addColLocal(gx-gw/2-.15,gx-gw/2+.15,gz-gd/2,gz+gd/2);
-  addColLocal(gx+gw/2-.15,gx+gw/2+.15,gz-gd/2,gz+gd/2);
-  addColLocal(gx-gw/2,gx+gw/2,gz-gd/2-.15,gz-gd/2+.15);
-  // BUG CORRIGIDO: a frente do grow room tem dois pedaços de parede com um
-  // vão de porta no meio, mas nenhum dos dois tinha colisor. A parede
-  // aparecia e todo mundo passava por dentro dela.
-  const meiaG=(gw-1.4)/2;
-  addColLocal(gx-gw/2,gx-1.4/2,gz+gd/2-.15,gz+gd/2+.15);
-  addColLocal(gx+1.4/2,gx+gw/2,gz+gd/2-.15,gz+gd/2+.15);
- })();
-
- // Três estações domésticas: os offsets são iguais aos enviados pelo
- // servidor em lote.estacoes. Cada etapa tem bancada e placa próprios.
- (function(){
-  const mad=new THREE.MeshStandardMaterial({color:0x7a6144,roughness:.92});
-  const metal=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.6});
-  const curaMat=new THREE.MeshStandardMaterial({color:0x936ec1,roughness:.82});
-  const embalagemMat=new THREE.MeshStandardMaterial({color:0x9a713c,roughness:.86});
-  const estacoes={secagem:{x:6.8,z:3.6},cura:{x:3.8,z:3.6},embalagem:{x:.8,z:3.6}};
-  lote.estacoes={};
-  Object.keys(estacoes).forEach(nome=>{const e=estacoes[nome];lote.estacoes[nome]={x:LX+e.x,z:LZ+e.z};});
-  lote.bancadaPos=lote.estacoes.secagem;
-  function bancada(e){
-   const tampo=new THREE.Mesh(new THREE.BoxGeometry(2.25,.1,.95),mad);
-   tampo.position.set(e.x,.92,e.z);tampo.castShadow=true;g.add(tampo);
-   [[-1,-.36],[1,-.36],[-1,.36],[1,.36]].forEach(pp=>{const pe=new THREE.Mesh(new THREE.BoxGeometry(.1,.9,.1),mad);pe.position.set(e.x+pp[0],.45,e.z+pp[1]);g.add(pe)});
-  }
-  bancada(estacoes.secagem);bancada(estacoes.cura);bancada(estacoes.embalagem);
-  // Varal de secagem: fios e quatro ganchos acima da estação da direita.
-  [-.85,-.28,.28,.85].forEach(dx=>{const gan=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.34,6),metal);gan.position.set(estacoes.secagem.x+dx,1.35,estacoes.secagem.z-.22);g.add(gan)});
-  const fio=new THREE.Mesh(new THREE.BoxGeometry(2.05,.025,.025),metal);fio.position.set(estacoes.secagem.x,1.62,estacoes.secagem.z-.22);g.add(fio);
-  // Cura: seis potes alinhados sobre a bancada central.
-  lote.curaPotes=[];
-  for(let ji=0;ji<6;ji++){
-   const pote=new THREE.Group(),gx=estacoes.cura.x-.72+(ji%3)*.72,gz=estacoes.cura.z-.18+Math.floor(ji/3)*.34;
-   const vidro=new THREE.Mesh(new THREE.CylinderGeometry(.14,.16,.30,12),new THREE.MeshStandardMaterial({color:0xd2e4e7,roughness:.15,transparent:true,opacity:.52}));vidro.position.set(gx,1.12,gz);
-   const recheio=new THREE.Mesh(new THREE.CylinderGeometry(.10,.12,.18,12),curaMat);recheio.position.set(gx,1.05,gz);
-   const tampa=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.035,12),new THREE.MeshStandardMaterial({color:0xb98ee6,roughness:.42,metalness:.2}));tampa.position.set(gx,1.29,gz);
-   pote.add(vidro);pote.add(recheio);pote.add(tampa);pote.visible=false;g.add(pote);lote.curaPotes.push({g:pote,fill:recheio,cap:tampa});
-  }
-  // Embalagem: caixas e fita sobre a bancada esquerda, sem reutilizar os potes.
-  lote.embalagemCaixas=[];
-  for(let ei=0;ei<4;ei++){
-   const caixa=new THREE.Mesh(new THREE.BoxGeometry(.36,.22,.28),embalagemMat);caixa.position.set(estacoes.embalagem.x-.55+(ei%2)*.7,1.10,estacoes.embalagem.z-.12+Math.floor(ei/2)*.34);caixa.visible=false;g.add(caixa);lote.embalagemCaixas.push(caixa);
-  }
-  lote.producaoMarkers=[];
-  const nomes={secagem:'SECAGEM',cura:'CURA',embalagem:'EMBALAGEM'};
-  Object.keys(estacoes).forEach(nome=>{
-   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T(placaLote(nomes[nome],'#8fe063')),transparent:true,depthTest:false}));sp.scale.set(1.45,.28,1);sp.position.set(estacoes[nome].x,1.65,estacoes[nome].z+.48);sp.visible=true;g.add(sp);lote.producaoMarkers.push(sp);
+  // Piso e três lados da construção-base. A frente fica livre no portão.
+  const piso=new THREE.Mesh(new THREE.BoxGeometry(W,.08,D),pisoM);
+  piso.position.y=.04; g.add(piso);
+  [[0,-D/2,W,.20],[-W/2,0,.20,D],[W/2,0,.20,D]].forEach(m=>{
+    const mu=new THREE.Mesh(new THREE.BoxGeometry(m[2],alt,m[3]),muroM);
+    mu.position.set(m[0],alt/2,m[1]); mu.castShadow=true; mu.receiveShadow=true; g.add(mu);
   });
-  Object.values(estacoes).forEach(e=>addColLocal(e.x-1.12,e.x+1.12,e.z-.5,e.z+.5));
- })();
 
- // placa com o nome do dono
- const spr=new THREE.Sprite(new THREE.SpriteMaterial({
-  map:T(placaLote('LIVRE','#9aa0a6')),transparent:true,depthTest:false}));
- spr.scale.set(2.8,.7,1);spr.position.set(0,alt+.8,D/2);g.add(spr);
- lote.placa=spr;
+  // Frente dividida em dois trechos, com vão central de 2.2m.
+  const vao=2.2,lado=(W-vao)/2;
+  [-1,1].forEach(sign=>{
+    const mu=new THREE.Mesh(new THREE.BoxGeometry(lado,.95,.20),muroM);
+    mu.position.set(sign*(vao/2+lado/2),.48,D/2); g.add(mu);
+  });
 
- // os 6 canteiros
- lote.plots.forEach(P=>{
-  const pg=new THREE.Group();
-  const w=new THREE.MeshStandardMaterial({color:0x6a4c30,roughness:1});
-  [[0,-.7,1.5,.11],[0,.7,1.5,.11],[-.7,0,.11,1.5],[.7,0,.11,1.5]].forEach(b=>{
-   const m=new THREE.Mesh(new THREE.BoxGeometry(b[2],.15,b[3]),w);
-   m.position.set(b[0],.075,b[1]);m.castShadow=true;pg.add(m)});
-  const sol=new THREE.Mesh(new THREE.BoxGeometry(1.4,.13,1.4),
-   new THREE.MeshStandardMaterial({color:0x45301f,roughness:1}));
-  sol.position.y=.085;sol.receiveShadow=true;pg.add(sol);
-  const ring=new THREE.Mesh(new THREE.RingGeometry(.78,.94,26),
-   new THREE.MeshBasicMaterial({color:0x8fe063,transparent:true,opacity:0,side:THREE.DoubleSide}));
-  ring.rotation.x=-Math.PI/2;ring.position.y=.17;pg.add(ring);
-  pg.position.set(P.x,0,P.z);scene.add(pg);
-  P.group=pg;P.ring=ring;
- });
+  // Pequeno abrigo, completamente dentro do lote e separado dos canteiros.
+  const shed=new THREE.Mesh(new THREE.BoxGeometry(2.0,1.7,1.5),madeira);
+  shed.position.set(-2.45,.85,-2.15); shed.castShadow=true; shed.receiveShadow=true; g.add(shed);
 
- g.position.set(LX,0,LZ);scene.add(g);
- // COLISORES do muro. A lista já foi criada no topo (as estruturas
- // internas registram nela também) — NÃO zerar aqui, senão os colisores
- // da estufa e do grow room ficariam órfãos e nunca seriam removidos.
- const addCol=(x0,x1,z0,z1)=>{
-  const c={minX:LX+x0,maxX:LX+x1,minZ:LZ+z0,maxZ:LZ+z1,active:true};
-  colliders.push(c);lote.cols.push(c);
- };
- addCol(-W/2-.2,W/2+.2,-D/2-.2,-D/2+.2);            // fundo
- addCol(-W/2-.2,-W/2+.2,-D/2,D/2);                  // lateral esquerda
- addCol(W/2-.2,W/2+.2,-D/2,D/2);                    // lateral direita
- addCol(-W/2-.2,-(vao/2),D/2-.2,D/2+.2);            // frente esquerda
-  addCol(vao/2,W/2+.2,D/2-.2,D/2+.2);                // frente direita
-  // colisor do vão do portão: ativo enquanto fechado
- // colisor nasce coerente com o estado atual do portão
- const colPortao={minX:LX-vao/2,maxX:LX+vao/2,minZ:LZ+D/2-.2,maxZ:LZ+D/2+.2,
-  // o proprietário nunca fica preso do lado de fora da própria casa;
-  // visitantes continuam sujeitos ao estado authoritative do portão
-  active:!(lote.portaoAberto||lote.index===meuLoteIndex)};
- colliders.push(colPortao);lote.cols.push(colPortao);lote.colPortao=colPortao;
- addCol(cx-cw/2,cx+cw/2,cz-cd/2,cz+cd/2);           // casinha
-  lote.grp=g;lote.montado=true;
-  atualizarPlacaLote(lote);
-  atualizarMarcadoresBancada(lote);
- // redesenha as plantas que o servidor já tinha mandado
- lote.plots.forEach((P,j)=>{ if(P.dados){P.mesh=null;P.meshEstagio=-1;
-  aplicarPlotOnline(lote.index,j,P.dados)} });
+  // Três bancadas compactas na faixa traseira.
+  const estacoes={
+    embalagem:{x:-2.3,z:-2.45},
+    cura:{x:0,z:-2.45},
+    secagem:{x:2.3,z:-2.45}
+  };
+  lote.estacoes={};
+  Object.keys(estacoes).forEach(nome=>{
+    const e=estacoes[nome]; lote.estacoes[nome]={x:lote.x+e.x,z:lote.z+e.z};
+    const b=new THREE.Mesh(new THREE.BoxGeometry(1.25,.75,.55),madeira);
+    b.position.set(e.x,.40,e.z); b.castShadow=true; g.add(b);
+  });
+  lote.bancadaPos=lote.estacoes.secagem;
+  lote.portaoPos={x:lote.x,z:lote.z+D/2};
+  lote.group=g;
+  lote.montado=true;
+  return g;
 }
 // ═══ desmonta a casa quando o jogador está longe — libera memória ═══
 function desmontarLote(lote){
@@ -5228,12 +4989,14 @@ const loteProxyCasaMat=new THREE.MeshStandardMaterial({color:0xb9ad95,roughness:
 const loteProxyTelhaMat=new THREE.MeshStandardMaterial({color:0x8f4a34,roughness:1});
 const loteProxyMuroMat=new THREE.MeshStandardMaterial({color:0x8d8578,roughness:1});
 function montarLoteProxy(lote){
- if(lote.proxy)return;
- const g=new THREE.Group();g.name='loteProxy_'+lote.index;
- const casa=new THREE.Mesh(new THREE.BoxGeometry(4.2,2.8,3.2),loteProxyCasaMat);casa.position.set(0,1.4,-1.8);g.add(casa);
- const telha=new THREE.Mesh(new THREE.BoxGeometry(4.8,.18,3.8),loteProxyTelhaMat);telha.position.set(0,2.9,-1.8);telha.rotation.z=.05;g.add(telha);
- const muro=new THREE.Mesh(new THREE.BoxGeometry(20,1.25,.16),loteProxyMuroMat);muro.position.set(0,.62,8);g.add(muro);
- g.position.set(lote.x,0,lote.z);g.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false}});scene.add(g);lote.proxy=g;
+  const g=new THREE.Group(); g.position.set(lote.x,0,lote.z);
+  const muro=new THREE.MeshStandardMaterial({color:0x6c5c4a,roughness:.96});
+  const piso=new THREE.MeshStandardMaterial({color:0x625b50,roughness:1});
+  const p=new THREE.Mesh(new THREE.BoxGeometry(8,.08,7),piso); p.position.y=.04; g.add(p);
+  [[0,-3.5,8,.16],[-4,0,.16,7],[4,0,.16,7]].forEach(m=>{
+    const o=new THREE.Mesh(new THREE.BoxGeometry(m[2],1.2,m[3]),muro); o.position.set(m[0],.6,m[1]); g.add(o);
+  });
+  return g;
 }
 function desmontarLoteProxy(lote){if(!lote.proxy)return;scene.remove(lote.proxy);lote.proxy=null}
 let mapaStreamT=0;
