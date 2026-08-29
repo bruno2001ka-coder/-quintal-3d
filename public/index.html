@@ -4319,8 +4319,17 @@ function tick(){
  limbs.armL.rotation.x=-sw*.8;limbs.armR.rotation.x=sw*.8;
  if(bossModeloPronto){
   const andando=mag>.05&&!modalOpen()&&!aguardandoPrimeiroLote;
-  bossTocar(andando?(run?'Run':'Walk'):'Idle');
-  if(!andando&&bossActions.Idle)bossActions.Idle.paused=true;
+  if(andando){
+   bossTocar(run?'Run':'Walk');
+  } else if(bossActions.Idle){
+   // O CesiumMan não tem Idle separado: resetamos e congelamos a pose
+   // para ele não continuar andando no lugar quando o jogador para.
+   if(bossAction!==bossActions.Idle){
+    bossTocar('Idle',.08);
+    bossActions.Idle.reset().play();
+   }
+   bossActions.Idle.paused=true;
+  }
   if(bossMixer)bossMixer.update(dt);
  }
 
