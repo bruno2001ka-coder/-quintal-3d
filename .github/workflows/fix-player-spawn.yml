@@ -1,0 +1,44 @@
+name: Fix player spawn outside house
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-spawn:
+    if: github.event.head_commit.message != 'fix: spawn player outside lot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Correct lot door spawn
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('servidor-1.js')
+          s = p.read_text(encoding='utf-8')
+          old = 'return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 2.4, ry: 0 };'
+          new = 'return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 0.55, ry: 0 };'
+          if old not in s:
+              raise SystemExit('spawn pattern not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+      - name: Validate and commit
+        shell: bash
+        run: |
+          node --check servidor-1.js
+          grep -F 'LOTE_D / 2 + 0.55' servidor-1.js
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add servidor-1.js
+          git commit -m 'fix: spawn player outside lot'
+          git push origin HEAD:main
+          git rm -f .github/workflows/fix-player-spawn.yml
+          git commit -m 'chore: remove one-time spawn repair workflow'
+          git push origin HEAD:main
