@@ -56,16 +56,28 @@ jobs:
           else:
               print('Patch do CesiumMan aplicado.')
 
-      - name: Commit character fix back to main
+      - name: Validate and commit character repair
         shell: bash
         run: |
-          if git diff --quiet -- public/index.html; then
-            echo "Nenhuma alteração do personagem para commitar."
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('public/index.html').read_text(encoding='utf-8')
+          assert "frustumCulled=false" in s
+          assert "bossVisualPivot.updateMatrixWorld(true)" in s
+          assert "modelo.matrixAutoUpdate=true" in s
+          PY
+          changed=0
+          git diff --quiet -- public/index.html || changed=1
+          test -f .github/workflows/fix-character.yml && changed=1 || true
+          test -f CHARACTER_REPAIR_TRIGGER.txt && changed=1 || true
+          if [ "$changed" -eq 0 ]; then
+            echo "Nada para commitar."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/index.html
+          git rm -f .github/workflows/fix-character.yml CHARACTER_REPAIR_TRIGGER.txt 2>/dev/null || true
           git commit -m "fix: stabilize CesiumMan character integration"
           git push origin HEAD:main
 
