@@ -22,63 +22,89 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Stabilize CesiumMan character integration
+      - name: Stabilize character and lot spawn integration
         shell: python
         run: |
           from pathlib import Path
+          import re
+
+          # Character visibility/transform safety already used before.
           p = Path('public/index.html')
           s = p.read_text(encoding='utf-8')
-          original = s
-
           old = "modelo.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true}});"
           new = "modelo.traverse(o=>{if(o.isMesh){o.visible=true;o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}});"
           if old in s:
               s = s.replace(old, new, 1)
-
           old = "bossVisualPivot.visible=true;\n  bossVisualPivot.add(modelo);\n  bossMixer=new THREE.AnimationMixer(modelo);"
           new = "bossVisualPivot.visible=true;\n  bossVisualPivot.add(modelo);\n  bossVisualPivot.updateMatrixWorld(true);\n  modelo.updateMatrixWorld(true);\n  bossMixer=new THREE.AnimationMixer(modelo);"
           if old in s:
               s = s.replace(old, new, 1)
-
-          old = "  if(bossModeloPronto)for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;"
-          new = "  if(bossModeloPronto){\n   requestAnimationFrame(()=>{\n    if(bossModelo===modelo&&bossVisualPivot.visible&&modelo.visible){\n     for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;\n    }\n   });\n  }"
-          if old in s:
-              s = s.replace(old, new, 1)
-
           old = "modelo.visible=true; bossVisualPivot.visible=true;\n  window.__quintalBoss.meshes=bossMeshCount;"
           new = "modelo.visible=true; bossVisualPivot.visible=true;\n  modelo.matrixAutoUpdate=true;\n  bossVisualPivot.matrixAutoUpdate=true;\n  window.__quintalBoss.meshes=bossMeshCount;"
           if old in s:
               s = s.replace(old, new, 1)
-
           p.write_text(s, encoding='utf-8')
-          if s == original:
-              print('CesiumMan já estava estabilizado; nenhum patch necessário.')
-          else:
-              print('Patch do CesiumMan aplicado.')
 
-      - name: Validate and commit character repair
+          # Server: the client map uses compact 8x7m lots. Replace the old
+          # 20.4x16.4-style authoritative colliders and the unsafe 2.4m spawn.
+          p = Path('servidor-1.js')
+          s = p.read_text(encoding='utf-8')
+          pattern = re.compile(r"function spawnNaPortaDoLote\(lote\) \{.*?\n\}", re.S)
+          repl = """function spawnNaPortaDoLote(lote) {
+  // Calçada imediatamente além do portão frontal; nunca nasce dentro do lote.
+  return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 1.25, ry: 0 };
+}"""
+          s, n = pattern.subn(repl, s, count=1)
+          assert n == 1, 'spawnNaPortaDoLote não encontrado'
+          pattern = re.compile(r"const COL_LOTE_REL = \[.*?\n\];\nconst IDX_PORTAO = 5;", re.S)
+          repl = """const COL_LOTE_REL = [
+  [-4.0, 4.0, -3.625, -3.375], // fundo
+  [-4.0, -3.75, -3.5, 3.5],     // lateral esquerda
+  [3.75, 4.0, -3.5, 3.5],       // lateral direita
+  [-4.0, -1.6, 3.375, 3.625],   // frente esquerda
+  [1.6, 4.0, 3.375, 3.625],     // frente direita
+  [-1.6, 1.6, 3.375, 3.625]     // portão central
+];
+const IDX_PORTAO = 5;"""
+          s, n = pattern.subn(repl, s, count=1)
+          assert n == 1, 'COL_LOTE_REL não encontrado'
+          p.write_text(s, encoding='utf-8')
+
+          # Test guard: assert the authoritative spawn and compact colliders.
+          p = Path('testes/test-spawn-preclick.js')
+          s = p.read_text(encoding='utf-8')
+          marker = "assert.match(server, /const retomada = retomadaLegada \\? null : retomadaBruta/"
+          if "const COL_LOTE_REL" not in s:
+              insert = "\nassert.match(server, /const COL_LOTE_REL = \\[/,\n  'colisores dos lotes não estão definidos no teste');\nassert.match(server, /\\[-4\\.0, 4\\.0, -3\\.625, -3\\.375\\]/,\n  'colisor compacto do lote não está ativo');\nassert.match(server, /lote\\.z \\+ LOTE_D \/ 2 \\+ 1\\.25/,\n  'spawn do proprietário não está na calçada');\n"
+              s = s.replace("\nconsole.log('PASS:", insert + "\nconsole.log('PASS:", 1)
+          p.write_text(s, encoding='utf-8')
+
+      - name: Validate and commit repair
         shell: bash
         run: |
+          node --check servidor-1.js
+          node testes/test-spawn-preclick.js
           python - <<'PY'
           from pathlib import Path
-          s = Path('public/index.html').read_text(encoding='utf-8')
-          assert "frustumCulled=false" in s
-          assert "bossVisualPivot.updateMatrixWorld(true)" in s
-          assert "modelo.matrixAutoUpdate=true" in s
+          s=Path('servidor-1.js').read_text(encoding='utf-8')
+          assert 'lote.z + LOTE_D / 2 + 1.25' in s
+          assert '[-4.0, 4.0, -3.625, -3.375]' in s
           PY
           changed=0
           git diff --quiet -- public/index.html || changed=1
+          git diff --quiet -- servidor-1.js || changed=1
+          git diff --quiet -- testes/test-spawn-preclick.js || changed=1
           test -f .github/workflows/fix-character.yml && changed=1 || true
           test -f CHARACTER_REPAIR_TRIGGER.txt && changed=1 || true
           if [ "$changed" -eq 0 ]; then
-            echo "Nada para commitar."
+            echo "Nenhuma correção pendente."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/index.html
+          git add public/index.html servidor-1.js testes/test-spawn-preclick.js
           git rm -f .github/workflows/fix-character.yml CHARACTER_REPAIR_TRIGGER.txt 2>/dev/null || true
-          git commit -m "fix: stabilize CesiumMan character integration"
+          git commit -m "fix: align player spawn and compact lot colliders"
           git push origin HEAD:main
 
       - name: Setup Node.js
