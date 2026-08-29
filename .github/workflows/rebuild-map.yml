@@ -21,61 +21,35 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
-          server_path = Path('servidor-1.js')
-          s = server_path.read_text(encoding='utf-8')
-
-          spawn_pattern = re.compile(r"function spawnNaPortaDoLote\(lote\) \{.*?\n\}", re.S)
-          spawn_repl = """function spawnNaPortaDoLote(lote) {
-            // Spawn on the sidewalk immediately outside the front gate.
-            // The visual map uses compact 8x7m lots.
-            return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 1.25, ry: 0 };
-          }"""
-          s, n_spawn = spawn_pattern.subn(spawn_repl, s, count=1)
-          if n_spawn != 1:
-              raise SystemExit('ERRO: spawnNaPortaDoLote não encontrado')
-
-          coll_pattern = re.compile(r"const COL_LOTE_REL = \[.*?\n\];\nconst IDX_PORTAO = 5;", re.S)
-          coll_repl = """const COL_LOTE_REL = [
-            [-4.0, 4.0, -3.625, -3.375], // fundo
-            [-4.0, -3.75, -3.5, 3.5],     // lateral esquerda
-            [3.75, 4.0, -3.5, 3.5],       // lateral direita
-            [-4.0, -1.6, 3.375, 3.625],   // frente esquerda
-            [1.6, 4.0, 3.375, 3.625],     // frente direita
-            [-1.6, 1.6, 3.375, 3.625]     // portão central
-          ];
-          const IDX_PORTAO = 5;"""
-          s, n_coll = coll_pattern.subn(coll_repl, s, count=1)
-          if n_coll != 1:
-              raise SystemExit('ERRO: COL_LOTE_REL não encontrado')
-
-          server_path.write_text(s, encoding='utf-8')
-
-          Path('MAP_REBUILD_STATUS.md').write_text("""# Quintal 3D — reconstrução da integração do mapa
-
-Branch: `rebuild/map-integration-2026-08-29`
-
-## Regra
-O mapa visual atual é a referência. A camada authoritative deve usar as mesmas dimensões e posições, evitando colisores ou spawns herdados do mapa anterior.
-
-## Baseline aplicado
-- lotes: 8 × 7 m;
-- colisores relativos: perímetro compacto de cada lote, com abertura central do portão;
-- spawn do proprietário: calçada a 1,25 m além da frente do lote;
-- armas, economia, inventário e multiplayer: preservados.
-
-## Próximo passo
-Validar cada lote, construção, portão e ponto de interação contra o mapa visual atual antes de promover a branch para `main`.
-""", encoding='utf-8')
+          p = Path('servidor-1.js')
+          s = p.read_text(encoding='utf-8')
+          s2, n1 = re.subn(r"function spawnNaPortaDoLote\(lote\) \{.*?\n\}", """function spawnNaPortaDoLote(lote) {
+  return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 1.25, ry: 0 };
+}""", s, count=1, flags=re.S)
+          if n1 != 1:
+              raise SystemExit('spawnNaPortaDoLote não encontrado')
+          s2, n2 = re.subn(r"const COL_LOTE_REL = \[.*?\n\];\nconst IDX_PORTAO = 5;", """const COL_LOTE_REL = [
+  [-4.0, 4.0, -3.625, -3.375],
+  [-4.0, -3.75, -3.5, 3.5],
+  [3.75, 4.0, -3.5, 3.5],
+  [-4.0, -1.6, 3.375, 3.625],
+  [1.6, 4.0, 3.375, 3.625],
+  [-1.6, 1.6, 3.375, 3.625]
+];
+const IDX_PORTAO = 5;""", s2, count=1, flags=re.S)
+          if n2 != 1:
+              raise SystemExit('COL_LOTE_REL não encontrado')
+          p.write_text(s2, encoding='utf-8')
+          Path('MAP_REBUILD_STATUS.md').write_text('''# Quintal 3D — reconstrução da integração do mapa\n\nBranch de trabalho: rebuild/map-integration-2026-08-29\n\nBaseline: mapa visual compacto 8x7m, colisores compactos e spawn na calçada a 1,25m da frente. O `main` não é alterado por esta branch.\n''', encoding='utf-8')
           PY
 
-      - name: Validate baseline
+      - name: Validate
         shell: bash
         run: |
           node --check servidor-1.js
           python3 - <<'PY'
           from pathlib import Path
-          s = Path('servidor-1.js').read_text(encoding='utf-8')
+          s=Path('servidor-1.js').read_text(encoding='utf-8')
           assert 'lote.z + LOTE_D / 2 + 1.25' in s
           assert '[-4.0, 4.0, -3.625, -3.375]' in s
           assert '[-1.6, 1.6, 3.375, 3.625]' in s
@@ -83,15 +57,15 @@ Validar cada lote, construção, portão e ponto de interação contra o mapa vi
           PY
           git diff --check
 
-      - name: Commit baseline
+      - name: Commit rebuild baseline
         shell: bash
         run: |
           if git diff --quiet -- servidor-1.js MAP_REBUILD_STATUS.md; then
-            echo "Baseline já aplicado."
+            echo 'Baseline already applied'
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add servidor-1.js MAP_REBUILD_STATUS.md
-          git commit -m "fix: rebuild compact map collision and spawn baseline"
+          git commit -m 'fix: align compact map spawn and colliders'
           git push origin HEAD:rebuild/map-integration-2026-08-29
