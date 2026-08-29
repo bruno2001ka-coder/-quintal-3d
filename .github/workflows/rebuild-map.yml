@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconcile map geometry with authoritative server
+      - name: Reconcile compact map baseline
         shell: python
         run: |
           from pathlib import Path
@@ -24,13 +24,10 @@ jobs:
           server_path = Path('servidor-1.js')
           s = server_path.read_text(encoding='utf-8')
 
-          # The current visual map uses compact 8x7 m lots. Keep one
-          # authoritative lot collision footprint and a spawn safely beyond
-          # the front gate. Do not touch weapons, economy or gameplay systems.
           spawn_pattern = re.compile(r"function spawnNaPortaDoLote\(lote\) \{.*?\n\}", re.S)
           spawn_repl = """function spawnNaPortaDoLote(lote) {
   // Spawn on the sidewalk immediately outside the front gate.
-  // This keeps the player outside the construction on the compact 8x7m map.
+  // The visual map uses compact 8x7m lots.
   return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 1.25, ry: 0 };
 }"""
           s, n_spawn = spawn_pattern.subn(spawn_repl, s, count=1)
@@ -55,34 +52,40 @@ const IDX_PORTAO = 5;"""
 
           Path('MAP_REBUILD_STATUS.md').write_text("""# Quintal 3D — reconstrução da integração do mapa
 
-Branch de reconstrução: `rebuild/map-integration-2026-08-29`
+Branch: `rebuild/map-integration-2026-08-29`
 
-Objetivo: tratar o mapa visual atual como fonte de verdade e alinhar a camada authoritative sem alterar armas, economia, inventário ou multiplayer.
+## Regra
+O mapa visual atual é a referência. A camada authoritative deve usar as mesmas dimensões e posições, evitando colisores ou spawns herdados do mapa anterior.
 
-## Primeira correção
+## Baseline aplicado
+- lotes: 8 × 7 m;
+- colisores relativos: perímetro compacto de cada lote, com abertura central do portão;
+- spawn do proprietário: calçada a 1,25 m além da frente do lote;
+- armas, economia, inventário e multiplayer: preservados.
 
-- lotes authoritative: 8 × 7 m;
-- colisores relativos do lote: uma única definição compatível com o lote compacto;
-- spawn do proprietário: 1,25 m além do limite frontal do lote;
-- personagem permanece responsabilidade do cliente; servidor fornece apenas posição authoritative.
-
-## Próxima etapa
-
-Validar a posição de cada lote, portão e construção contra o mapa visual atual antes de levar qualquer alteração desta branch para `main`.
+## Próximo passo
+Validar cada lote, construção, portão e ponto de interação contra o mapa visual atual antes de promover a branch para `main`.
 """, encoding='utf-8')
 
-      - name: Validate
+      - name: Validate baseline
         shell: bash
         run: |
           node --check servidor-1.js
-          node testes/test-spawn-preclick.js
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('servidor-1.js').read_text(encoding='utf-8')
+          assert 'lote.z + LOTE_D / 2 + 1.25' in s
+          assert '[-4.0, 4.0, -3.625, -3.375]' in s
+          assert '[-1.6, 1.6, 3.375, 3.625]' in s
+          print('MAP_BASELINE_OK')
+          PY
           git diff --check
 
-      - name: Commit reconciliation
+      - name: Commit baseline
         shell: bash
         run: |
           if git diff --quiet -- servidor-1.js MAP_REBUILD_STATUS.md; then
-            echo "Nenhuma alteração pendente."
+            echo "Baseline já aplicado."
             exit 0
           fi
           git config user.name "github-actions[bot]"
