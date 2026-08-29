@@ -4889,9 +4889,10 @@ const PAL_PORTAO=[0x8f4a34,0x6b6b6b,0x4a5a3c,0x7a4a33,0x5a6470];
   // A ordem bate com TIPO_PLOT do servidor: ele decide luz e crescimento
   // por ambiente, então a posição de cada índice importa.
   const off=[
-   [-7,-4],[-4.6,-4],[-2.2,-4],[-7,-1.4],[-4.6,-1.4],[-2.2,-1.4],   // 0-5 sol
-   [3.2,-4.4],[5.2,-4.4],[3.2,-2.4],[5.2,-2.4],                     // 6-9 estufa
-   [-6.6,3.4],[-4.6,3.4],[-2.6,3.4],[-6.6,5.4],[-4.6,5.4],[-2.6,5.4] // 10-15 grow
+   [-2.4,-1.7],[-0.8,-1.7],[0.8,-1.7],[2.4,-1.7],
+   [-2.4,-0.4],[-0.8,-0.4],[0.8,-0.4],[2.4,-0.4],
+   [-2.4,0.9],[-0.8,0.9],[0.8,0.9],[2.4,0.9],
+   [-2.4,2.2],[-0.8,2.2],[0.8,2.2],[2.4,2.2]
   ];
   off.forEach((pp,j)=>{
    lotesOnline[i].plots.push({x:LX+pp[0],z:LZ+pp[1],baseY:.15,
@@ -4902,6 +4903,7 @@ const PAL_PORTAO=[0x8f4a34,0x6b6b6b,0x4a5a3c,0x7a4a33,0x5a6470];
 })();
 // ═══ monta a casa de um lote: layout, cores, árvores e tralha sorteados ═══
 function montarLote(lote){
+  if(lote.montado)return;
   const W=LOTE_W,D=LOTE_D,alt=2.45;
   const g=new THREE.Group(); g.position.set(lote.x,0,lote.z);
   const muroM=new THREE.MeshStandardMaterial({color:corMuro,roughness:.94});
@@ -4942,6 +4944,7 @@ function montarLote(lote){
   lote.bancadaPos=lote.estacoes.secagem;
   lote.portaoPos={x:lote.x,z:lote.z+D/2};
   lote.group=g;
+  lote.montado=true;
   return g;
 }
 // ═══ desmonta a casa quando o jogador está longe — libera memória ═══
