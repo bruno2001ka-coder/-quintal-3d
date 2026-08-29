@@ -1133,9 +1133,7 @@ function aplicarDiariaServidor() {
   }
 }
 function spawnNaPortaDoLote(lote) {
-  // Frente do lote: portão central voltado para a rua, fora da madeira.
-  // O recuo de 2.4m deixa o jogador na calçada/entrada frontal.
-  return { x: lote.x, y: 12, z: lote.z + LOTE_D / 2 + 2.4, ry: 0 };
+  return { x:lote.x, y:12, z:lote.z + LOTE_D / 2 + 1.25, ry:0 };
 }
 function spawnOficial(j) {
   const lote = loteDoJogador(j);
@@ -1330,10 +1328,12 @@ for (const [sx, sz] of FARM_SLOT_SPOTS) {
 /* Colisores de cada propriedade, em coordenada RELATIVA ao centro do lote.
    O índice 5 é o portão: só bloqueia quando está fechado. */
 const COL_LOTE_REL = [
-  [-10.2,10.2,-8.2,-7.8], [-10.2,-9.8,-8.0,8.0], [9.8,10.2,-8.0,8.0], [1.2,10.2,7.8,8.2],
-  [-10.2,-1.2,7.8,8.2], [-1.2,1.2,7.8,8.2], [1.9,2.1,-5.1,-1.7], [6.300000000000001,6.5,-5.1,-1.7],
-  [2.0,6.4,-5.199999999999999,-5.0], [2.0,3.5,-1.8,-1.5999999999999999], [4.9,6.4,-1.8,-1.5999999999999999], [-7.85,-7.549999999999999,2.2,6.6000000000000005], [-1.6499999999999995,-1.3499999999999996,2.2,6.6000000000000005],
-  [-7.699999999999999,-1.4999999999999996,2.0500000000000003,2.35], [-7.699999999999999,-5.3,6.45,6.750000000000001], [-3.8999999999999995,-1.4999999999999996,6.45,6.750000000000001], [5.5,8.1,3.1,4.1]
+  [-4.0,4.0,-3.58,-3.38],
+  [-4.0,-3.8,-3.5,3.5],
+  [3.8,4.0,-3.5,3.5],
+  [-4.0,-1.1,3.38,3.58],
+  [1.1,4.0,3.38,3.58],
+  [-1.1,1.1,3.38,3.58]
 ];
 const IDX_PORTAO = 5;
 
@@ -1470,15 +1470,13 @@ function carregarTerritoriosPersistidos() {
    o servidor mandou. Agora as propriedades existem aqui também.
    Estes números vêm do cliente (LOTE_SPOTS, LOTE_W, LOTE_D) — se mudarem
    lá, precisam mudar aqui. */
-const LOTE_W = 20, LOTE_D = 16;
-const LOTE_SPOTS = [
-  [-34,31],[2,31],[38,31],[-34,63],[2,63],
-  [38,63],[-34,95],[2,95],[38,95],[-34,127]
-];
+const LOTE_W = 8, LOTE_D = 7;
+const LOTE_SPOTS = [[-44,27],[-34,27],[-24,27],[-14,27],[-4,27],[6,27],[16,27],[26,27],[36,27],[46,27]];
 const PLOT_OFFSETS = [
-  [-7,-4],[-4.6,-4],[-2.2,-4],[-7,-1.4],[-4.6,-1.4],[-2.2,-1.4],
-  [3.2,-4.4],[5.2,-4.4],[3.2,-2.4],[5.2,-2.4],
-  [-6.6,3.4],[-4.6,3.4],[-2.6,3.4],[-6.6,5.4],[-4.6,5.4],[-2.6,5.4]
+  [-2.4,-1.7],[-0.8,-1.7],[0.8,-1.7],[2.4,-1.7],
+  [-2.4,-0.4],[-0.8,-0.4],[0.8,-0.4],[2.4,-0.4],
+  [-2.4,0.9],[-0.8,0.9],[0.8,0.9],[2.4,0.9],
+  [-2.4,2.2],[-0.8,2.2],[0.8,2.2],[2.4,2.2]
 ];
 function loteDoJogador(j) {
   if (!j.autenticado || !j.chave || !loteDe.has(j.chave)) return null;
@@ -1504,11 +1502,7 @@ const ESTACOES_PUBLICAS = {
 // Produção doméstica: três estações físicas, uma por etapa. Os mesmos
 // offsets são usados pelo cliente para que a interação nunca fique em um
 // ponto visual diferente do ponto validado pelo servidor.
-const ESTACOES_CASA_REL = Object.freeze({
-  secagem: { x: 6.8, z: 3.6, raio: 2.35 },
-  cura: { x: 3.8, z: 3.6, raio: 2.35 },
-  embalagem: { x: .8, z: 3.6, raio: 2.35 }
-});
+const ESTACOES_CASA_REL = Object.freeze({ secagem:{x:2.3,z:-2.45,raio:1.25}, cura:{x:0,z:-2.45,raio:1.25}, embalagem:{x:-2.3,z:-2.45,raio:1.25} });
 function posEstacaoCasa(lote, nome) {
   const e = ESTACOES_CASA_REL[nome];
   return e && lote ? { x:lote.x+e.x, z:lote.z+e.z, raio:e.raio } : null;
