@@ -2320,6 +2320,10 @@ function humanoid(shirt,pants,skin){
 const P=humanoid(0x1a1c1a,0x4a5233);
 const player=P.g,limbs=P.L;
 player.position.set(GATEX,0,C.z1-4);player.rotation.y=Math.PI;scene.add(player);
+// O pivô de física continua sendo `player`; o pivô visual separado evita
+// que a origem do rig Mixamo altere a mira da câmera ou o ponto de colisão.
+const bossVisualPivot=new THREE.Group();bossVisualPivot.name='bossVisualPivot';player.add(bossVisualPivot);
+let bossCameraFocusY=1.18;
 // Personagem principal importado: a física continua usando o mesmo grupo
 // `player`, posição, colisores, câmera e arma. O boneco low-poly antigo fica
 // como fallback caso o GLB ou o CDN do loader não carregue.
@@ -2334,15 +2338,23 @@ function carregarPersonagemPrincipal(){
  const loader=new THREE.GLTFLoader();
  loader.load('assets/TheBoss_com_animacoes.glb',gltf=>{
   const modelo=gltf.scene;
-  const caixa=new THREE.Box3().setFromObject(modelo),tam=caixa.getSize(new THREE.Vector3());
+  const caixaInicial=new THREE.Box3().setFromObject(modelo),tam=caixaInicial.getSize(new THREE.Vector3());
   if(!tam.y||!Number.isFinite(tam.y))return;
   modelo.scale.setScalar(1.78/tam.y);
-  const pos=caixa.getCenter(new THREE.Vector3());
-  modelo.position.y=-caixa.min.y*modelo.scale.y;
   modelo.rotation.y=Math.PI;
+  // A caixa precisa ser recalculada depois da escala/rotação. Centralizamos
+  // X/Z e colocamos o piso em y=0 dentro do pivô visual, não no player.
+  modelo.updateMatrixWorld(true);
+  const caixa=new THREE.Box3().setFromObject(modelo),centro=caixa.getCenter(new THREE.Vector3());
+  modelo.position.x-=centro.x;modelo.position.z-=centro.z;modelo.position.y-=caixa.min.y;
+  modelo.updateMatrixWorld(true);
+  const caixaFinal=new THREE.Box3().setFromObject(modelo);
+  bossCameraFocusY=Math.max(.95,Math.min(1.35,caixaFinal.min.y+(caixaFinal.max.y-caixaFinal.min.y)*.62));
   modelo.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true}});
-  for(const antigo of [...player.children])antigo.visible=false;
-  player.add(modelo);
+  // Não esconder o pivô novo: ele também é filho de `player`.
+  for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;
+  bossVisualPivot.visible=true;
+  bossVisualPivot.add(modelo);
   bossMixer=new THREE.AnimationMixer(modelo);
   for(const clip of (gltf.animations||[])){
    const nome=clip.name||'';
@@ -4333,7 +4345,7 @@ function tick(){
 
  /* câmera */
  const alt=aiming?1.5:1.45, dd=aiming?2.5:camDist;
- camT.set(player.position.x,player.position.y+alt+.18,player.position.z);
+ camT.set(player.position.x,player.position.y+bossCameraFocusY,player.position.z);
  // O GLB tem escala humana; mantemos uma distância confortável para que
  // a câmera nunca fique dentro do avatar quando uma parede fica próxima.
  const CAMERA_MIN_DIST=aiming?1.05:1.35;
