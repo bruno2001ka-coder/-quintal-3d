@@ -1,0 +1,55 @@
+name: Validate map v2
+
+on:
+  push:
+    branches:
+      - rebuild/map-v2-2026-08-29
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate server
+        run: node --check servidor-1.js
+
+      - name: Validate inline client JavaScript
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, tempfile
+          html=Path('public/index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>', html, flags=re.I)
+          assert scripts, 'Nenhum script inline encontrado'
+          for i, code in enumerate(scripts):
+              p=Path(tempfile.gettempdir())/f'quintal-inline-{i}.js'
+              p.write_text(code,encoding='utf-8')
+              r=subprocess.run(['node','--check',str(p)],text=True,capture_output=True)
+              if r.returncode:
+                  print(r.stderr)
+                  raise SystemExit(f'JS inline inválido: bloco {i}')
+          print(f'CLIENT_INLINE_JS_OK ({len(scripts)} blocos)')
+          PY
+
+      - name: Validate map contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          c=Path('public/index.html').read_text(encoding='utf-8')
+          s=Path('servidor-1.js').read_text(encoding='utf-8')
+          assert 'const LOTE_W=8, LOTE_D=7;' in c
+          assert 'const LOTE_W = 8, LOTE_D = 7;' in s
+          assert 'const LOTE_SPOTS=[[-44,27],[-34,27],[-24,27],[-14,27],[-4,27],[6,27],[16,27],[26,27],[36,27],[46,27]];' in c
+          assert 'const LOTE_SPOTS = [[-44,27],[-34,27],[-24,27],[-14,27],[-4,27],[6,27],[16,27],[26,27],[36,27],[46,27]];' in s
+          assert 'lote.z + LOTE_D / 2 + 1.25' in s
+          assert '[-2.4,-1.7]' in c and '[-2.4,-1.7]' in s
+          assert 'lote.montado=true;' in c
+          print('MAP_V2_CONTRACT_OK')
+          PY
+          git diff --check
