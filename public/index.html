@@ -2333,7 +2333,8 @@ window.__quintalBoss={get state(){return bossLoadState},get ready(){return bossM
 function bossTocar(nome,fade=.16){
  if(!bossMixer||!bossActions[nome])return;
  const proxima=bossActions[nome];if(bossAction===proxima)return;
- if(bossAction)bossAction.fadeOut(fade);proxima.reset().fadeIn(fade).play();bossAction=proxima;
+  if(bossAction){bossAction.paused=false;bossAction.fadeOut(fade)}
+  proxima.reset().fadeIn(fade).play();proxima.paused=false;bossAction=proxima;
 }
 function carregarPersonagemPrincipal(){
  if(!window.THREE||!THREE.GLTFLoader)return;
@@ -2365,18 +2366,25 @@ function carregarPersonagemPrincipal(){
   bossVisualPivot.visible=true;
   bossVisualPivot.add(modelo);
   bossMixer=new THREE.AnimationMixer(modelo);
-  for(const clip of (gltf.animations||[])){
+  const clips=gltf.animations||[];
+  for(const clip of clips){
    const nome=clip.name||'';
-   // CesiumMan tem um único clip; ele serve como Idle enquanto o movimento
-   // continua sendo controlado pelo mesmo sistema do jogo.
-   const chave=['Idle','Walk','Run','Reload','WalkBackwards'].includes(nome)?nome:(!bossActions.Idle?'Idle':null);
-   if(chave)bossActions[chave]=bossMixer.clipAction(clip);
+   if(['Idle','Walk','Run','Reload','WalkBackwards'].includes(nome))bossActions[nome]=bossMixer.clipAction(clip);
   }
+  // O CesiumMan tem um clip de demonstração, não um Walk separado.
+  // Ele fica como Idle e também como movimento, mas o Idle é congelado;
+  // assim o jogador não parece caminhar sem sair do lugar quando parado.
+  if(!bossActions.Idle&&clips[0])bossActions.Idle=bossMixer.clipAction(clips[0]);
+  if(!bossActions.Walk&&clips[0])bossActions.Walk=bossMixer.clipAction(clips[0]);
+  if(!bossActions.Run&&clips[0])bossActions.Run=bossMixer.clipAction(clips[0]);
   bossModeloPronto=!!bossActions.Idle;
   bossLoadState=bossModeloPronto?'loaded':'missing_idle';
   modelo.visible=true; bossVisualPivot.visible=true;
   window.__quintalBoss.meshes=bossMeshCount; window.__quintalBoss.animations=(gltf.animations||[]).map(a=>a.name);
-  if(bossModeloPronto)bossTocar('Idle',0);
+  if(bossModeloPronto){
+   bossTocar('Idle',0);
+   bossActions.Idle.paused=true;
+  }
   // Só agora, depois de escala, pivô, malhas, mixer e animações, ocultamos o fallback.
   if(bossModeloPronto)for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;
  },undefined,erro=>{
@@ -4312,6 +4320,7 @@ function tick(){
  if(bossModeloPronto){
   const andando=mag>.05&&!modalOpen()&&!aguardandoPrimeiroLote;
   bossTocar(andando?(run?'Run':'Walk'):'Idle');
+  if(!andando&&bossActions.Idle)bossActions.Idle.paused=true;
   if(bossMixer)bossMixer.update(dt);
  }
 
