@@ -2415,8 +2415,8 @@ function adicionarArmaGLB(k,modeloBase){
  const maior=Math.max(tamanho.x,tamanho.y,tamanho.z);
  if(maior>0&&Number.isFinite(maior))modelo.scale.setScalar(alvo/maior);
  // Os assets do GitHub têm o comprimento no eixo X; o gunMesh do jogo usa +Z como frente.
- // O eixo frontal exportado aponta para -X; +90 graus alinha o cano com +Z da mira.
- modelo.rotation.set(0,Math.PI/2,0);
+ // Inversão longitudinal corrigida: o cano aponta para +Z, junto da mira e do disparo.
+ modelo.rotation.set(0,-Math.PI/2,0);
  const ajuste=k==='rifle'?{x:0,y:-.02,z:.08}:{x:0,y:-.01,z:.05};
  modelo.position.set(ajuste.x,ajuste.y,ajuste.z);
  armaGLBCache[k]=modelo;
