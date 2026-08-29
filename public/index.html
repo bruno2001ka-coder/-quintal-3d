@@ -2323,7 +2323,8 @@ player.position.set(GATEX,0,C.z1-4);player.rotation.y=Math.PI;scene.add(player);
 // O pivô de física continua sendo `player`; o pivô visual separado evita
 // que a origem do rig Mixamo altere a mira da câmera ou o ponto de colisão.
 const bossVisualPivot=new THREE.Group();bossVisualPivot.name='bossVisualPivot';player.add(bossVisualPivot);
-let bossCameraFocusY=1.18;
+const BOSS_ALTURA_ALVO=1.62; // metros, alinhado ao humanoide low-poly original
+let bossCameraFocusY=1.08;
 // Personagem principal importado: a física continua usando o mesmo grupo
 // `player`, posição, colisores, câmera e arma. O boneco low-poly antigo fica
 // como fallback caso o GLB ou o CDN do loader não carregue.
@@ -2340,7 +2341,7 @@ function carregarPersonagemPrincipal(){
   const modelo=gltf.scene;
   const caixaInicial=new THREE.Box3().setFromObject(modelo),tam=caixaInicial.getSize(new THREE.Vector3());
   if(!tam.y||!Number.isFinite(tam.y))return;
-  modelo.scale.setScalar(1.78/tam.y);
+  modelo.scale.setScalar(BOSS_ALTURA_ALVO/tam.y);
   modelo.rotation.y=Math.PI;
   // A caixa precisa ser recalculada depois da escala/rotação. Centralizamos
   // X/Z e colocamos o piso em y=0 dentro do pivô visual, não no player.
@@ -2349,7 +2350,9 @@ function carregarPersonagemPrincipal(){
   modelo.position.x-=centro.x;modelo.position.z-=centro.z;modelo.position.y-=caixa.min.y;
   modelo.updateMatrixWorld(true);
   const caixaFinal=new THREE.Box3().setFromObject(modelo);
-  bossCameraFocusY=Math.max(.95,Math.min(1.35,caixaFinal.min.y+(caixaFinal.max.y-caixaFinal.min.y)*.62));
+  // Offset final explícito: pés em y=0 e foco no tronco, não no centro do rig.
+  bossVisualPivot.position.set(0,0,0);
+  bossCameraFocusY=Math.max(.9,Math.min(1.25,caixaFinal.min.y+(caixaFinal.max.y-caixaFinal.min.y)*.58));
   modelo.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true}});
   // Não esconder o pivô novo: ele também é filho de `player`.
   for(const antigo of [...player.children])if(antigo!==bossVisualPivot)antigo.visible=false;
