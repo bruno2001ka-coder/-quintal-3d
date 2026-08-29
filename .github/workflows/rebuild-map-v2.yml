@@ -21,9 +21,7 @@ jobs:
         run: python3 scripts/rebuild-map-v2.py
 
       - name: Validate JavaScript
-        run: |
-          node --check servidor-1.js
-          node --check public/index.html
+        run: node --check servidor-1.js
 
       - name: Validate map contract
         run: |
@@ -32,9 +30,9 @@ jobs:
           c=Path('public/index.html').read_text(encoding='utf-8')
           s=Path('servidor-1.js').read_text(encoding='utf-8')
           for text in ['const LOTE_W=8, LOTE_D=7;', 'const LOTE_SPOTS=[[-44,27],[-34,27],[-24,27],[-14,27],[-4,27],[6,27],[16,27],[26,27],[36,27],[46,27]];']:
-              assert text in c
+              assert text in c, text
           for text in ['const LOTE_W = 8, LOTE_D = 7;', 'const LOTE_SPOTS = [[-44,27],[-34,27],[-24,27],[-14,27],[-4,27],[6,27],[16,27],[26,27],[36,27],[46,27]];', 'lote.z + LOTE_D / 2 + 1.25']:
-              assert text in s
+              assert text in s, text
           print('MAP_V2_OK')
           PY
           git diff --check
