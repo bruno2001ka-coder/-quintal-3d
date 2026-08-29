@@ -2328,7 +2328,8 @@ let bossCameraFocusY=1.08;
 // Personagem principal importado: a física continua usando o mesmo grupo
 // `player`, posição, colisores, câmera e arma. O boneco low-poly antigo fica
 // como fallback caso o GLB ou o CDN do loader não carregue.
-let bossMixer=null,bossActions={},bossAction=null,bossModeloPronto=false,bossLoadState='loading';
+let bossMixer=null,bossActions={},bossAction=null,bossModeloPronto=false,bossLoadState='loading',bossModelo=null;
+window.__quintalBoss={get state(){return bossLoadState},get ready(){return bossModeloPronto},get model(){return bossModelo},get pivot(){return bossVisualPivot}};
 function bossTocar(nome,fade=.16){
  if(!bossMixer||!bossActions[nome])return;
  const proxima=bossActions[nome];if(bossAction===proxima)return;
@@ -2338,7 +2339,11 @@ function carregarPersonagemPrincipal(){
  if(!window.THREE||!THREE.GLTFLoader)return;
  const loader=new THREE.GLTFLoader();
  loader.load('assets/TheBoss_com_animacoes.glb',gltf=>{
-  const modelo=gltf.scene;
+  const modelo=gltf.scene; bossModelo=modelo; bossLoadState='loaded_scene';
+  modelo.visible=true; modelo.name='TheBoss_loaded';
+  let bossMeshCount=0;
+  modelo.traverse(o=>{if(o.isMesh)bossMeshCount++});
+  window.__quintalBoss.meshes=bossMeshCount;
   const caixaInicial=new THREE.Box3().setFromObject(modelo),tam=caixaInicial.getSize(new THREE.Vector3());
   if(!tam.y||!Number.isFinite(tam.y))return;
   modelo.scale.setScalar(BOSS_ALTURA_ALVO/tam.y);
@@ -2365,9 +2370,11 @@ function carregarPersonagemPrincipal(){
   }
   bossModeloPronto=!!bossActions.Idle;
   bossLoadState=bossModeloPronto?'loaded':'missing_idle';
+  modelo.visible=true; bossVisualPivot.visible=true;
+  window.__quintalBoss.meshes=bossMeshCount; window.__quintalBoss.animations=(gltf.animations||[]).map(a=>a.name);
   if(bossModeloPronto)bossTocar('Idle',0);
  },undefined,erro=>{
-  bossLoadState='error';
+  bossLoadState='error'; window.__quintalBoss.error=String(erro&&erro.message||erro);
   console.error('ERRO AO CARREGAR THEBOSS:',erro);
   if(typeof toast==='function')toast('TheBoss não carregou — usando personagem reserva');
  });
