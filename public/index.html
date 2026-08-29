@@ -4930,9 +4930,12 @@ function montarLote(lote){
  [[0,-D/2,W,.25],[-W/2,0,.25,D],[W/2,0,.25,D]].forEach(m=>{
   const mu=new THREE.Mesh(new THREE.BoxGeometry(m[2],alt,m[3]),muroM);
   mu.position.set(m[0],alt/2,m[1]);mu.castShadow=true;mu.receiveShadow=true;g.add(mu)});
- // A frente fica aberta: não desenhamos uma parede atrás do portão.
- // A única barreira visual da entrada é a folha do portão abaixo;
- // quando ela gira para aberto, o vão fica realmente livre.
+ // Frente da casa com dois trechos laterais e vão central do portão.
+ // Não existe uma parede atrás da entrada: a folha é a única barreira do vão.
+ const vao=3.2, lado=(W-vao)/2;
+ [[-(vao/2+lado/2)],[vao/2+lado/2]].forEach(px=>{
+  const mu=new THREE.Mesh(new THREE.BoxGeometry(lado,alt,.25),muroM);
+  mu.position.set(px[0],alt/2,D/2);mu.castShadow=true;mu.receiveShadow=true;g.add(mu)});
 
  // casinha: posição e tamanho sorteados dentro do terreno
  // casa menor: é só marcação de propriedade, não precisa dominar o terreno
