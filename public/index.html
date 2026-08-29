@@ -4365,10 +4365,10 @@ function tick(){
  camT.set(player.position.x,player.position.y+bossCameraFocusY,player.position.z);
  // O GLB tem escala humana; mantemos uma distância confortável para que
  // a câmera nunca fique dentro do avatar quando uma parede fica próxima.
- const CAMERA_MIN_DIST=aiming?1.05:1.35;
+ const CAMERA_MIN_DIST=aiming?2.25:3.2;
  let dist=Math.max(CAMERA_MIN_DIST,dd);
  const cxf=Math.sin(camYaw)*Math.cos(camPitch),czf=Math.cos(camYaw)*Math.cos(camPitch);
- for(let s=.65;s<=dist;s+=.25){
+ for(let s=.45;s<=dist;s+=.25){
   const tx=camT.x+cxf*s,tz=camT.z+czf*s;let hit=false;
   for(const c of colliders) if(c.active!==false&&tx>c.minX-.2&&tx<c.maxX+.2&&tz>c.minZ-.2&&tz<c.maxZ+.2){hit=true;break}
   // Em espaços apertados, o piso de 1,5m colocava a câmera dentro do muro.
@@ -4376,7 +4376,7 @@ function tick(){
   // superfície que foi atingida pelo raio de visão.
   // Não ignoramos uma parede próxima: isso colocaria a câmera atrás dela.
   // O limite mínimo impede que a correção atravesse o corpo do avatar.
-  if(hit&&s>.85){dist=Math.max(CAMERA_MIN_DIST,s-.22);break}}
+  if(hit){dist=Math.max(CAMERA_MIN_DIST,s-.22);break}}
  const shoulder=aiming?.6:0;
  const cx=camT.x+cxf*dist+Math.cos(camYaw)*shoulder;
  const cz=camT.z+czf*dist-Math.sin(camYaw)*shoulder;
