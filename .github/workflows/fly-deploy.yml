@@ -21,23 +21,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
       - name: Validate server syntax
         run: node --check servidor-1.js
-
       - name: Setup Flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
-
       - name: Deploy to Fly.io
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl deploy --app quintal-3d --remote-only --wait-timeout 300
+      - name: Smoke test HTTP health
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 5 https://quintal-3d.fly.dev/healthz; then exit 0; fi
+            sleep 3
+          done
+          exit 1
+      - name: Smoke test WebSocket
+        run: |
+          node <<'NODE'
+          const WebSocket = require('ws');
+          const ws = new WebSocket('wss://quintal-3d.fly.dev', {handshakeTimeout: 10000});
+          const timer = setTimeout(() => { console.error('WebSocket timeout'); process.exit(1); }, 15000);
+          ws.on('open', () => {
+            clearTimeout(timer);
+            console.log('WEBSOCKET_OPEN_OK');
+            try { ws.send(JSON.stringify({t:'hello',token:'',persistId:'smoke-test',aparelhoId:'smoke-test',nome:'SmokeTest',avatarId:'carmo'})); } catch (_) {}
+            setTimeout(() => { try { ws.close(); } catch (_) {} process.exit(0); }, 1000);
+          });
+          ws.on('message', d => console.log('WS_MESSAGE', String(d).slice(0,300)));
+          ws.on('error', e => { clearTimeout(timer); console.error('WebSocket error:', e.message); process.exit(1); });
+          ws.on('close', (c,r) => { if (!timer) return; clearTimeout(timer); if(c!==1000) { console.error('WebSocket closed:',c,String(r||'')); process.exit(1); } });
+          NODE
