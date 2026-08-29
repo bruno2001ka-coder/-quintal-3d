@@ -2347,7 +2347,8 @@ function carregarPersonagemPrincipal(){
   const caixaInicial=new THREE.Box3().setFromObject(modelo),tam=caixaInicial.getSize(new THREE.Vector3());
   if(!tam.y||!Number.isFinite(tam.y))return;
   modelo.scale.setScalar(BOSS_ALTURA_ALVO/tam.y);
-  modelo.rotation.y=Math.PI;
+  // CesiumMan já usa o eixo frontal esperado pelo jogo; não inverter o modelo.
+  modelo.rotation.y=0;
   // A caixa precisa ser recalculada depois da escala/rotação. Centralizamos
   // X/Z e colocamos o piso em y=0 dentro do pivô visual, não no player.
   modelo.updateMatrixWorld(true);
